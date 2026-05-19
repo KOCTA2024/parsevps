@@ -314,3 +314,7 @@ SA÷3¬~KA÷Загалом¬IS÷¬~KB÷Останні матчі: Манреса
 [19.05.2026, 21:39:12] src/data/Elitsur_Yavne_vs_Makkabi_Petakh-Tikva.json
 [19.05.2026, 21:40:25] src/data/Elitsur_Yavne_vs_Makkabi_Petakh-Tikva.json
 [19.05.2026, 21:41:30] src/data/Elitsur_Yavne_vs_Makkabi_Petakh-Tikva.json
+[19.05.2026, 21:45:23] src/data/Elitsur_Yavne_vs_Makkabi_Petakh-Tikva.json
+[19.05.2026, 21:46:43] src/data/Venetsiya_vs_Tortona.json
+[19.05.2026, 21:49:44] src/data/Venetsiya_vs_Tortona.json
+[19.05.2026, 21:57:07] src/data/Venetsiya_vs_Tortona.json

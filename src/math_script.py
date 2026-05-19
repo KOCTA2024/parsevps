@@ -1090,6 +1090,13 @@ def threshold_calcs(main: dict, lines_data: dict = None) -> dict:
     h1_home= q1h+q2h; h1_away= q1a+q2a
     h1_total = h1_home + h1_away
 
+    # ── Guard: finished match — BK lines from file are pre-match/frozen
+    # snapshots and not meaningful for threshold calculation.
+    # Fall back to synthetic lines bracketed around the final score.
+    _match_is_finished = _is_match_finished(main.get("st", ""))
+    if _match_is_finished:
+        lines_data = None  # force synthetic fallback for all line extractions
+
     def for_match_line(line: float) -> dict:
         return {
             "line": line,
@@ -1448,7 +1455,7 @@ def quarter_duration_minutes(tour: str) -> int:
 def parse_minutes_played(st: str, tour: str) -> float:
     """
     Parse minutes played from status string.
-    'Live (4-а чверть 4')'  → 3 full quarters * q_dur + 4
+    'Live (4-а чверть 4\')'  → 3 full quarters * q_dur + 4
     'Halftime' / 'HT'       → 2 * q_dur
     'Finished'              → 4 * q_dur
     Returns float minutes played (may be fractional from OT, ignored here).
@@ -1465,21 +1472,30 @@ def parse_minutes_played(st: str, tour: str) -> float:
     if "HALFTIME" in st_up or st_up.strip() in ("HT", "HALF TIME", "HALF-TIME"):
         return float(2 * q)
 
-    # Ukrainian: "4-а чверть 4'" or "1-й квартал 3'"
-    m = re.search(r'(\d)\s*[-–]?[аийй]?\s*(?:чверть|квартал)\s*(\d+)[\'′]?', st, re.IGNORECASE)
+    # 1. Ukrainian/Russian: "4-а чверть 5'", "1-й квартал 3'", "3-я чверть 2'", "4 четверть 5'"
+    # Handle various suffixes (-а, -я, -й, -та, -ша, -га, -тя) and optional spaces/dots
+    m = re.search(r'(\d+)[-–\s]*[а-яА-Я]*\s*(?:чверть|квартал|четверть|чв|кв)\.?\s*(\d+)[\'′]?', st, re.IGNORECASE)
     if m:
         quarter_num = int(m.group(1))
         minute_in_q = int(m.group(2))
         return float((quarter_num - 1) * q + minute_in_q)
 
-    # English: Q1 5' or Quarter 2 3'
-    m = re.search(r'Q(\d)\s*(\d+)[\'′]?', st, re.IGNORECASE)
+    # 2. English: "Q4 5'", "Quarter 2 3'", "4th Quarter 5'", "Q 1 5'"
+    m = re.search(r'(?:Q|Quarter|Qtr|Quar)\s*(\d+)\s*(\d+)[\'′]?', st, re.IGNORECASE)
     if m:
         quarter_num = int(m.group(1))
         minute_in_q = int(m.group(2))
         return float((quarter_num - 1) * q + minute_in_q)
 
-    # Fallback
+    # 3. Quarter only: "4-а чверть", "Q3"
+    m = re.search(r'(\d+)[-–\s]*[а-яА-Я]*\s*(?:чверть|квартал|четверть|чв|кв)\.?', st, re.IGNORECASE)
+    if not m:
+        m = re.search(r'(?:Q|Quarter|Qtr|Quar)\s*(\d+)', st, re.IGNORECASE)
+    if m:
+        quarter_num = int(m.group(1))
+        return float((quarter_num - 1) * q)
+
+    # Fallback to halftime if nothing else matches
     return float(2 * q)
 
 
@@ -1715,6 +1731,24 @@ def live_calibrated_projection(main: dict, pre_stat: dict) -> dict:
 
     tour = main.get("tour", "")
     st   = main.get("st", "")
+
+    # ── Guard: match already finished — live projection is meaningless ────
+    if _is_match_finished(st):
+        return {
+            "status": "FINISHED",
+            "note": (
+                "Match is finished (stage=FT). live_calibrated values are NOT valid "
+                "as a live projection — min_left=0, BK lines may be frozen pre-match "
+                "snapshots. Use pre_match_stat + history for post-game reference only."
+            ),
+            "LiveCalibrated_Total": None,
+            "LiveRaw_Total":        None,
+            "home": {"LiveCalibrated": None, "LiveRaw": None},
+            "away": {"LiveCalibrated": None, "LiveRaw": None},
+            "min_played": None,
+            "min_left":   0.0,
+            "q_duration_min": quarter_duration_minutes(tour),
+        }
     min_played = parse_minutes_played(st, tour)
     min_left   = minutes_left(min_played, tour)
     q_dur      = quarter_duration_minutes(tour)
@@ -1914,14 +1948,27 @@ def _derive_stage(st: str) -> str:
         return "FT"
     if "HALFTIME" in su or su.strip() in ("HT", "HALF TIME", "HALF-TIME"):
         return "HT"
-    # Live quarter detection: handles Ukrainian "4-а чверть", "3-й квартал" and English "Q4"
-    m = _re.search(r'(\d)[-–\s]*(?:[аАйиіЇї]+\s*)?(?:чверть|квартал)|[Qq](\d)', st, _re.IGNORECASE)
+    # Live quarter detection: handles Ukrainian "4-а чверть", "3-й квартал", Russian "4 четверть" and English "Q4"
+    m = _re.search(r'(\d+)[-–\s]*[а-яА-Я]*\s*(?:чверть|квартал|четверть|чв|кв)\.?|[Qq](\d+)', st, _re.IGNORECASE)
     if m:
         q = int(m.group(1) or m.group(2))
         return f"Q{q}_live"
     if "LIVE" in su:
         return "live"
     return st  # return raw if unrecognised
+
+
+def _is_match_finished(st: str) -> bool:
+    """
+    Return True if the match status indicates the game is over (FT / Finished).
+    Used to gate live_calibrated and BK line usage — a finished match has
+    min_left=0 and lines frozen at their last update, so neither live-calibrated
+    projections nor BK lines from line_result.json should be used as live signals.
+    """
+    if not st:
+        return False
+    su = st.upper().strip()
+    return "FINISHED" in su or su == "FT"
 
 
 # ─────────────────────────────────────────────
@@ -2080,6 +2127,36 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
     # Live calibrated projection (ТЗ live_projection_formula_columns)
     live_calibrated = live_calibrated_projection(main, pre_match_stat)
 
+    # ── Lines staleness warning ──────────────────────────────────────────
+    _st = main.get("st", "")
+    _match_finished = _is_match_finished(_st)
+    _stage_label = _derive_stage(_st)
+    lines_stale_warning = None
+    if _match_finished:
+        lines_stale_warning = (
+            f"stage={_stage_label}: match is finished. "
+            "BK lines from line_result.json are frozen snapshots — "
+            "they reflect pre-match or early-live odds, NOT the current market. "
+            "live_calibrated is disabled (status=FINISHED). "
+            "Use pre_match_stat + history_zones for evaluation."
+        )
+    elif lines_data:
+        # Check if ALL BK lines look like pre-match (opening == current for every entry)
+        mt = lines_data.get("match_total", [])
+        if mt:
+            stale_count = sum(
+                1 for e in mt
+                if e.get("overOdd") is not None
+                and e.get("overOpen") is not None
+                and abs(float(e.get("overOdd", 0)) - float(e.get("overOpen", 0))) < 0.001
+            )
+            if stale_count == len(mt):
+                lines_stale_warning = (
+                    "All BK match_total lines have overOdd == overOpen — "
+                    "lines appear to be pre-match snapshots with no live update. "
+                    "live_calibrated may be unreliable; cross-check with pre_match_stat."
+                )
+
     # Candidates
     candidates = candidate_filter(history_zones, sample, stat_sp, strong_patterns, projection,
                                    current_score_a=hs, current_score_b=aws)
@@ -2189,12 +2266,18 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
         "candidates": candidates,
         "blockers": (
             (["SAMPLE_FAIL"] if not sample["recommendation_allowed"] else []) +
-            (["STAT_OFF"]    if stat_sp["status"] == "OFF" else [])
+            (["STAT_OFF"]    if stat_sp["status"] == "OFF" else []) +
+            (["LINES_STALE"] if lines_stale_warning else [])
         ),
+        "lines_stale_warning": lines_stale_warning,
         "final_signal": (
-            "SCENARIO_STRONG_BUT_NEEDS_LIVE_STAT"
-            if stat_sp["status"] == "OFF" and sample["recommendation_allowed"]
-            else ("SAMPLE_FAIL" if not sample["recommendation_allowed"] else "OK")
+            "FINISHED_NO_LIVE"
+            if _match_finished
+            else (
+                "SCENARIO_STRONG_BUT_NEEDS_LIVE_STAT"
+                if stat_sp["status"] == "OFF" and sample["recommendation_allowed"]
+                else ("SAMPLE_FAIL" if not sample["recommendation_allowed"] else "OK")
+            )
         ),
     }
 
@@ -2206,44 +2289,387 @@ def build_result_json(match_result: dict, lines_data: dict = None,
     """
     Maps process_match() output → result.json.
     Key order optimised for LLM consumption:
-      1. meta / context
-      2. bookmaker_lines  (что предлагает рынок)
-      3. score_state      (текущий момент матча)
-      4. final_verdict    (главный вывод — сразу виден)
-      5. markets_evaluation
-      6. stat_conditioned_line_profiles  (формулы)
-      7. checkpoint_matrices / scenario_zones
-      8. quarter_result_profile
-      9. stat_alignment
-      10. history_zones / stat_zones  (агрегированные исторические данные)
-      11. live_boxscore
-      12. data_quality
-      13. raw_data        (сырые записи — в самом конце)
+      1.  schema_version
+      2.  match           (новый блок: id, stage, period, score-объект, quarters, series_context)
+      3.  data_quality    (на верхнем уровне)
+      4.  bookmaker_lines (match_total, team_it, quarter_total + все старые ключи)
+      5.  live_team_stats (новый блок из live_calibrated)
+      6.  projections     (новый блок: pre_match_stat / live_calibrated / segment)
+      7.  history_by_exact_line   (новый блок)
+      8.  scenario_patterns_by_line (новый блок)
+      9.  line_evaluations         (новый блок)
+      --- старые блоки сохраняются ---
+      10. meta
+      11. score_state
+      12. final_verdict
+      13. markets_evaluation
+      14. stat_conditioned_line_profiles
+      15. scenario_zones
+      16. checkpoint_matrices
+      17. quarter_result_profile
+      18. stat_alignment
+      19. history_zones / stat_zones
+      20. live_boxscore
+      21. raw_data
     """
     r = match_result  # shorthand
 
-    # ── meta ──────────────────────────────────────────────────────────────
+    # ── meta (старый) ─────────────────────────────────────────────────────
     meta = r.get("meta", {})
 
-    # ── data_quality ──────────────────────────────────────────────────────
+    # ── scenario, stat_support, live_calibrated ──────────────────────────
+    scenario     = r.get("scenario", {})
+    stat_support = r.get("stat_support", {})
+    lc           = r.get("live_calibrated", {})
+    lc_home      = lc.get("home", {})
+    lc_away      = lc.get("away", {})
+
+    # ── live_calibrated validity guard ───────────────────────────────────
+    _lc_status      = lc.get("status", "")
+    _lc_is_valid    = _lc_status not in ("FINISHED", "NO_DATA")
+    _lines_stale_w  = r.get("lines_stale_warning")  # may be None
+
+    # ── data_quality (верхний уровень, новая структура) ───────────────────
     sg = r.get("sample_gate", {})
+    stat_sp = r.get("stat_support", {})
+    home_n = sg.get("team_a_valid_games") or sg.get("team_a_n") or sg.get("home_n")
+    away_n = sg.get("team_b_valid_games") or sg.get("team_b_n") or sg.get("away_n")
+    pooled_n = None
+    if home_n is not None and away_n is not None:
+        try:
+            pooled_n = int(home_n) + int(away_n)
+        except (TypeError, ValueError):
+            pooled_n = None
+    h2h_n = sg.get("h2h_n")
     data_quality = {
+        "stat_support": "ON" if stat_sp.get("status") == "ON" else "OFF",
+        "required_fields_present": stat_sp.get("required_fields", []),
+        "missing_fields": stat_sp.get("missing_fields", []),
+        "samples": {
+            "home_last_games_valid": home_n,
+            "away_last_games_valid": away_n,
+            "pooled_valid": pooled_n,
+            "h2h_valid": h2h_n,
+        },
+        "sample_warning": sg.get("warning") or (
+            f"pooled{pooled_n}, not full pooled70" if pooled_n and pooled_n < 70 else None
+        ),
+        "current_match_excluded": True,
+        "technical_20_0_excluded": True,
+        "lines_stale_warning": _lines_stale_w,
+        # старые поля сохраняются
+        "sample_gate": sg,
+        "sample_strength": r.get("sample_strength"),
+        "live_stat_support": r.get("live_stat_support", {}),
+        "blockers": r.get("blockers", []),
+        "final_signal": r.get("final_signal"),
+    }
+
+    # ── bookmaker_lines (новая структура + старые ключи) ──────────────────
+    raw_lines = lines_data if lines_data else {}
+
+    def _enrich_match_total(entries):
+        result = []
+        for i, e in enumerate(entries):
+            line_val = e.get("line")
+            result.append({
+                "id": f"mt_{str(line_val).replace('.', '_')}_{i}",
+                "market": "match_total",
+                "scope": e.get("scope", "Match"),
+                "line": line_val,
+                "over_odd": e.get("overOdd") or e.get("over_odd"),
+                "under_odd": e.get("underOdd") or e.get("under_odd"),
+                "source": e.get("bookmaker") or e.get("source", ""),
+                "is_real_bookmaker_line": True,
+                **e,  # сохраняем все оригинальные поля
+            })
+        return result
+
+    def _enrich_team_it(entries):
+        result = []
+        for i, e in enumerate(entries):
+            line_val = e.get("line")
+            team = e.get("team", "")
+            result.append({
+                "id": f"{team}_it_{str(line_val).replace('.', '_')}_{i}",
+                "market": "team_it",
+                "team": team,
+                "team_name": e.get("team_name") or e.get("teamName", ""),
+                "line": line_val,
+                "over_odd": e.get("overOdd") or e.get("over_odd"),
+                "under_odd": e.get("underOdd") or e.get("under_odd"),
+                "source": e.get("bookmaker") or e.get("source", ""),
+                "is_real_bookmaker_line": True,
+                **e,
+            })
+        return result
+
+    def _enrich_quarter_total(entries):
+        result = []
+        for i, e in enumerate(entries):
+            line_val = e.get("line")
+            scope = e.get("scope", "")
+            result.append({
+                "id": f"{scope.lower()}_total_{str(line_val).replace('.', '_')}_{i}",
+                "market": "quarter_total",
+                "scope": scope,
+                "line": line_val,
+                "over_odd": e.get("overOdd") or e.get("over_odd"),
+                "under_odd": e.get("underOdd") or e.get("under_odd"),
+                "source": e.get("bookmaker") or e.get("source", ""),
+                "is_real_bookmaker_line": True,
+                **e,
+            })
+        return result
+
+    bookmaker_lines = {
+        "real_lines_only": True,
+        # новые категоризированные ключи
+        "match_total":   _enrich_match_total(raw_lines.get("match_total", [])),
+        "team_it":       _enrich_team_it(raw_lines.get("team_it", [])),
+        "quarter_total": _enrich_quarter_total(raw_lines.get("quarter_total", [])),
+        # старые ключи сохраняются
+        "half_total":     raw_lines.get("half_total", []),
+        "match_handicap": raw_lines.get("match_handicap", []),
+        "match_1x2":      raw_lines.get("match_1x2", []),
+        "other":          raw_lines.get("other", []),
+    }
+
+    # ── новый блок: match ─────────────────────────────────────────────────
+    score_str = meta.get("score", "")
+    home_pts, away_pts = None, None
+    if score_str and "-" in str(score_str):
+        parts = str(score_str).split("-")
+        try:
+            home_pts = int(parts[0])
+            away_pts = int(parts[1])
+        except (ValueError, IndexError):
+            pass
+    total_pts = (home_pts + away_pts) if (home_pts is not None and away_pts is not None) else None
+    margin_home = (home_pts - away_pts) if (home_pts is not None and away_pts is not None) else None
+
+    q1_str = meta.get("q1", "")
+    q2_str = meta.get("q2", "")
+
+    def _parse_q(s):
+        if s and "-" in str(s):
+            parts = str(s).split("-")
+            try:
+                h, a = int(parts[0]), int(parts[1])
+                return {"home": h, "away": a, "total": h + a}
+            except (ValueError, IndexError):
+                pass
+        return {"home": None, "away": None, "total": None}
+
+    q1_data = _parse_q(q1_str)
+    q2_data = _parse_q(q2_str)
+
+    # period и минуты — берём из live_calibrated (там уже посчитано)
+    _lc_min_played = lc.get("min_played")
+    _lc_min_left   = lc.get("min_left")
+    _q_dur = lc.get("q_duration_min") or 10
+    _stage = meta.get("stage", "")
+
+    # определяем номер периода из min_played
+    def _period_from_min(mp, q_dur):
+        if mp is None:
+            return None
+        try:
+            mp = float(mp)
+            q_dur = float(q_dur) or 10.0
+            q = int(mp // q_dur) + 1
+            return min(q, 4)
+        except (TypeError, ValueError):
+            return None
+
+    _period_num = _period_from_min(_lc_min_played, _q_dur)
+    _period_min_played = None
+    _period_min_left   = None
+    if _period_num is not None and _lc_min_played is not None:
+        try:
+            _period_min_played = round(float(_lc_min_played) % float(_q_dur), 1)
+            _period_min_left   = round(float(_q_dur) - _period_min_played, 1)
+        except (TypeError, ValueError):
+            pass
+
+    match_block = {
+        "id":   meta.get("match_id"),
+        "name": meta.get("match"),
+        "stage": _stage,
+        "period": _period_num,
+        "period_minute_played": _period_min_played,
+        "period_minute_left": _period_min_left,
+        "match_minute_played": _lc_min_played,
+        "match_minute_left": _lc_min_left,
+        "score": {
+            "home":        home_pts,
+            "away":        away_pts,
+            "total":       total_pts,
+            "margin_home": margin_home,
+        },
+        "quarters": {
+            "q1": q1_data,
+            "q2": q2_data,
+            "q3_live": {"home": None, "away": None, "total": None},
+        },
+        "series_context": {
+            "is_playoff":    None,
+            "series_score":  meta.get("tournament"),
+            "elimination":   None,
+            "closeout":      None,
+            "must_win":      None,
+            "motivation_gate": None,
+        },
+        # старые поля
+        "tournament":    meta.get("tournament"),
+        "date":          meta.get("date"),
+        "url":           meta.get("url"),
+        "h1_total":      meta.get("h1_total"),
+        "current_total": meta.get("current_total"),
+    }
+
+    # ── новый блок: live_team_stats (из live_calibrated) ──────────────────
+    stat_sp_data = stat_support
+
+    def _live_profile(efg, extra_poss, ftr):
+        """Определить live_profile по показателям."""
+        efg = efg or 0.0
+        extra_poss = extra_poss or 0.0
+        ftr = ftr or 0.0
+        if efg >= 0.55 and extra_poss >= 0:
+            return "REAL_HIGH"
+        if efg < 0.40 and extra_poss < 0 and ftr == 0:
+            return "COLLAPSE_SUPPRESSION"
+        if efg < 0.45:
+            return "LOW_EFFICIENCY"
+        return "NORMAL"
+
+    def _build_live_team(lc_side, side_key, team_name):
+        pts_raw = lc_side.get("LiveRaw")
+        fga = stat_sp_data.get(f"{side_key}_fga") or stat_sp_data.get(f"team_{side_key[0]}_fga")
+        efg = lc_side.get("eFG_live") or 0.0
+        ftr = lc_side.get("FTr_live") or 0.0
+        extra_poss = lc_side.get("ExtraPoss_live") or 0.0
+        poss = lc_side.get("Poss_live") or 0.0
+        return {
+            "team_name":  team_name,
+            "points":     pts_raw,
+            "FGA":        fga,
+            "FGM":        None,
+            "2PA":        None,
+            "2PM":        None,
+            "3PA":        None,
+            "3PM":        None,
+            "FTA":        None,
+            "FTM":        None,
+            "ORB":        None,
+            "DRB":        None,
+            "TO":         None,
+            "fouls":      None,
+            "Poss":       poss if poss else None,
+            "eFG":        efg if efg else None,
+            "FTr":        ftr if ftr else None,
+            "ExtraPoss":  extra_poss if extra_poss else None,
+            "OffRtg":     None,
+            "live_profile": _live_profile(efg, extra_poss, ftr),
+        }
+
+    home_name = meta.get("match", "").split(" vs ")[0].strip() if " vs " in str(meta.get("match", "")) else "Home"
+    away_name = meta.get("match", "").split(" vs ")[1].strip() if " vs " in str(meta.get("match", "")) else "Away"
+
+    live_team_stats = {
+        "home": _build_live_team(lc_home, "home", home_name),
+        "away": _build_live_team(lc_away, "away", away_name),
+    }
+
+    # ── новый блок: projections ───────────────────────────────────────────
+    proj = r.get("projection", {})
+    pre  = r.get("pre_match_stat", {})
+    proj_match = proj.get("match", {})
+    proj_q3    = proj.get("q3", {})
+    projections = {
+        "pre_match_stat": {
+            "home_final": pre.get("team_a", {}).get("PreFinal"),
+            "away_final": pre.get("team_b", {}).get("PreFinal"),
+            "total":      pre.get("PreFinal_Total"),
+        },
+        "live_calibrated": {
+            "valid":      _lc_is_valid,
+            "status":     _lc_status if not _lc_is_valid else "OK",
+            "home_final": lc_home.get("LiveCalibrated") if _lc_is_valid else None,
+            "away_final": lc_away.get("LiveCalibrated") if _lc_is_valid else None,
+            "total":      lc.get("LiveCalibrated_Total") if _lc_is_valid else None,
+            "note":       lc.get("note") if not _lc_is_valid else None,
+        },
+        "segment_projection": {
+            "home_final":  proj_match.get("team_a_final_center"),
+            "away_final":  proj_match.get("team_b_final_center"),
+            "total":       proj_match.get("final_total_center"),
+            "range_low":   proj_match.get("low"),
+            "range_high":  proj_match.get("high"),
+            "total_std":   proj_match.get("total_std"),
+        },
+        "projection_priority": {
+            "main_for_p_live":    "segment_projection",
+            "secondary":          "live_calibrated" if _lc_is_valid else "DISABLED_FINISHED",
+            "raw_simple_pace":    "informational_only",
+        },
+        "lines_stale_warning": _lines_stale_w,
+        # полный объект projection сохраняється
+        "q3": proj_q3,
+        "thresholds": r.get("thresholds", {}),
+    }
+
+    # ── новый блок: history_by_exact_line ─────────────────────────────────
+    hz = r.get("history_zones", {})
+    history_by_exact_line = {
+        "match_total": hz.get("match_total", {}),
+        "team_it":     hz.get("team_it_match", {}),
+        "quarter_total": hz.get("q3_total", {}),
+    }
+
+    # ── новый блок: scenario_patterns_by_line ─────────────────────────────
+    sc_zones = scenario.get("team_a") or {}
+    scenario_patterns_by_line = {
+        "team_a": sc_zones,
+        "team_b": scenario.get("team_b") or {},
+    }
+
+    # ── новый блок: line_evaluations ─────────────────────────────────────
+    candidates = r.get("candidates", [])
+    line_evaluations = []
+    for cand in candidates:
+        line_evaluations.append({
+            "line_id":               cand.get("line_id") or cand.get("id"),
+            "is_real_bookmaker_line": True,
+            "market":     cand.get("market"),
+            "team":       cand.get("team"),
+            "team_name":  cand.get("team_name"),
+            "line":       cand.get("line"),
+            "threshold":  cand.get("threshold", {}),
+            "history":    cand.get("history", {}),
+            "scenario":   cand.get("scenario", {}),
+            "live_projection": cand.get("live_projection", {}),
+            "weights":    cand.get("weights", {}),
+            "formula":    cand.get("formula", {}),
+            "caps_blockers": cand.get("caps_blockers", []),
+            "final":      cand.get("final_verdict") or cand.get("final", {}),
+        })
+
+    # ── старый data_quality (для обратной совместимости) ──────────────────
+    data_quality_legacy = {
         "sample_gate": sg,
         "sample_strength": r.get("sample_strength"),
         "stat_support": {
-            "status":         r.get("stat_support", {}).get("status"),
-            "missing_fields": r.get("stat_support", {}).get("missing_fields", []),
+            "status":         stat_sp.get("status"),
+            "missing_fields": stat_sp.get("missing_fields", []),
         },
         "live_stat_support": r.get("live_stat_support", {}),
         "blockers":          r.get("blockers", []),
         "final_signal":      r.get("final_signal"),
     }
 
-    # ── bookmaker_lines ───────────────────────────────────────────────────
-    bookmaker_lines = lines_data if lines_data else {}
-
-    # ── score_state ───────────────────────────────────────────────────────
-    scenario = r.get("scenario", {})
+    # ── score_state (старый) ──────────────────────────────────────────────
     score_state = {
         "score":                meta.get("score"),
         "q1":                   meta.get("q1"),
@@ -2256,8 +2682,7 @@ def build_result_json(match_result: dict, lines_data: dict = None,
         "current_ht_total_bucket":  scenario.get("current_ht_total_bucket"),
     }
 
-    # ── live_boxscore ─────────────────────────────────────────────────────
-    stat_support = r.get("stat_support", {})
+    # ── live_boxscore (старый) ────────────────────────────────────────────
     live_boxscore = {
         "team_a_1h": stat_support.get("team_a_1h", {}),
         "team_b_1h": stat_support.get("team_b_1h", {}),
@@ -2266,28 +2691,24 @@ def build_result_json(match_result: dict, lines_data: dict = None,
         "live_override_score_b":  stat_support.get("live_override_score_b", {}),
     }
 
-    # ── history_zones ─────────────────────────────────────────────────────
-    history_zones = r.get("history_zones", {})
-
-    # ── stat_zones ────────────────────────────────────────────────────────
+    # ── stat_zones (старый) ───────────────────────────────────────────────
     stat_zones = r.get("stat_zones", {})
 
-    # ── stat_conditioned_line_profiles ─────────────────────────────────────
-    # Pre-match stat projection + live calibrated projection per line
+    # ── stat_conditioned_line_profiles (старый) ───────────────────────────
     stat_conditioned_line_profiles = {
-        "pre_match_stat":  r.get("pre_match_stat", {}),
-        "live_calibrated": r.get("live_calibrated", {}),
-        "projection":      r.get("projection", {}),
+        "pre_match_stat":  pre,
+        "live_calibrated": lc,
+        "projection":      proj,
         "thresholds":      r.get("thresholds", {}),
     }
 
-    # ── scenario_zones ────────────────────────────────────────────────────
+    # ── scenario_zones (старый) ───────────────────────────────────────────
     scenario_zones = {
         "team_a": scenario.get("team_a", {}),
         "team_b": scenario.get("team_b", {}),
     }
 
-    # ── checkpoint_matrices ───────────────────────────────────────────────
+    # ── checkpoint_matrices (старый) ──────────────────────────────────────
     checkpoint_matrices = {
         "team_any_quarter_threshold": r.get("team_any_quarter_threshold", {}),
         "opponent_allowed_any_quarter_threshold": r.get("opponent_allowed_any_quarter_threshold", {}),
@@ -2295,8 +2716,7 @@ def build_result_json(match_result: dict, lines_data: dict = None,
         "strong_patterns": r.get("strong_patterns", []),
     }
 
-    # ── quarter_result_profile ─────────────────────────────────────────────
-    hz = history_zones
+    # ── quarter_result_profile (старый) ───────────────────────────────────
     quarter_result_profile = {
         "q1_total":  hz.get("q1_total", {}),
         "q2_total":  hz.get("q2_total", {}),
@@ -2307,7 +2727,7 @@ def build_result_json(match_result: dict, lines_data: dict = None,
         "at_least_one_quarter_b": hz.get("at_least_one_quarter_b", {}),
     }
 
-    # ── stat_alignment ────────────────────────────────────────────────────
+    # ── stat_alignment (старый) ───────────────────────────────────────────
     stat_alignment = {
         "stat_support_full": {k: v for k, v in stat_support.items()
                                if k not in ("team_a_1h", "team_b_1h",
@@ -2322,33 +2742,32 @@ def build_result_json(match_result: dict, lines_data: dict = None,
         "match_total":         hz.get("match_total", {}),
     }
 
-    # ── markets_evaluation ────────────────────────────────────────────────
-    markets_evaluation = r.get("candidates", [])
+    # ── markets_evaluation (старый) ───────────────────────────────────────
+    markets_evaluation = candidates
 
-    # ── final_verdict ─────────────────────────────────────────────────────
+    # ── final_verdict (старый) ────────────────────────────────────────────
     final_verdict = {
         "final_signal":  r.get("final_signal"),
         "blockers":      r.get("blockers", []),
         "sample_strength": r.get("sample_strength"),
-        "top_candidates": r.get("candidates", [])[:5],
+        "top_candidates": candidates[:5],
         "projection_summary": {
-            "match_total_center": r.get("projection", {}).get("match", {}).get("final_total_center"),
-            "match_total_range":  [
-                r.get("projection", {}).get("match", {}).get("low"),
-                r.get("projection", {}).get("match", {}).get("high"),
-            ],
-            "q3_total_center": r.get("projection", {}).get("q3", {}).get("total_center"),
-            "live_calibrated_total": r.get("live_calibrated", {}).get("LiveCalibrated_Total"),
-            "pre_final_total": r.get("pre_match_stat", {}).get("PreFinal_Total"),
+            "match_total_center": proj_match.get("final_total_center"),
+            "match_total_range":  [proj_match.get("low"), proj_match.get("high")],
+            "q3_total_center": proj_q3.get("total_center"),
+            "live_calibrated_total": lc.get("LiveCalibrated_Total") if _lc_is_valid else None,
+            "live_calibrated_valid": _lc_is_valid,
+            "pre_final_total": pre.get("PreFinal_Total"),
+            "lines_stale_warning": _lines_stale_w,
         },
-        "stat_support_status": r.get("stat_support", {}).get("status"),
+        "stat_support_status": stat_sp.get("status"),
         "live_stat_verdict":   r.get("live_stat_support", {}).get("verdict"),
         "ht_profile": stat_support.get("ht_profile", {}),
         "anti_sweep_signal_a": r.get("anti_sweep", {}).get("team_a", {}).get("signal"),
         "anti_sweep_signal_b": r.get("anti_sweep", {}).get("team_b", {}).get("signal"),
     }
 
-    # ── raw_data — сырые записи в самом конце ────────────────────────────
+    # ── raw_data (старый) ─────────────────────────────────────────────────
     raw_data = {}
     if parsed:
         raw_data["main_match"]  = parsed.get("main_match")
@@ -2359,46 +2778,72 @@ def build_result_json(match_result: dict, lines_data: dict = None,
         raw_data["raw_block"]   = raw_block
 
     return {
-        # ── 1. Контекст матча ─────────────────────────────────────────────
-        "meta":                           meta,
+        # ══ НОВАЯ СТРУКТУРА (schema v3) ══════════════════════════════════
+        "schema_version": "basketball_line_eval_v3.0",
 
-        # ── 2. Линии букмекеров ───────────────────────────────────────────
-        "bookmaker_lines":                bookmaker_lines,
+        # ── 1. Контекст матча (новый расширенный блок) ───────────────────
+        "match": match_block,
 
-        # ── 3. Текущее состояние матча ────────────────────────────────────
-        "score_state":                    score_state,
+        # ── 2. Качество данных (верхний уровень) ─────────────────────────
+        "data_quality": data_quality,
 
-        # ── 4. Итоговый вердикт (главный вывод) ──────────────────────────
-        "final_verdict":                  final_verdict,
+        # ── 3. Линии букмекеров (новая структура + старые ключи) ─────────
+        "bookmaker_lines": bookmaker_lines,
 
-        # ── 5. Рынки — кандидаты для ставок ──────────────────────────────
-        "markets_evaluation":             markets_evaluation,
+        # ── 4. Живая статистика команд ───────────────────────────────────
+        "live_team_stats": live_team_stats,
 
-        # ── 6. Формулы: проекции, пороги, калибровка ─────────────────────
+        # ── 5. Проекции ──────────────────────────────────────────────────
+        "projections": projections,
+
+        # ── 6. История по точным линиям ──────────────────────────────────
+        "history_by_exact_line": history_by_exact_line,
+
+        # ── 7. Сценарные паттерны по линиям ─────────────────────────────
+        "scenario_patterns_by_line": scenario_patterns_by_line,
+
+        # ── 8. Оценки линий (главный вывод по ставкам) ───────────────────
+        "line_evaluations": line_evaluations,
+
+        # ══ СТАРАЯ СТРУКТУРА (обратная совместимость) ════════════════════
+
+        # ── 9. meta (старый) ─────────────────────────────────────────────
+        "meta": meta,
+
+        # ── 10. Линии букмекеров (старый плоский формат) ─────────────────
+        # уже включено в bookmaker_lines выше
+
+        # ── 11. Текущее состояние матча ───────────────────────────────────
+        "score_state": score_state,
+
+        # ── 12. Итоговый вердикт ─────────────────────────────────────────
+        "final_verdict": final_verdict,
+
+        # ── 13. Рынки — кандидаты ────────────────────────────────────────
+        "markets_evaluation": markets_evaluation,
+
+        # ── 14. Формулы: проекции, пороги, калибровка ────────────────────
         "stat_conditioned_line_profiles": stat_conditioned_line_profiles,
 
-        # ── 7. Сценарии и чекпоинты ───────────────────────────────────────
-        "scenario_zones":                 scenario_zones,
-        "checkpoint_matrices":            checkpoint_matrices,
+        # ── 15. Сценарии и чекпоинты ──────────────────────────────────────
+        "scenario_zones": scenario_zones,
+        "checkpoint_matrices": checkpoint_matrices,
 
-        # ── 8. Профиль по четвертям ───────────────────────────────────────
-        "quarter_result_profile":         quarter_result_profile,
+        # ── 16. Профиль по четвертям ──────────────────────────────────────
+        "quarter_result_profile": quarter_result_profile,
 
-        # ── 9. Стат-выравнивание (спреды, IT-матч, разрешённые) ───────────
-        "stat_alignment":                 stat_alignment,
+        # ── 17. Стат-выравнивание ─────────────────────────────────────────
+        "stat_alignment": stat_alignment,
 
-        # ── 10. Исторические зоны и перцентили статистики ─────────────────
-        "history_zones":                  history_zones,
-        "stat_zones":                     stat_zones,
+        # ── 18. Исторические зоны и перцентили ────────────────────────────
+        "history_zones": hz,
+        "stat_zones": stat_zones,
 
-        # ── 11. Бокссcore текущего матча (H1 статистика) ─────────────────
-        "live_boxscore":                  live_boxscore,
+        # ── 19. Бокссcore текущего матча ──────────────────────────────────
+        "live_boxscore": live_boxscore,
 
-        # ── 12. Качество данных / флаги ───────────────────────────────────
-        "data_quality":                   data_quality,
-
-        # ── 13. Сырые данные ──────────────────────────────────────────────
-        "raw_data":                       raw_data,
+        # ── 20. Сырые данные ──────────────────────────────────────────────
+        "raw_data": raw_data,
     }
 
 
