@@ -136,6 +136,56 @@ def extract_bk_match_handicap_lines(lines_data: dict, scope: str = "Match") -> l
             result.append(float(hcp))
     return sorted(result)
 
+
+def extract_bk_3pt_total_lines(lines_data: dict) -> list:
+    """
+    Extract unique sorted 3PT combined total lines from bookmakers.
+    These typically appear in 'other' section (bettingType not mapped) or
+    home_ind_total / away_ind_total with very small line values (< 20).
+    Returns sorted list of float lines, e.g. [9.5, 10.5, 11.5].
+    """
+    seen = set()
+    result = []
+    # Check home_ind_total and away_ind_total for very small lines (3PT proxy)
+    for section in ("home_ind_total", "away_ind_total"):
+        for entry in lines_data.get(section, []):
+            line = entry.get("line")
+            if line is not None:
+                fline = float(line)
+                # Heuristic: 3PT individual totals are typically < 20
+                if fline < 20.0 and fline not in seen:
+                    seen.add(fline)
+                    result.append(fline)
+    # Also check 'other' section for any 3PT-style small lines
+    for entry in lines_data.get("other", []):
+        line = entry.get("handicap")
+        if line is not None:
+            fline = float(line)
+            if fline < 20.0 and fline not in seen:
+                seen.add(fline)
+                result.append(fline)
+    return sorted(result)
+
+
+def extract_bk_3pt_handicap_lines(lines_data: dict) -> list:
+    """
+    Extract 3PT handicap lines from bookmakers (small absolute values, typically ±0.5..±4.5).
+    These come from 'other' section or home_ind_total/away_ind_total handicap entries.
+    Returns sorted list of home-perspective handicap floats, e.g. [-2.5, -1.5, 1.5, 2.5].
+    """
+    seen = set()
+    result = []
+    for section in ("home_ind_total", "away_ind_total", "other"):
+        for entry in lines_data.get(section, []):
+            hcp = entry.get("handicap")
+            if hcp is not None:
+                fhcp = float(hcp)
+                # Small handicaps (absolute value < 10) are 3PT handicap candidates
+                if abs(fhcp) < 10.0 and fhcp not in seen:
+                    seen.add(fhcp)
+                    result.append(fhcp)
+    return sorted(result)
+
 # ─────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────
@@ -2433,6 +2483,10 @@ def build_result_json(match_result: dict, lines_data: dict = None,
         "match_handicap": raw_lines.get("match_handicap", []),
         "match_1x2":      raw_lines.get("match_1x2", []),
         "other":          raw_lines.get("other", []),
+        # 3PT-маркети: потрібні для extract_bk_3pt_total_lines / extract_bk_3pt_handicap_lines
+        # Парсер шукає саме ці ключі — без них 3PT total/handicap = null (bug)
+        "home_ind_total": raw_lines.get("home_ind_total", []),
+        "away_ind_total": raw_lines.get("away_ind_total", []),
     }
 
     # ── новый блок: match ─────────────────────────────────────────────────
@@ -2551,21 +2605,42 @@ def build_result_json(match_result: dict, lines_data: dict = None,
         ftr = lc_side.get("FTr_live") or 0.0
         extra_poss = lc_side.get("ExtraPoss_live") or 0.0
         poss = lc_side.get("Poss_live") or 0.0
+        # Pull detailed box-score stats from stat_support (team_a_1h / team_b_1h)
+        # These keys mirror what process_match stores from the live main-match record
+        _1h_key = "team_a_1h" if side_key == "home" else "team_b_1h"
+        _1h = stat_sp_data.get(_1h_key, {})
+        # safe_int() ensures all count stats are int (not raw JSON strings),
+        # which is critical for arithmetic: 3PM_home + 3PM_away must be int addition.
+        # safe_int returns 0 for missing/None — use None-guarded version below.
+        def _si(v):
+            return safe_int(v) if v not in (None, "", "null") else None
+        _fga_raw = fga or _1h.get("FGA")
+        # Compute 2PA from FGA - 3PA if not directly available (parser may omit h2pam/a2pam)
+        _3pa = _si(_1h.get("3PA"))
+        _fga = _si(_fga_raw)
+        _2pa = _si(_1h.get("2PA"))
+        if _2pa is None and _fga is not None and _3pa is not None:
+            _2pa = _fga - _3pa
+        _3pm = _si(_1h.get("3PM"))
+        _fgm = _si(_1h.get("FGM"))
+        _2pm = _si(_1h.get("2PM"))
+        if _2pm is None and _fgm is not None and _3pm is not None:
+            _2pm = _fgm - _3pm
         return {
             "team_name":  team_name,
             "points":     pts_raw,
-            "FGA":        fga,
-            "FGM":        None,
-            "2PA":        None,
-            "2PM":        None,
-            "3PA":        None,
-            "3PM":        None,
-            "FTA":        None,
-            "FTM":        None,
-            "ORB":        None,
-            "DRB":        None,
-            "TO":         None,
-            "fouls":      None,
+            "FGA":        _fga,
+            "FGM":        _fgm,
+            "2PA":        _2pa,
+            "2PM":        _2pm,
+            "3PA":        _3pa,
+            "3PM":        _3pm,
+            "FTA":        _si(_1h.get("FTA")),
+            "FTM":        _si(_1h.get("FTM")),
+            "ORB":        _si(_1h.get("ORB")),
+            "DRB":        _si(_1h.get("DRB")),
+            "TO":         _si(_1h.get("TO")),
+            "fouls":      _si(_1h.get("FOULS")),
             "Poss":       poss if poss else None,
             "eFG":        efg if efg else None,
             "FTr":        ftr if ftr else None,

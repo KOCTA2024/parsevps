@@ -318,3 +318,6 @@ SA÷3¬~KA÷Загалом¬IS÷¬~KB÷Останні матчі: Манреса
 [19.05.2026, 21:46:43] src/data/Venetsiya_vs_Tortona.json
 [19.05.2026, 21:49:44] src/data/Venetsiya_vs_Tortona.json
 [19.05.2026, 21:57:07] src/data/Venetsiya_vs_Tortona.json
+[20.05.2026, 19:51:42] src/data/Rylski_Sportyst_vs_Lok._Plovdyv.json
+[20.05.2026, 20:14:55] src/data/Rylski_Sportyst_vs_Lok._Plovdyv.json
+[20.05.2026, 20:17:16] src/data/Rylski_Sportyst_vs_Lok._Plovdyv.json
