@@ -561,6 +561,130 @@ def history_quarter_total(rows_a: list, rows_b: list, quarter: str) -> dict:
         "pooled70": zone_over_under(pooled, QUARTER_TOTAL_LINES),
     }
 
+def history_half_total(rows_a: list, rows_b: list, h2h_rows: list,
+                       lines: list) -> dict:
+    """
+    Для каждой BK-линии из half_total (например, 86.5) считает реальную историю:
+      - сколько матчей team_a / team_b завершили первую половину с тоталом <= line (Under)
+      - сколько с тоталом >  line (Over)
+      - pooled70 (сумма обеих команд, N=na+nb)
+      - smoothed (Laplace +1/+2)
+      - H2H если есть
+    Статус OFF проставляется ТОЛЬКО если физически нет строк в rows_a или rows_b.
+    """
+    if not lines:
+        return {}
+
+    na = len(rows_a)
+    nb = len(rows_b)
+    nh = len(h2h_rows)
+
+    result = {}
+    for line in lines:
+        line_key = str(line)
+
+        # Team A
+        if na > 0:
+            a_under = sum(1 for r in rows_a if r["h1_total"] <= line)
+            a_over  = na - a_under
+            a_under_rate = round(a_under / na, 3)
+            a_over_rate  = round(a_over  / na, 3)
+            a_smoothed_under = round((a_under + 1) / (na + 2), 3)
+            a_smoothed_over  = round((a_over  + 1) / (na + 2), 3)
+            team_a_block = {
+                "n":             na,
+                "under_hits":    a_under,
+                "under_rate":    a_under_rate,
+                "over_hits":     a_over,
+                "over_rate":     a_over_rate,
+                "smoothed_under": a_smoothed_under,
+                "smoothed_over":  a_smoothed_over,
+                "P_hist_exact":  "ON",
+            }
+        else:
+            team_a_block = {"n": 0, "P_hist_exact": "OFF",
+                            "under_hits": None, "over_hits": None,
+                            "under_rate": None, "over_rate": None}
+
+        # Team B
+        if nb > 0:
+            b_under = sum(1 for r in rows_b if r["h1_total"] <= line)
+            b_over  = nb - b_under
+            b_under_rate = round(b_under / nb, 3)
+            b_over_rate  = round(b_over  / nb, 3)
+            b_smoothed_under = round((b_under + 1) / (nb + 2), 3)
+            b_smoothed_over  = round((b_over  + 1) / (nb + 2), 3)
+            team_b_block = {
+                "n":             nb,
+                "under_hits":    b_under,
+                "under_rate":    b_under_rate,
+                "over_hits":     b_over,
+                "over_rate":     b_over_rate,
+                "smoothed_under": b_smoothed_under,
+                "smoothed_over":  b_smoothed_over,
+                "P_hist_exact":  "ON",
+            }
+        else:
+            team_b_block = {"n": 0, "P_hist_exact": "OFF",
+                            "under_hits": None, "over_hits": None,
+                            "under_rate": None, "over_rate": None}
+
+        # Pooled70 (Team A + Team B combined)
+        if na > 0 and nb > 0:
+            pooled_n     = na + nb
+            pool_under   = a_under + b_under
+            pool_over    = a_over  + b_over
+            pool_u_rate  = round(pool_under / pooled_n, 3)
+            pool_o_rate  = round(pool_over  / pooled_n, 3)
+            pool_sm_under = round((pool_under + 1) / (pooled_n + 2), 3)
+            pool_sm_over  = round((pool_over  + 1) / (pooled_n + 2), 3)
+            pooled_block = {
+                "n":              pooled_n,
+                "under_hits":     pool_under,
+                "under_rate":     pool_u_rate,
+                "over_hits":      pool_over,
+                "over_rate":      pool_o_rate,
+                "smoothed_under": pool_sm_under,
+                "smoothed_over":  pool_sm_over,
+                "P_hist_exact":   "ON",
+                "pct_str_under":  f"{pool_under}/{pooled_n}",
+                "pct_str_over":   f"{pool_over}/{pooled_n}",
+            }
+        else:
+            pooled_block = {"n": (na + nb), "P_hist_exact": "OFF"}
+
+        # H2H
+        if nh > 0:
+            h_under = sum(1 for r in h2h_rows if r["h1_total"] <= line)
+            h_over  = nh - h_under
+            h2h_block = {
+                "n":          nh,
+                "under_hits": h_under,
+                "under_rate": round(h_under / nh, 3),
+                "over_hits":  h_over,
+                "over_rate":  round(h_over  / nh, 3),
+                "P_hist_exact": "ON",
+                "pct_str_under": f"{h_under}/{nh}",
+                "pct_str_over":  f"{h_over}/{nh}",
+            }
+        else:
+            h2h_block = {"n": 0, "P_hist_exact": "OFF"}
+
+        # Overall pass/fail gate for this line
+        p_hist_exact = "ON" if (na > 0 and nb > 0) else "OFF"
+
+        result[line_key] = {
+            "line":          line,
+            "P_hist_exact":  p_hist_exact,
+            "team_a":        team_a_block,
+            "team_b":        team_b_block,
+            "pooled70":      pooled_block,
+            "h2h":           h2h_block,
+        }
+
+    return result
+
+
 def history_team_it_match(rows_a: list, rows_b: list) -> dict:
     """scored+allowed gate for match IT"""
     results = {}
@@ -2103,6 +2227,10 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
     hist_atleast1q_a = history_at_least_one_quarter(rows_a)
     hist_atleast1q_b = history_at_least_one_quarter(rows_b)
 
+    # ── 1H total history по BK-линиям (динамический расчёт) ─────────────────
+    bk_h1_lines_for_hist = extract_bk_half_total_lines(lines_data) if lines_data else []
+    hist_half_total = history_half_total(rows_a, rows_b, h2h_rows, bk_h1_lines_for_hist)
+
     history_zones = {
         "match_total": hist_match_total,
         "q1_total": hist_q1_total,
@@ -2117,6 +2245,7 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
         "allowed_points": hist_allowed,
         "at_least_one_quarter_a": hist_atleast1q_a,
         "at_least_one_quarter_b": hist_atleast1q_b,
+        "half_total": hist_half_total,
     }
 
     # Conditional scanner
@@ -2698,9 +2827,14 @@ def build_result_json(match_result: dict, lines_data: dict = None,
     # ── новый блок: history_by_exact_line ─────────────────────────────────
     hz = r.get("history_zones", {})
     history_by_exact_line = {
-        "match_total": hz.get("match_total", {}),
-        "team_it":     hz.get("team_it_match", {}),
+        "match_total":   hz.get("match_total", {}),
+        "team_it":       hz.get("team_it_match", {}),
         "quarter_total": hz.get("q3_total", {}),
+        # 1H total: динамически рассчитан по реальным BK-линиям из half_total.
+        # Каждый ключ = строковое значение линии (напр. "86.5").
+        # Внутри: team_a, team_b, pooled70, h2h с реальными under/over hits.
+        # P_hist_exact = "OFF" ТОЛЬКО если физически нет матчей команды.
+        "half_total":    hz.get("half_total", {}),
     }
 
     # ── новый блок: scenario_patterns_by_line ─────────────────────────────

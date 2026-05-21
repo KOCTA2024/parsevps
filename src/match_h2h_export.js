@@ -1,3 +1,4 @@
+
 import fs from 'fs';
 import path from 'path';
 import { chromium } from 'playwright';
@@ -8,24 +9,29 @@ import { fileURLToPath } from 'url';
 import https from 'https';
 import zlib from 'zlib';
 import { fetchAndSaveLines } from './parse_lines.js';
-
+ 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
+ 
 // ─── Kill leftover browser processes + clean tmp ──────────────────────────────
 try { execSync('pkill -f chromium || true'); } catch {}
 try { execSync('pkill -f headless_shell || true'); } catch {}
 try { execSync('pkill -f chrome || true'); } catch {}
-try { execSync('sleep 1'); } catch {}
+// Чекаємо справжньої смерті процесів, не просто 1 секунду
+try { execSync('sleep 2 && pkill -9 -f chromium 2>/dev/null || true'); } catch {}
 try { execSync('rm -rf /tmp/.org.chromium.* /tmp/playwright* 2>/dev/null || true'); } catch {}
-
+ 
+// Унікальна temp-директорія для цього запуску — щоб паралельні запуски (ти + клієнт)
+// не шарили профіль Chromium і не читали DOM один одного
+const RUN_TMP_DIR = `/tmp/pw_run_${process.pid}_${Date.now()}`;
+ 
 import { OUTPUT_PATH } from './constants/index.js';
-
+ 
 const DEFAULT_LIMIT     = 35;
 const DEFAULT_H2H_LIMIT = 5;
-
+ 
 // ─── utils ────────────────────────────────────────────────────────────────────
-
+ 
 function clearOutputDirectory() {
   if (fs.existsSync(OUTPUT_PATH)) {
     for (const file of fs.readdirSync(OUTPUT_PATH)) {
@@ -36,12 +42,12 @@ function clearOutputDirectory() {
     fs.mkdirSync(OUTPUT_PATH, { recursive: true });
   }
 }
-
+ 
 function askQuestion(query) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   return new Promise(resolve => rl.question(query, ans => { rl.close(); resolve(ans); }));
 }
-
+ 
 function parseArgs() {
   const args = process.argv.slice(2);
   const options = {
@@ -61,26 +67,26 @@ function parseArgs() {
   if (!options.matchUrl) throw new Error('❌ Missing required argument: matchUrl=<flashscore-url>');
   return options;
 }
-
+ 
 function sanitizeFileName(value) {
   return String(value || 'flashscore_export')
     .normalize('NFKD').replace(/[^\w\-. ]+/g, '').replace(/\s+/g, '_')
     .replace(/_+/g, '_').replace(/^_+|_+$/g, '').slice(0, 120) || 'flashscore_export';
 }
-
+ 
 function extractMid(matchUrl) {
   const mid = new URL(matchUrl).searchParams.get('mid');
   if (!mid) throw new Error('❌ Could not extract ?mid= from the provided matchUrl');
   return mid;
 }
-
+ 
 function formatUnixDate(ts) {
   if (!ts) return '';
   return new Date(Number(ts) * 1000).toLocaleString('ru-RU').replace(',', '');
 }
-
+ 
 // ─── Status mapping from DI field (dc_ feed) ─────────────────────────────────
-
+ 
 function parseDcStatus(raw, match) {
   if (!raw || raw.length < 3) return { statusStr: '', liveMinute: null };
   const kv = parseKV(raw.split('~')[0]);
@@ -95,9 +101,9 @@ function parseDcStatus(raw, match) {
   }
   return { statusStr: 'Live', liveMinute: diNum };
 }
-
+ 
 // ─── API fetch (gzip-aware) ───────────────────────────────────────────────────
-
+ 
 async function fetchFeed(feedName, fsign, prefix = '35') {
   const url = `https://${prefix}.flashscore.ninja/${prefix}/x/feed/${feedName}`;
   return new Promise((resolve, reject) => {
@@ -124,14 +130,14 @@ async function fetchFeed(feedName, fsign, prefix = '35') {
     }).on('error', reject);
   });
 }
-
+ 
 async function fetchFeedSafe(feedName, fsign, prefix) {
   try { return await fetchFeed(feedName, fsign, prefix); }
   catch (e) { console.warn(`⚠ Could not fetch ${feedName}: ${e.message}`); return ''; }
 }
-
+ 
 // ─── KV parser ────────────────────────────────────────────────────────────────
-
+ 
 function parseKV(text) {
   const obj = {};
   if (!text) return obj;
@@ -141,27 +147,27 @@ function parseKV(text) {
   }
   return obj;
 }
-
+ 
 // ─── H2H feed parser (df_hh_) ────────────────────────────────────────────────
-
+ 
 function parseHhFeed(raw) {
   const result = { homeName: '', awayName: '', homeMatches: [], awayMatches: [], h2hMatches: [] };
   if (!raw) return result;
-
+ 
   const blocks = raw.split('~');
   let section = null;
   let sectionCount = 0;
-
+ 
   for (const block of blocks) {
     const f = parseKV(block);
-
+ 
     if ('KA' in f) {
       sectionCount = 0;
       if (result.h2hMatches.length > 0 || section === 'h2h') break;
       section = null;
       continue;
     }
-
+ 
     if ('KB' in f) {
       sectionCount++;
       const label = (f['KB'] || '').toLowerCase();
@@ -180,12 +186,12 @@ function parseHhFeed(raw) {
       }
       continue;
     }
-
+ 
     if (!f['KP'] || !section) continue;
-
+ 
     const homeScore = f['KU'] !== undefined ? Number(f['KU']) : null;
     const awayScore = f['KT'] !== undefined ? Number(f['KT']) : null;
-
+ 
     const match = {
       matchId    : f['KP'],
       timestamp  : f['KC'] || null,
@@ -204,48 +210,48 @@ function parseHhFeed(raw) {
       side       : f['KS'] || '',
       url        : `https://www.flashscore.com/match/${f['KP']}/`,
     };
-
+ 
     if (section === 'home')      result.homeMatches.push(match);
     else if (section === 'away') result.awayMatches.push(match);
     else if (section === 'h2h')  result.h2hMatches.push(match);
   }
-
+ 
   return result;
 }
-
+ 
 // ─── Quarter scores parser (df_sur_) ─────────────────────────────────────────
-
+ 
 const PERIOD_KEY_PAIRS = [
   ['BA','BB'], ['BC','BD'], ['BE','BF'], ['BG','BH'],
   ['BI','BJ'], ['BK','BL'], ['BM','BN'], ['BO','BP'],
 ];
-
+ 
 function parseSurFeed(raw) {
   const result = {};
   if (!raw || raw.length < 5) return result;
-
+ 
   const allKV = {};
   for (const block of raw.split('~')) Object.assign(allKV, parseKV(block));
-
+ 
   for (let i = 0; i < PERIOD_KEY_PAIRS.length; i++) {
     const [hKey, aKey] = PERIOD_KEY_PAIRS[i];
     if (allKV[hKey] === undefined && allKV[aKey] === undefined) continue;
-
+ 
     const label = i < 4 ? `Q${i + 1}` : `OT${i - 3}`;
     const home  = allKV[hKey] !== undefined ? allKV[hKey] : '';
     const away  = allKV[aKey] !== undefined ? allKV[aKey] : '';
     const total = (home !== '' && away !== '') ? Number(home) + Number(away) : '';
-
+ 
     result[`${label}_Home`]  = home;
     result[`${label}_Away`]  = away;
     result[`${label}_Total`] = total;
   }
-
+ 
   return result;
 }
-
+ 
 // ─── Statistics parser (df_st_) ───────────────────────────────────────────────
-
+ 
 const SECTION_SUFFIX_MAP = {
   'матч'          : '_Match', 'match'         : '_Match',
   '1-а чверть'   : '_Q1',    '1st quarter'   : '_Q1', 'q1': '_Q1',
@@ -256,7 +262,7 @@ const SECTION_SUFFIX_MAP = {
   '2-й овертайм' : '_OT2',   '2nd overtime'  : '_OT2',
   '3-й овертайм' : '_OT3',   '3rd overtime'  : '_OT3',
 };
-
+ 
 const STAT_KEY_MAP = {
   'всього підбирань'           : 'Rebounds',
   'rebounds'                   : 'Rebounds',
@@ -302,17 +308,17 @@ const STAT_KEY_MAP = {
   '% влучань з лінії штрафних' : 'FT_Pct',
   'free throw %'               : 'FT_Pct',
 };
-
+ 
 function parseStFeed(raw) {
   const result = {};
   if (!raw || raw.length < 5) return result;
-
+ 
   let currentSuffix = '_Match';
   const unknownCounters = {};
-
+ 
   for (const block of raw.split('~')) {
     const f = parseKV(block);
-
+ 
     if ('SE' in f) {
       const sectionLabel = (f['SE'] || '').trim();
       const key = sectionLabel.toLowerCase().trim();
@@ -330,17 +336,17 @@ function parseStFeed(raw) {
       }
       continue;
     }
-
+ 
     if ('SF' in f) continue;
-
+ 
     if (!('SG' in f) || !currentSuffix) continue;
-
+ 
     const statLabel = (f['SG'] || '').trim();
     const homeVal   = f['SH'] !== undefined ? f['SH'].trim() : '';
     const awayVal   = f['SI'] !== undefined ? f['SI'].trim() : '';
-
+ 
     const fieldBase = STAT_KEY_MAP[statLabel.toLowerCase()];
-
+ 
     if (fieldBase) {
       result[`Home_${fieldBase}${currentSuffix}`] = homeVal;
       result[`Away_${fieldBase}${currentSuffix}`] = awayVal;
@@ -353,10 +359,10 @@ function parseStFeed(raw) {
       result[`Away_${safeLabel}${currentSuffix}${dedup}`] = awayVal;
     }
   }
-
+ 
   return result;
 }
-
+ 
 function transliterate(str) {
   const map = {
     'а':'a','б':'b','в':'v','г':'g','ґ':'g','д':'d','е':'e','є':'ie','ж':'zh',
@@ -370,10 +376,10 @@ function transliterate(str) {
   };
   return str.split('').map(c => map[c] ?? c).join('');
 }
-
+ 
 // ─── Live score helpers ───────────────────────────────────────────────────────
 const QUARTER_LABELS = ['Q1', 'Q2', 'Q3', 'Q4'];
-
+ 
 function calcLiveScores(qd) {
   let homeSum = 0, awaySum = 0, anyPresent = false;
   for (const label of [...QUARTER_LABELS, 'OT1','OT2','OT3','OT4','OT5','OT6']) {
@@ -386,49 +392,49 @@ function calcLiveScores(qd) {
   if (!anyPresent) return { liveHome: '', liveAway: '', liveTotal: '' };
   return { liveHome: homeSum, liveAway: awaySum, liveTotal: homeSum + awaySum };
 }
-
+ 
 function detectBreakLabel(qd, isLive, periodName) {
   if (!isLive || !periodName) return '';
   
   // Проверяем, передан ли вообще статус перерыва из HTML главного матча
   const hasBreakWord = /перерва|half.?time|break|interval/i.test(periodName);
   if (!hasBreakWord) return '';
-
+ 
   let lastFilled = -1;
   for (let i = 0; i < QUARTER_LABELS.length; i++) {
     const h = qd[`${QUARTER_LABELS[i]}_Home`];
     const a = qd[`${QUARTER_LABELS[i]}_Away`];
     if (h !== '' && h !== undefined && a !== '' && a !== undefined) lastFilled = i;
   }
-
+ 
   if (lastFilled >= 0 && lastFilled < 3) {
     return `Перерва (після ${QUARTER_LABELS[lastFilled]})`;
   }
   return 'Перерва';
 }
-
+ 
 // ─── Build one flat match row ─────────────────────────────────────────────────
-
+ 
 function buildMatchRow(match, sourceLabel, quarterData, statsData, status, periodName, seriesInfo) {
   const qd = quarterData || {};
   const sd = statsData   || {};
   const g  = (key, fallback = '') => sd[key] !== undefined ? sd[key] : fallback;
-
+ 
   const isLive = typeof status === 'string' && status.toLowerCase().startsWith('live');
   const { liveHome, liveAway, liveTotal } = calcLiveScores(qd);
   const breakLabel = detectBreakLabel(qd, isLive, periodName || '');
-
+ 
   const displayHome   = isLive && liveHome  !== '' ? liveHome  : (match.homeScore !== null ? match.homeScore  : '');
   const displayAway   = isLive && liveAway  !== '' ? liveAway  : (match.awayScore !== null ? match.awayScore  : '');
   const displayTotal  = isLive && liveTotal !== '' ? liveTotal : (match.total     !== null ? match.total      : '');
   const baseStatus    = status !== undefined ? status : (match.status || '');
   const displayStatus = breakLabel || baseStatus;
-
+ 
   const baseTournament = match.tournament || '';
   const tournament = (seriesInfo && seriesInfo.trim())
     ? (baseTournament ? `${baseTournament} | ${seriesInfo.trim()}` : seriesInfo.trim())
     : baseTournament;
-
+ 
   return {
     src  : sourceLabel,
     mid  : match.matchId    || '',
@@ -440,14 +446,14 @@ function buildMatchRow(match, sourceLabel, quarterData, statsData, status, perio
     hs   : displayHome,
     as_  : displayAway,
     tot  : displayTotal,
-
+ 
     q1h : qd['Q1_Home']  ?? '', q1a : qd['Q1_Away']  ?? '', q1t : qd['Q1_Total']  ?? '',
     q2h : qd['Q2_Home']  ?? '', q2a : qd['Q2_Away']  ?? '', q2t : qd['Q2_Total']  ?? '',
     q3h : qd['Q3_Home']  ?? '', q3a : qd['Q3_Away']  ?? '', q3t : qd['Q3_Total']  ?? '',
     q4h : qd['Q4_Home']  ?? '', q4a : qd['Q4_Away']  ?? '', q4t : qd['Q4_Total']  ?? '',
     ot1h: qd['OT1_Home'] ?? '', ot1a: qd['OT1_Away'] ?? '', ot1t: qd['OT1_Total'] ?? '',
     ot2h: qd['OT2_Home'] ?? '', ot2a: qd['OT2_Away'] ?? '', ot2t: qd['OT2_Total'] ?? '',
-
+ 
     hfgam : g('Home_FGA_Match'),
     afgam : g('Away_FGA_Match'),
     hfgmm : g('Home_FGM_Match'),
@@ -472,7 +478,7 @@ function buildMatchRow(match, sourceLabel, quarterData, statsData, status, perio
     aftmm : g('Away_FT_Made_Match'),
     hftpm : g('Home_FT_Pct_Match'),
     aftpm : g('Away_FT_Pct_Match'),
-
+ 
     hrbm  : g('Home_Rebounds_Match'),
     arbm  : g('Away_Rebounds_Match'),
     horbm : g('Home_Off_Rebounds_Match'),
@@ -489,7 +495,7 @@ function buildMatchRow(match, sourceLabel, quarterData, statsData, status, perio
     atovm : g('Away_Turnovers_Match'),
     hflsm : g('Home_Fouls_Match'),
     aflsm : g('Away_Fouls_Match'),
-
+ 
     hrb1 : g('Home_Rebounds_Q1'),    arb1 : g('Away_Rebounds_Q1'),
     horb1: g('Home_Off_Rebounds_Q1'), aorb1: g('Away_Off_Rebounds_Q1'),
     hdrb1: g('Home_Def_Rebounds_Q1'), adrb1: g('Away_Def_Rebounds_Q1'),
@@ -510,7 +516,7 @@ function buildMatchRow(match, sourceLabel, quarterData, statsData, status, perio
     hfta1: g('Home_FT_Att_Q1'),       afta1: g('Away_FT_Att_Q1'),
     hftm1: g('Home_FT_Made_Q1'),      aftm1: g('Away_FT_Made_Q1'),
     hftp1: g('Home_FT_Pct_Q1'),       aftp1: g('Away_FT_Pct_Q1'),
-
+ 
     hrb2 : g('Home_Rebounds_Q2'),    arb2 : g('Away_Rebounds_Q2'),
     horb2: g('Home_Off_Rebounds_Q2'), aorb2: g('Away_Off_Rebounds_Q2'),
     hdrb2: g('Home_Def_Rebounds_Q2'), adrb2: g('Away_Def_Rebounds_Q2'),
@@ -531,7 +537,7 @@ function buildMatchRow(match, sourceLabel, quarterData, statsData, status, perio
     hfta2: g('Home_FT_Att_Q2'),       afta2: g('Away_FT_Att_Q2'),
     hftm2: g('Home_FT_Made_Q2'),      aftm2: g('Away_FT_Made_Q2'),
     hftp2: g('Home_FT_Pct_Q2'),       aftp2: g('Away_FT_Pct_Q2'),
-
+ 
     hrb3 : g('Home_Rebounds_Q3'),    arb3 : g('Away_Rebounds_Q3'),
     horb3: g('Home_Off_Rebounds_Q3'), aorb3: g('Away_Off_Rebounds_Q3'),
     hdrb3: g('Home_Def_Rebounds_Q3'), adrb3: g('Away_Def_Rebounds_Q3'),
@@ -552,7 +558,7 @@ function buildMatchRow(match, sourceLabel, quarterData, statsData, status, perio
     hfta3: g('Home_FT_Att_Q3'),       afta3: g('Away_FT_Att_Q3'),
     hftm3: g('Home_FT_Made_Q3'),      aftm3: g('Away_FT_Made_Q3'),
     hftp3: g('Home_FT_Pct_Q3'),       aftp3: g('Away_FT_Pct_Q3'),
-
+ 
     hrb4 : g('Home_Rebounds_Q4'),    arb4 : g('Away_Rebounds_Q4'),
     horb4: g('Home_Off_Rebounds_Q4'), aorb4: g('Away_Off_Rebounds_Q4'),
     hdrb4: g('Home_Def_Rebounds_Q4'), adrb4: g('Away_Def_Rebounds_Q4'),
@@ -573,25 +579,23 @@ function buildMatchRow(match, sourceLabel, quarterData, statsData, status, perio
     hfta4: g('Home_FT_Att_Q4'),       afta4: g('Away_FT_Att_Q4'),
     hftm4: g('Home_FT_Made_Q4'),      aftm4: g('Away_FT_Made_Q4'),
     hftp4: g('Home_FT_Pct_Q4'),       aftp4: g('Away_FT_Pct_Q4'),
-
+ 
     url: match.url || '',
   };
 }
-
+ 
 // ─── Playwright: get fsign ────────────────────────────────────────────────────
 // FIX: isolated context per call + stable DOM wait + double-read verification
-
-async function extractFsign(browser, matchId) {
-  const context = await browser.newContext({
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-  });
-
+ 
+async function extractFsign(context, matchId, sportId = '1') {
+  // context — это PersistentContext, переданный из main(). newPage() вызываем напрямую.
+ 
   const page = await context.newPage();
   let fsign      = '';
   let prefix     = '35';
   let liveStatus = '';
   let seriesInfo = '';
-
+ 
   const fsignPromise = new Promise(resolve => {
     context.on('request', req => {
       const h = req.headers();
@@ -604,68 +608,98 @@ async function extractFsign(browser, matchId) {
       }
     });
   });
-
+ 
   try {
     await page.goto(
       `https://www.flashscore.ua/match/${matchId}/#/h2h/overall`,
       { waitUntil: 'networkidle', timeout: 60000 }
     );
-
+ 
     const captured = await Promise.race([
       fsignPromise,
       new Promise((_, reject) => setTimeout(() => reject(new Error('fsign timeout')), 30000)),
     ]).catch(e => { console.warn('⚠ fsign capture:', e.message); return null; });
-
+ 
     if (captured) { fsign = captured.fsign; prefix = captured.prefix; }
-
+ 
     const liveWrapper = await page.$('.detailScore__wrapper.detailScore__live');
     if (liveWrapper) {
       await page.waitForFunction(() => {
         const el = document.querySelector('.fixedHeaderDuel__detailStatus');
         return el && el.textContent.trim().length > 0;
       }, { timeout: 8000 }).catch(() => {});
-
+ 
       let statusText = await page.$eval('.fixedHeaderDuel__detailStatus', el => el.textContent.trim()).catch(() => '');
-
-      // Если в HTML написано "Перерва", парсим табло, чтобы узнать после какой чверти
-      if (statusText.toLowerCase().includes('перерва')) {
-        const lastQuarterNum = await page.$$eval('.smv__part', parts => {
-          let validIndex = 0;
-          parts.forEach((p, idx) => {
-            if (p.textContent.trim() !== '') validIndex = idx + 1;
-          });
-          return validIndex;
-        }).catch(() => 0);
-
-        if (lastQuarterNum > 0 && lastQuarterNum < 5) {
-          liveStatus = `Перерва (після Q${lastQuarterNum})`;
-        } else {
-          liveStatus = statusText;
+      console.log(`  [Live Scraper] Статус з HTML: "${statusText}"`);
+ 
+      const htmlSaysBreak = statusText.toLowerCase().includes('перерва');
+ 
+      if (htmlSaysBreak) {
+        // ── ВЕРИФІКАЦІЯ через dc_ фід ────────────────────────────────────────
+        // HTML може брехати якщо Chromium підхопив кешований DOM попереднього запуску.
+        // Перевіряємо DI у dc_ фіді: якщо DI > 0 — матч іде, перерва вже закінчилась.
+        let dcVerified = true; // за замовчуванням довіряємо HTML
+        if (fsign) {
+          try {
+            const rawDcCheck = await fetchFeed(`dc_${sportId}_${matchId}`, fsign, prefix);
+            const kvCheck = parseKV((rawDcCheck || '').split('~')[0]);
+            const diCheck = kvCheck['DI'];
+            if (diCheck !== undefined && Number(diCheck) === -1) {
+              // DI=-1 означає що матч вже не лайв (finished/not started) —
+              // HTML з "Перерва" однозначно застарів
+              console.warn(`  [Live Scraper] ⚠ HTML="Перерва" але dc_ DI=-1 — матч вже не лайв, ігноруємо`);
+              statusText = '';
+              dcVerified = false;
+            }
+            // DI >= 0 — це хвилина чверті, не індикатор стану. Не чіпаємо.
+          } catch (e) {
+            console.warn(`  [Live Scraper] dc_ верифікація не вдалась: ${e.message}`);
+          }
         }
+ 
+        if (dcVerified && statusText) {
+          // Перерва підтверджена — визначаємо після якої чверті
+          const lastQuarterNum = await page.$$eval('.smv__part', parts => {
+            let validIndex = 0;
+            parts.forEach((p, idx) => {
+              if (p.textContent.trim() !== '') validIndex = idx + 1;
+            });
+            return validIndex;
+          }).catch(() => 0);
+ 
+          if (lastQuarterNum > 0 && lastQuarterNum < 5) {
+            liveStatus = `Перерва (після Q${lastQuarterNum})`;
+          } else {
+            liveStatus = statusText;
+          }
+        }
+        // якщо dcVerified=false — liveStatus лишається '', далі використається dcMinute
       } else {
-        liveStatus = statusText; // Тут будет "1-а чверть", "2-а чверть" и т.д.
+        liveStatus = statusText; // "1-а чверть", "2-а чверть" і т.д.
       }
-
-      console.log(`  [Live Scraper] Статус из HTML: "${liveStatus}"`);
+ 
+      console.log(`  [Live Scraper] Фінальний статус: "${liveStatus}"`);
     }
-
+ 
     seriesInfo = await page.$eval('.infoBox__info', el => el.textContent.trim()).catch(() => '');
     if (seriesInfo) console.log(`  [Series Info] "${seriesInfo}"`);
-
+ 
   } catch (e) {
     console.error('fsign/live-parse error:', e.message);
   } finally {
     await page.close();
-    await context.close();
+    // context (mainContext) закрывается в main() — не закрываем его здесь
+    // Чистимо унікальну temp-директорію цього запуску
+    try { execSync(`rm -rf ${RUN_TMP_DIR} 2>/dev/null || true`); } catch {}
   }
-
+ 
   return { fsign, prefix, liveStatus, seriesInfo };
 }
-
+ 
 // ─── Enrich matches with dc_ + sur + st feeds ─────────────────────────────────
-
+ 
 const CONCURRENT_FETCH = 5;
-
+ 
 async function enrichMatches(matches, sportId, fsign, prefix) {
   const enriched = new Map();
   for (let i = 0; i < matches.length; i += CONCURRENT_FETCH) {
@@ -690,11 +724,11 @@ async function enrichMatches(matches, sportId, fsign, prefix) {
   }
   return enriched;
 }
-
+ 
 // ─── output ───────────────────────────────────────────────────────────────────
-
+ 
 function ensureOutputDir() { fs.mkdirSync(OUTPUT_PATH, { recursive: true }); }
-
+ 
 function writeXlsx(rows, fileName) {
   ensureOutputDir();
   const filePath = path.join(OUTPUT_PATH, `${fileName}.xlsx`);
@@ -708,26 +742,26 @@ function writeXlsx(rows, fileName) {
   XLSX.writeFile(wb, filePath);
   return filePath;
 }
-
+ 
 function writeJson(rows, fileName) {
   ensureOutputDir();
   const filePath = path.join(OUTPUT_PATH, `${fileName}.json`);
   fs.writeFileSync(filePath, JSON.stringify(rows, null, 2), 'utf-8');
   return filePath;
 }
-
+ 
 // ─── main ─────────────────────────────────────────────────────────────────────
-
+ 
 async function main() {
   clearOutputDirectory();
   const options = parseArgs();
   const userChoice = await askQuestion('');
   options.fileType = userChoice.trim() === '2' ? 'json' : 'xlsx';
-
+ 
   const chromePath = fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : undefined;
-
-  // FIX: disable all caching at browser launch level
-const browser = await chromium.launch({
+ 
+  // FIX: use launchPersistentContext so userDataDir is handled by Playwright (not via --user-data-dir arg)
+  const mainContext = await chromium.launchPersistentContext(RUN_TMP_DIR, {
     headless: true,
     executablePath: chromePath,
     args: [
@@ -742,39 +776,40 @@ const browser = await chromium.launch({
       '--disk-cache-size=0',
       '--disable-application-cache',
       '--disable-cache',
+      // --user-data-dir передаётся как первый аргумент launchPersistentContext, не сюда
     ],
   });
   try {
     const matchId = extractMid(options.matchUrl);
     const sportId = options.matchUrl.includes('basketball') ? '5' : '1';
-
+ 
     console.log('--- Отримання fsign через Playwright... ---');
-
-    // FIX: pass browser, not context — extractFsign creates its own isolated context
-    const { fsign, prefix, liveStatus, seriesInfo } = await extractFsign(browser, matchId);
+ 
+    // FIX: pass mainContext directly — extractFsign no longer creates its own context
+    const { fsign, prefix, liveStatus, seriesInfo } = await extractFsign(mainContext, matchId, sportId);
     console.log(`fsign: ${fsign}, prefix: ${prefix}`);
     if (!fsign) throw new Error('❌ Could not capture fsign');
-
+ 
     console.log('--- Завантаження df_hh_... ---');
     const rawHh = await fetchFeed(`df_hh_${sportId}_${matchId}`, fsign, prefix);
     if (!rawHh || rawHh.length < 50) throw new Error('❌ Empty df_hh_ response');
-
+ 
     let { homeName, awayName, homeMatches, awayMatches, h2hMatches } = parseHhFeed(rawHh);
-
+ 
     const homeSlice = homeMatches.slice(0, Math.min(options.limit,    homeMatches.length));
     const awaySlice = awayMatches.slice(0, Math.min(options.limit,    awayMatches.length));
     const h2hSlice  = h2hMatches.slice(0,  Math.min(options.h2hLimit, h2hMatches.length));
-
+ 
     console.log(`Teams: ${homeName} vs ${awayName}`);
     console.log(`Home: ${homeMatches.length}, Away: ${awayMatches.length}, H2H: ${h2hMatches.length}`);
-
+ 
     const mainMatchStub = { matchId, homeName, awayName };
     const allMatches = [mainMatchStub, ...homeSlice, ...awaySlice, ...h2hSlice];
     const uniqueMatches = [...new Map(allMatches.map(m => [m.matchId, m])).values()];
-
+ 
     console.log(`\n--- Збагачення ${uniqueMatches.length} матчів (dc_ + sur + st)... ---`);
     const enrichMap = await enrichMatches(uniqueMatches, sportId, fsign, prefix);
-
+ 
     const enrich = id => {
       const e = enrichMap.get(id);
       if (!e) return { status: '', quarterData: {}, statsData: {} };
@@ -786,11 +821,11 @@ const browser = await chromium.launch({
       }
       return { status, quarterData: quarterData || {}, statsData: statsData || {} };
     };
-
+ 
     let mainMatch = homeMatches.find(m => m.matchId === matchId)
       || awayMatches.find(m => m.matchId === matchId)
       || h2hMatches.find(m => m.matchId === matchId);
-
+ 
     if (!mainMatch) {
       mainMatch = {
         matchId,
@@ -808,7 +843,7 @@ const browser = await chromium.launch({
         url       : `https://www.flashscore.com/match/${matchId}/`,
       };
     }
-
+ 
     // ── Лінії букмекерів — тут mainMatch вже визначено ──────────────────────
     const participants = {
       homeId: mainMatch.homeTeamId ?? homeMatches[0]?.homeTeamId ?? null,
@@ -828,7 +863,7 @@ const browser = await chromium.launch({
     } catch (e) {
       console.warn(`  ⚠ Не вдалося скопіювати line_result.json: ${e.message}`);
     }
-
+ 
     if (!homeName || !awayName) {
       if (mainMatch.homeName) homeName = mainMatch.homeName;
       if (mainMatch.awayName) awayName = mainMatch.awayName;
@@ -841,12 +876,12 @@ const browser = await chromium.launch({
       }
     }
     console.log(`Resolved names for file: ${homeName} vs ${awayName}`);
-
+ 
     const { dcStatus: dcMainStatus, quarterData: mainQ, statsData: mainS } =
       enrichMap.get(matchId) || { dcStatus: { statusStr: '', liveMinute: null }, quarterData: {}, statsData: {} };
     const { statusStr: dcStatusStr, liveMinute: dcMinute } =
       dcMainStatus || { statusStr: '', liveMinute: null };
-
+ 
     let mainStatus = '';
     if (liveStatus) {
       const isBreak = /перерва|half.?time|break|interval/i.test(liveStatus);
@@ -862,10 +897,10 @@ const browser = await chromium.launch({
         ? `Live (${dcMinute}')`
         : dcStatusStr;
     }
-
+ 
     const sep   = label => ({ Source: `--- ${label.toUpperCase()} ---` });
     const blank = ()    => ({ Source: '' });
-
+ 
     const payload = [
       sep('Main Match'),
       buildMatchRow(mainMatch, 'MAIN MATCH', mainQ, mainS, mainStatus, liveStatus, seriesInfo),
@@ -888,13 +923,13 @@ const browser = await chromium.launch({
         return buildMatchRow(m, 'H2H', quarterData, statsData, status);
       }),
     ];
-
+ 
     const rawName  = options.fileName || `${transliterate(homeName)}_vs_${transliterate(awayName)}`;
     const baseName = sanitizeFileName(rawName);
     const outputFile = options.fileType === 'json'
       ? writeJson(payload, baseName)
       : writeXlsx(payload, baseName);
-
+ 
     // Зберігаємо payload як JSON у src/data/ для Python
     const payloadPath = path.join(DATA_DIR, `${baseName}.json`);
     fs.writeFileSync(payloadPath, JSON.stringify(payload, null, 2), 'utf-8');
@@ -904,12 +939,12 @@ const browser = await chromium.launch({
       `[${new Date().toLocaleString('ru-RU')}] ${outputFile}\n`
     );
     console.log(`\n✅ Success! File saved: ${outputFile}`);
-
+ 
   } finally {
-    await browser.close();
+    await mainContext.close();
     console.log('--- Process finished ---');
     process.exit(0);
   }
 }
-
+ 
 main().catch(e => { console.error(e); process.exit(1); });
