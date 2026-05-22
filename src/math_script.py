@@ -2158,9 +2158,14 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
     away_team= main.get("at", "Away")
     hs  = safe_int(main.get("hs"))
     aws = safe_int(main.get("as_"))
-    q1h = safe_int(main.get("q1h")); q1a = safe_int(main.get("q1a"))
-    q2h = safe_int(main.get("q2h")); q2a = safe_int(main.get("q2a"))
-    h1_home = q1h+q2h; h1_away = q1a+q2a
+    _q1h_raw = main.get("q1h"); _q1a_raw = main.get("q1a")
+    _q2h_raw = main.get("q2h"); _q2a_raw = main.get("q2a")
+    q1h = safe_int(_q1h_raw); q1a = safe_int(_q1a_raw)
+    q2h = safe_int(_q2h_raw); q2a = safe_int(_q2a_raw)
+    _q1_known = _q1h_raw not in ("", None) and _q1a_raw not in ("", None)
+    _q2_known = _q2h_raw not in ("", None) and _q2a_raw not in ("", None)
+    h1_home = q1h+q2h if _q1_known and _q2_known else None
+    h1_away = q1a+q2a if _q1_known and _q2_known else None
     margin_team_a = hs - aws
 
     # Determine perspective for each team based on their role
@@ -2252,7 +2257,10 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
     current_margin_bucket = ht_margin_bucket(margin_team_a)
     current_q_state       = quarter_state(q1h > q1a, q2h > q2a)
     hist_h1_totals_a = [r["h1_total"] for r in rows_a]
-    current_ht_bucket = ht_total_bucket(h1_home + h1_away, hist_h1_totals_a)
+    current_ht_bucket = ht_total_bucket(
+        (h1_home + h1_away) if (h1_home is not None and h1_away is not None) else None,
+        hist_h1_totals_a
+    )
     q3_hist_a = [r["q3_total"] for r in rows_a]
     h2_hist_a = [r["h2_total"] for r in rows_a]
 
@@ -2375,9 +2383,9 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
             "date": main.get("dt"),
             "stage": _derive_stage(main.get("st", "")),
             "score": f"{hs}-{aws}",
-            "q1": f"{q1h}-{q1a}",
-            "q2": f"{q2h}-{q2a}",
-            "h1_total": h1_home + h1_away,
+            "q1": f"{q1h}-{q1a}" if _q1_known else None,
+            "q2": f"{q2h}-{q2a}" if _q2_known else None,
+            "h1_total": (h1_home + h1_away) if (h1_home is not None and h1_away is not None) else None,
             "current_total": hs + aws,
             "margin_team_a": margin_team_a,
             "url": main.get("url", ""),

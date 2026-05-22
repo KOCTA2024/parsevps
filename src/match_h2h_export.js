@@ -1,4 +1,3 @@
-
 import fs from 'fs';
 import path from 'path';
 import { chromium } from 'playwright';
@@ -19,7 +18,8 @@ try { execSync('pkill -f headless_shell || true'); } catch {}
 try { execSync('pkill -f chrome || true'); } catch {}
 // Чекаємо справжньої смерті процесів, не просто 1 секунду
 try { execSync('sleep 2 && pkill -9 -f chromium 2>/dev/null || true'); } catch {}
-try { execSync('rm -rf /tmp/.org.chromium.* /tmp/playwright* 2>/dev/null || true'); } catch {}
+// Чистимо залишки від попередніх запусків (включно з їх HTTP-кешем)
+try { execSync('rm -rf /tmp/.org.chromium.* /tmp/playwright* /tmp/pw_run_* /tmp/pw_cache_* 2>/dev/null || true'); } catch {}
  
 // Унікальна temp-директорія для цього запуску — щоб паралельні запуски (ти + клієнт)
 // не шарили профіль Chromium і не читали DOM один одного
@@ -106,8 +106,13 @@ function parseDcStatus(raw, match) {
  
 async function fetchFeed(feedName, fsign, prefix = '35') {
   const url = `https://${prefix}.flashscore.ninja/${prefix}/x/feed/${feedName}`;
+  // FIX: keepAlive: false — кожен запит через нове TCP з'єднання.
+  // Глобальний agent з keepAlive може тримати протухле з'єднання між запусками скрипта,
+  // через що сервер повертає старі дані без нового запиту до мережі.
+  const agent = new https.Agent({ keepAlive: false });
   return new Promise((resolve, reject) => {
     https.get(url, {
+      agent,
       headers: {
         'x-fsign'        : fsign,
         'Referer'        : 'https://www.flashscore.ua/',
@@ -622,15 +627,26 @@ async function extractFsign(context, matchId, sportId = '1') {
  
     if (captured) { fsign = captured.fsign; prefix = captured.prefix; }
  
-    const liveWrapper = await page.$('.detailScore__wrapper.detailScore__live');
+    // Чекаємо появи лайв-блоку — після networkidle JS може ще рендерити його
+    const liveWrapper = await page.waitForSelector(
+      '.detailScore__wrapper.detailScore__live',
+      { timeout: 8000 }
+    ).catch(() => null);
+
     if (liveWrapper) {
       await page.waitForFunction(() => {
-        const el = document.querySelector('.fixedHeaderDuel__detailStatus');
+        const el = document.querySelector('.detailScore__status .fixedHeaderDuel__detailStatus');
         return el && el.textContent.trim().length > 0;
       }, { timeout: 8000 }).catch(() => {});
  
-      let statusText = await page.$eval('.fixedHeaderDuel__detailStatus', el => el.textContent.trim()).catch(() => '');
-      console.log(`  [Live Scraper] Статус з HTML: "${statusText}"`);
+      // подвійне читання з паузою для стабілізації DOM
+      await page.waitForTimeout(500);
+      // Читаємо з основного блоку (не з прихованого fixedHeaderDuel--isHidden)
+      const read1 = await page.$eval('.detailScore__status .fixedHeaderDuel__detailStatus', el => el.textContent.trim()).catch(() => '');
+      await page.waitForTimeout(400);
+      const read2 = await page.$eval('.detailScore__status .fixedHeaderDuel__detailStatus', el => el.textContent.trim()).catch(() => '');
+      let statusText = read2 || read1;
+      console.log(`  [Live Scraper] read1="${read1}" read2="${read2}" using="${statusText}"`);
  
       const htmlSaysBreak = statusText.toLowerCase().includes('перерва');
  
@@ -644,14 +660,20 @@ async function extractFsign(context, matchId, sportId = '1') {
             const rawDcCheck = await fetchFeed(`dc_${sportId}_${matchId}`, fsign, prefix);
             const kvCheck = parseKV((rawDcCheck || '').split('~')[0]);
             const diCheck = kvCheck['DI'];
-            if (diCheck !== undefined && Number(diCheck) === -1) {
-              // DI=-1 означає що матч вже не лайв (finished/not started) —
-              // HTML з "Перерва" однозначно застарів
-              console.warn(`  [Live Scraper] ⚠ HTML="Перерва" але dc_ DI=-1 — матч вже не лайв, ігноруємо`);
-              statusText = '';
-              dcVerified = false;
+            if (diCheck !== undefined) {
+              const diNum = Number(diCheck);
+              if (diNum === -1) {
+                // Матч не лайв
+                console.warn(`  [Live Scraper] HTML=Перерва але dc_ DI=-1, ігноруємо`);
+                statusText = '';
+                dcVerified = false;
+              } else if (diNum >= 0) {
+                // FIX: DI>=0 = активна чверть — перерва вже закінчилась (головна помилка)
+                console.warn(`  [Live Scraper] HTML=Перерва але dc_ DI=${diNum} (активна чверть) — скидаємо`);
+                statusText = '';
+                dcVerified = false;
+              }
             }
-            // DI >= 0 — це хвилина чверті, не індикатор стану. Не чіпаємо.
           } catch (e) {
             console.warn(`  [Live Scraper] dc_ верифікація не вдалась: ${e.message}`);
           }
@@ -689,8 +711,8 @@ async function extractFsign(context, matchId, sportId = '1') {
   } finally {
     await page.close();
     // context (mainContext) закрывается в main() — не закрываем его здесь
-    // Чистимо унікальну temp-директорію цього запуску
-    try { execSync(`rm -rf ${RUN_TMP_DIR} 2>/dev/null || true`); } catch {}
+    // FIX: не видаляємо RUN_TMP_DIR тут — контекст ще живий.
+    // Чиститься в main() finally після mainContext.close().
   }
  
   return { fsign, prefix, liveStatus, seriesInfo };
@@ -773,9 +795,12 @@ async function main() {
       '--single-process',             // Запускает браузер в ОДНОМ процессе (экономит до 150-200 МБ ОЗУ)
       '--disable-extensions',         // Никаких расширений
       '--blink-settings=imagesEnabled=false', // Намертво блокирует загрузку картинок на уровне движка
-      '--disk-cache-size=0',
+      // HTTP-кеш явно в окрему папку цього запуску — гарантує чистий старт без залишків DOM
+      `--disk-cache-dir=/tmp/pw_cache_${process.pid}`,
+      '--disk-cache-size=0',          // розмір 0 = фактично вимикаємо HTTP-кеш повністю
       '--disable-application-cache',
       '--disable-cache',
+      '--aggressive-cache-discard',   // скидає кеш навіть якщо браузер вважає його актуальним
       // --user-data-dir передаётся как первый аргумент launchPersistentContext, не сюда
     ],
   });
@@ -942,6 +967,8 @@ async function main() {
  
   } finally {
     await mainContext.close();
+    // FIX: clean up temp dirs after context is fully closed
+    try { execSync(`rm -rf ${RUN_TMP_DIR} /tmp/pw_cache_${process.pid} 2>/dev/null || true`); } catch {}
     console.log('--- Process finished ---');
     process.exit(0);
   }
