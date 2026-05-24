@@ -36,20 +36,44 @@ QUARTER_SPREAD_LINES=[-15.5,-12.5,-10.5,-8.5,-6.5,-5.5,-4.5,-3.5,-2.5,-1.5,
 ALLOWED_LINES      = [60.5,65.5,70.5,75.5,80.5,82.5,85.5,87.5,90.5,
                       92.5,95.5,97.5,100.5,105.5]
 
+# ── Basketball History Zones Module — ТЗ §5-6 ───────────────────────────
+H1_TOTAL_LINES       = [30.5,35.5,40.5,45.5,50.5,55.5,60.5,65.5,70.5,75.5,
+                        80.5,85.5,90.5,95.5,100.5,105.5,110.5]
+H1_TEAM_POINTS_LINES = [10.5,12.5,14.5,15.5,16.5,18.5,20.5,21.5,22.5,24.5,
+                        25.5,27.5,30.5,32.5,35.5,37.5,40.5,42.5,45.5,50.5,55.5]
+H2_TOTAL_LINES       = [30.5,35.5,40.5,45.5,50.5,55.5,60.5,65.5,70.5,75.5,
+                        80.5,85.5,90.5,95.5,100.5,105.5,110.5,115.5,120.5]
+H2_TEAM_POINTS_LINES = [10.5,12.5,14.5,15.5,16.5,18.5,20.5,21.5,22.5,24.5,
+                        25.5,27.5,30.5,32.5,35.5,37.5,40.5,42.5,45.5,50.5,
+                        55.5,60.5]
+
+# ТЗ §7
+Q3_TOTAL_LINES       = [25.5,28.5,30.5,32.5,34.5,35.5,36.5,38.5,
+                        40.5,42.5,44.5,45.5,46.5,48.5,50.5,52.5,
+                        55.5,58.5,60.5]
+Q3_TEAM_POINTS_LINES = [5.5,7.5,8.5,10.5,12.5,14.5,15.5,16.5,
+                        18.5,20.5,21.5,22.5,24.5,25.5,27.5,30.5,
+                        32.5,35.5,37.5,40.5]
+
+# ТЗ §8
+AFTER3Q_TOTAL_LINES       = [70.5,75.5,80.5,85.5,90.5,95.5,100.5,105.5,
+                              110.5,115.5,120.5,125.5,130.5,135.5,140.5,
+                              145.5,150.5,155.5,160.5]
+AFTER3Q_TEAM_POINTS_LINES = [30.5,35.5,40.5,45.5,50.5,55.5,60.5,65.5,
+                              70.5,75.5,80.5,85.5,90.5,95.5,100.5]
+
+# ТЗ §9
+Q4_TOTAL_LINES       = [20.5,22.5,24.5,25.5,27.5,30.5,32.5,35.5,
+                        37.5,40.5,42.5,45.5,47.5,50.5,52.5,55.5,
+                        58.5,60.5]
+Q4_TEAM_POINTS_LINES = [5.5,7.5,8.5,10.5,12.5,14.5,15.5,16.5,
+                        18.5,20.5,21.5,22.5,24.5,25.5,27.5,30.5,
+                        32.5,35.5,37.5,40.5]
+
 MIN_VALID_MATCHES = 20
-PARSEDATAFILE = sorted(
-    [
-        entry for entry in os.scandir(os.path.join(os.path.dirname(__file__), "data"))
-        if entry.is_file() and entry.name != "line_result.json"
-    ],
-    key=lambda e: e.stat().st_mtime,
-    reverse=True,
-)[0].path
-print(PARSEDATAFILE)
-LINES_FILE = os.path.join(os.path.dirname(__file__), "data", "line_result.json")
 
 
-def load_lines(path: str = LINES_FILE) -> dict:
+def load_lines(path: str) -> dict:
     """
     Load bookmaker lines from line_result.json.
     Returns a dict with keys: match_total, half_total, quarter_total,
@@ -561,6 +585,401 @@ def history_quarter_total(rows_a: list, rows_b: list, quarter: str) -> dict:
         "pooled70": zone_over_under(pooled, QUARTER_TOTAL_LINES),
     }
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BASKETBALL HISTORY ZONES MODULE  (ТЗ §4-6)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _zone_label(r: float) -> str:
+    """ТЗ §4: assign zone label from hit-rate."""
+    if r >= 1.0:   return "100%"
+    if r >= 0.95:  return "95%+"
+    if r >= 0.90:  return "90%+"
+    if r >= 0.85:  return "85%+"
+    if r >= 0.80:  return "80%+"
+    if r >= 0.78:  return "78%+"
+    if r >= 0.75:  return "75%+"
+    if r >= 0.70:  return "70%+"
+    return "below_70"
+
+
+def _desc_stats(vals: list) -> dict:
+    """
+    ТЗ §0: descriptive stats for a sample — average/median/min/max/p25/p75/p90.
+    Returns empty dict if no data.
+    """
+    if not vals:
+        return {}
+    s = sorted(vals)
+    n = len(s)
+
+    def _pct(p):
+        k = (n - 1) * p / 100.0
+        lo, hi = math.floor(k), math.ceil(k)
+        if lo == hi:
+            return round(s[int(k)], 2)
+        return round(s[lo] * (hi - k) + s[hi] * (k - lo), 2)
+
+    return {
+        "avg":     round(sum(vals) / n, 2),
+        "median":  round(_pct(50), 2),
+        "min":     round(s[0], 2),
+        "max":     round(s[-1], 2),
+        "p25":     _pct(25),
+        "p75":     _pct(75),
+        "p90":     _pct(90),
+        "n":       n,
+    }
+
+
+def _hist_zone_threshold(values_a: list, values_b: list, h2h_values: list,
+                          line: float, side: str) -> dict:
+    """
+    ТЗ §3: compute over/under hits, rate, smoothed, zone for one threshold.
+    side: 'over'  → count(value > line)
+          'under' → count(value <= line)
+    """
+    def _count(vals, ln, s):
+        if s == "over":
+            return sum(1 for v in vals if v > ln)
+        return sum(1 for v in vals if v <= ln)
+
+    na, nb, nh = len(values_a), len(values_b), len(h2h_values)
+
+    if na > 0:
+        a_hits = _count(values_a, line, side)
+        a_rate = round(a_hits / na, 3)
+        a_sm   = round((a_hits + 1) / (na + 2), 3)
+        a_zone = _zone_label(a_rate)
+        a_status = None
+    else:
+        a_hits = None
+        a_rate = None
+        a_sm   = None
+        a_zone = None
+        a_status = "OFF"
+
+    if nb > 0:
+        b_hits = _count(values_b, line, side)
+        b_rate = round(b_hits / nb, 3)
+        b_sm   = round((b_hits + 1) / (nb + 2), 3)
+        b_zone = _zone_label(b_rate)
+        b_status = None
+    else:
+        b_hits = None
+        b_rate = None
+        b_sm   = None
+        b_zone = None
+        b_status = "OFF"
+
+    # pooled (ТЗ §3): team_a + team_b, NOT mixed with H2H
+    p_a_hits = _count(values_a, line, side) if na > 0 else 0
+    p_b_hits = _count(values_b, line, side) if nb > 0 else 0
+    p_hits = p_a_hits + p_b_hits
+    p_n    = na + nb
+    if p_n > 0:
+        p_rate = round(p_hits / p_n, 3)
+        p_sm   = round((p_hits + 1) / (p_n + 2), 3)
+        p_zone = _zone_label(p_rate)
+        p_status = None
+    else:
+        p_hits = None
+        p_rate = None
+        p_sm   = None
+        p_zone = None
+        p_status = "OFF"
+
+    if nh > 0:
+        h_hits = _count(h2h_values, line, side)
+        h_rate = round(h_hits / nh, 3)
+        h_sm   = round((h_hits + 1) / (nh + 2), 3)
+        h_zone = _zone_label(h_rate)
+        h_status = None
+    else:
+        h_hits = None
+        h_rate = None
+        h_sm   = None
+        h_zone = None
+        h_status = "OFF"
+
+    result = {
+        "market":         None,   # filled by caller
+        "line":           line,
+        "side":           side.upper(),
+        "team_a_hits":    a_hits,   "team_a_n":        na,
+        "team_a_rate":    a_rate,   "team_a_smoothed":  a_sm,
+        "team_a_zone":    a_zone,
+        "team_b_hits":    b_hits,   "team_b_n":        nb,
+        "team_b_rate":    b_rate,   "team_b_smoothed":  b_sm,
+        "team_b_zone":    b_zone,
+        "pooled_hits":    p_hits,   "pooled_n":        p_n,
+        "pooled_rate":    p_rate,   "pooled_smoothed":  p_sm,
+        "pooled_zone":    p_zone,
+        "h2h_hits":       h_hits,   "h2h_n":           nh,
+        "h2h_rate":       h_rate,   "h2h_smoothed":    h_sm,
+        "h2h_zone":       h_zone,
+    }
+    if a_status:
+        result["team_a_field_status"] = a_status
+    if b_status:
+        result["team_b_field_status"] = b_status
+    if p_status:
+        result["pooled_field_status"] = p_status
+    if h_status:
+        result["h2h_field_status"] = h_status
+    return result
+
+
+def _build_zone_block(market: str, values_a: list, values_b: list,
+                       h2h_values: list, lines: list) -> dict:
+    """
+    Build full over+under zone list for one market across all thresholds.
+    Returns dict with 'thresholds' list and 'descriptive_stats' per sample.
+    ТЗ §0: includes average/median/min/max/p25/p75/p90 for team_a, team_b, pooled, h2h.
+    """
+    thresholds = []
+    for line in lines:
+        for side in ("over", "under"):
+            entry = _hist_zone_threshold(values_a, values_b, h2h_values, line, side)
+            entry["market"] = market
+            thresholds.append(entry)
+
+    pooled_values = values_a + values_b
+    return {
+        "market": market,
+        "thresholds": thresholds,
+        "descriptive_stats": {
+            "team_a":  _desc_stats(values_a),
+            "team_b":  _desc_stats(values_b),
+            "pooled":  _desc_stats(pooled_values),
+            "h2h":     _desc_stats(h2h_values),
+        },
+    }
+
+
+def _build_team_zone_block(market_scored: str, market_allowed: str,
+                            scored_a: list, allowed_a: list,
+                            scored_b: list, allowed_b: list,
+                            h2h_scored_a: list, h2h_allowed_a: list,
+                            h2h_scored_b: list, h2h_allowed_b: list,
+                            lines: list) -> dict:
+    """
+    ТЗ §5B / §6B: team points zones — scored and allowed for both teams.
+    Returns dict with keys: team_a_scored, team_a_allowed,
+                            team_b_scored, team_b_allowed.
+    Each entry has 'thresholds' list and 'descriptive_stats'.
+
+    For individual team markets:
+      - team_a_scored: values_a = team A scored only; pooled = team A only (not mixed with B)
+        H2H: scored from team A perspective in H2H matches
+      - team_b_scored: values_a = team B scored only; pooled = team B only
+        H2H: scored from team B perspective in H2H matches
+    ТЗ §3: H2H рахувати окремо. H2H НЕ змішувати з pooled.
+    """
+    def _single_team(market, vals, h2h_vals, lns):
+        """Single team — pooled = same team's own sample (na = nb = 0 trick: pass vals as values_a, empty as values_b)."""
+        thresholds = []
+        for line in lns:
+            for side in ("over", "under"):
+                # Use values_a = team vals, values_b = [] so pooled = team only
+                entry = _hist_zone_threshold(vals, [], h2h_vals, line, side)
+                entry["market"] = market
+                # If the team sample is empty, mark this entry explicitly
+                if not vals:
+                    entry["field_status"] = "OFF"
+                thresholds.append(entry)
+        stats = _desc_stats(vals) if vals else None
+        h2h_stats = _desc_stats(h2h_vals) if h2h_vals else None
+        result = {
+            "market": market,
+            "thresholds": thresholds,
+            "descriptive_stats": {
+                "team":  stats if stats is not None else None,
+                "h2h":   h2h_stats if h2h_stats is not None else None,
+            },
+        }
+        if not vals:
+            result["field_status"] = "OFF"
+        if not h2h_vals:
+            result.setdefault("descriptive_stats", {})["h2h_field_status"] = "OFF"
+        return result
+
+    return {
+        "team_a_scored":  _single_team(
+            market_scored + "_TEAM_A_SCORED",  scored_a,  h2h_scored_a,  lines),
+        "team_a_allowed": _single_team(
+            market_allowed + "_TEAM_A_ALLOWED", allowed_a, h2h_allowed_a, lines),
+        "team_b_scored":  _single_team(
+            market_scored + "_TEAM_B_SCORED",  scored_b,  h2h_scored_b,  lines),
+        "team_b_allowed": _single_team(
+            market_allowed + "_TEAM_B_ALLOWED", allowed_b, h2h_allowed_b, lines),
+    }
+
+
+# ТЗ §5A — H1 TOTAL ZONES
+def history_h1_total_zones(rows_a: list, rows_b: list, h2h_rows: list) -> list:
+    """
+    H1 total = Q1 + Q2 combined (both teams).
+    Threshold list: H1_TOTAL_LINES.
+    """
+    vals_a   = [r["h1_total"] for r in rows_a]
+    vals_b   = [r["h1_total"] for r in rows_b]
+    vals_h2h = [r["h1_total"] for r in h2h_rows]
+    return _build_zone_block("H1_TOTAL", vals_a, vals_b, vals_h2h, H1_TOTAL_LINES)
+
+
+# ТЗ §5B — TEAM H1 POINTS ZONES (scored + allowed)
+def history_h1_team_points_zones(rows_a: list, rows_b: list, h2h_rows: list) -> dict:
+    """
+    Team H1 scored = h1_team (Q1+Q2 own points).
+    Team H1 allowed = h1_opp (Q1+Q2 opponent points).
+    H2H perspective: home team scored = h1_team, away team scored = h1_opp (away POV).
+    ТЗ §5B: рахується для Team A scored/allowed та Team B scored/allowed.
+    """
+    scored_a  = [r["h1_team"] for r in rows_a]
+    allowed_a = [r["h1_opp"]  for r in rows_a]
+    scored_b  = [r["h1_team"] for r in rows_b]
+    allowed_b = [r["h1_opp"]  for r in rows_b]
+    # H2H: home perspective for team A, away perspective (opp) for team B
+    h2h_scored_a  = [r["h1_team"] for r in h2h_rows]
+    h2h_allowed_a = [r["h1_opp"]  for r in h2h_rows]
+    h2h_scored_b  = [r["h1_opp"]  for r in h2h_rows]   # away scored = home opp
+    h2h_allowed_b = [r["h1_team"] for r in h2h_rows]   # away allowed = home scored
+    return _build_team_zone_block(
+        "H1", "H1",
+        scored_a, allowed_a,
+        scored_b, allowed_b,
+        h2h_scored_a, h2h_allowed_a,
+        h2h_scored_b, h2h_allowed_b,
+        H1_TEAM_POINTS_LINES,
+    )
+
+
+# ТЗ §6A — H2 TOTAL ZONES
+def history_h2_total_zones(rows_a: list, rows_b: list, h2h_rows: list) -> list:
+    """
+    H2 total = Q3 + Q4 combined (both teams).
+    Threshold list: H2_TOTAL_LINES.
+    """
+    vals_a   = [r["h2_total"] for r in rows_a]
+    vals_b   = [r["h2_total"] for r in rows_b]
+    vals_h2h = [r["h2_total"] for r in h2h_rows]
+    return _build_zone_block("H2_TOTAL", vals_a, vals_b, vals_h2h, H2_TOTAL_LINES)
+
+
+# ТЗ §6B — TEAM H2 POINTS ZONES (scored + allowed)
+def history_h2_team_points_zones(rows_a: list, rows_b: list, h2h_rows: list) -> dict:
+    """
+    Team H2 scored = h2_team (Q3+Q4 own points).
+    Team H2 allowed = h2_opp (Q3+Q4 opponent points).
+    H2H perspective: home team scored = h2_team, away team scored = h2_opp (away POV).
+    ТЗ §6B: рахується для Team A scored/allowed та Team B scored/allowed.
+    """
+    scored_a  = [r["h2_team"] for r in rows_a]
+    allowed_a = [r["h2_opp"]  for r in rows_a]
+    scored_b  = [r["h2_team"] for r in rows_b]
+    allowed_b = [r["h2_opp"]  for r in rows_b]
+    # H2H: home perspective for team A, away perspective (opp) for team B
+    h2h_scored_a  = [r["h2_team"] for r in h2h_rows]
+    h2h_allowed_a = [r["h2_opp"]  for r in h2h_rows]
+    h2h_scored_b  = [r["h2_opp"]  for r in h2h_rows]
+    h2h_allowed_b = [r["h2_team"] for r in h2h_rows]
+    return _build_team_zone_block(
+        "H2", "H2",
+        scored_a, allowed_a,
+        scored_b, allowed_b,
+        h2h_scored_a, h2h_allowed_a,
+        h2h_scored_b, h2h_allowed_b,
+        H2_TEAM_POINTS_LINES,
+    )
+
+
+# ТЗ §7A — Q3 TOTAL ZONES
+def history_q3_total_zones(rows_a: list, rows_b: list, h2h_rows: list) -> dict:
+    vals_a   = [r["q3_total"] for r in rows_a]
+    vals_b   = [r["q3_total"] for r in rows_b]
+    vals_h2h = [r["q3_total"] for r in h2h_rows]
+    return _build_zone_block("Q3_TOTAL", vals_a, vals_b, vals_h2h, Q3_TOTAL_LINES)
+
+
+# ТЗ §7B — TEAM Q3 POINTS ZONES (scored + allowed)
+def history_q3_team_points_zones(rows_a: list, rows_b: list, h2h_rows: list) -> dict:
+    scored_a  = [r["q3_team"] for r in rows_a]
+    allowed_a = [r["q3_opp"]  for r in rows_a]
+    scored_b  = [r["q3_team"] for r in rows_b]
+    allowed_b = [r["q3_opp"]  for r in rows_b]
+    h2h_scored_a  = [r["q3_team"] for r in h2h_rows]
+    h2h_allowed_a = [r["q3_opp"]  for r in h2h_rows]
+    h2h_scored_b  = [r["q3_opp"]  for r in h2h_rows]
+    h2h_allowed_b = [r["q3_team"] for r in h2h_rows]
+    return _build_team_zone_block(
+        "Q3", "Q3",
+        scored_a, allowed_a,
+        scored_b, allowed_b,
+        h2h_scored_a, h2h_allowed_a,
+        h2h_scored_b, h2h_allowed_b,
+        Q3_TEAM_POINTS_LINES,
+    )
+
+
+# ТЗ §8A — AFTER 3Q TOTAL ZONES
+def history_after3q_total_zones(rows_a: list, rows_b: list, h2h_rows: list) -> dict:
+    vals_a   = [r["after3q_total"] for r in rows_a]
+    vals_b   = [r["after3q_total"] for r in rows_b]
+    vals_h2h = [r["after3q_total"] for r in h2h_rows]
+    return _build_zone_block("AFTER3Q_TOTAL", vals_a, vals_b, vals_h2h, AFTER3Q_TOTAL_LINES)
+
+
+# ТЗ §8B — TEAM AFTER 3Q POINTS ZONES (scored + allowed)
+def history_after3q_team_points_zones(rows_a: list, rows_b: list, h2h_rows: list) -> dict:
+    scored_a  = [r["after3q_team"] for r in rows_a]
+    allowed_a = [r["after3q_opp"]  for r in rows_a]
+    scored_b  = [r["after3q_team"] for r in rows_b]
+    allowed_b = [r["after3q_opp"]  for r in rows_b]
+    h2h_scored_a  = [r["after3q_team"] for r in h2h_rows]
+    h2h_allowed_a = [r["after3q_opp"]  for r in h2h_rows]
+    h2h_scored_b  = [r["after3q_opp"]  for r in h2h_rows]
+    h2h_allowed_b = [r["after3q_team"] for r in h2h_rows]
+    return _build_team_zone_block(
+        "AFTER3Q", "AFTER3Q",
+        scored_a, allowed_a,
+        scored_b, allowed_b,
+        h2h_scored_a, h2h_allowed_a,
+        h2h_scored_b, h2h_allowed_b,
+        AFTER3Q_TEAM_POINTS_LINES,
+    )
+
+
+# ТЗ §9A — Q4 TOTAL ZONES
+def history_q4_total_zones(rows_a: list, rows_b: list, h2h_rows: list) -> dict:
+    vals_a   = [r["q4_total"] for r in rows_a]
+    vals_b   = [r["q4_total"] for r in rows_b]
+    vals_h2h = [r["q4_total"] for r in h2h_rows]
+    return _build_zone_block("Q4_TOTAL", vals_a, vals_b, vals_h2h, Q4_TOTAL_LINES)
+
+
+# ТЗ §9B — TEAM Q4 POINTS ZONES (scored + allowed)
+def history_q4_team_points_zones(rows_a: list, rows_b: list, h2h_rows: list) -> dict:
+    scored_a  = [r["q4_team"] for r in rows_a]
+    allowed_a = [r["q4_opp"]  for r in rows_a]
+    scored_b  = [r["q4_team"] for r in rows_b]
+    allowed_b = [r["q4_opp"]  for r in rows_b]
+    h2h_scored_a  = [r["q4_team"] for r in h2h_rows]
+    h2h_allowed_a = [r["q4_opp"]  for r in h2h_rows]
+    h2h_scored_b  = [r["q4_opp"]  for r in h2h_rows]
+    h2h_allowed_b = [r["q4_team"] for r in h2h_rows]
+    return _build_team_zone_block(
+        "Q4", "Q4",
+        scored_a, allowed_a,
+        scored_b, allowed_b,
+        h2h_scored_a, h2h_allowed_a,
+        h2h_scored_b, h2h_allowed_b,
+        Q4_TEAM_POINTS_LINES,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+
 def history_half_total(rows_a: list, rows_b: list, h2h_rows: list,
                        lines: list) -> dict:
     """
@@ -799,7 +1218,7 @@ def quarter_state(q1_win: bool, q2_win: bool) -> str:
     return "0-2"
 
 def ht_total_bucket(h1_total: float, hist_h1_totals: list) -> str:
-    if not hist_h1_totals:
+    if not hist_h1_totals or h1_total is None:
         return "unknown"
     p25 = percentile(hist_h1_totals, 25)
     p75 = percentile(hist_h1_totals, 75)
@@ -808,10 +1227,10 @@ def ht_total_bucket(h1_total: float, hist_h1_totals: list) -> str:
     if h1_total >= p75: return "high"
     if h1_total >= p25: return "middle"
     return "low"
-
 def conditional_scanner(rows: list, margin_bkt: str, q_state: str, ht_total_bkt: str,
                          needed_q3: float, needed_2h: float,
                          needed_team_q3: float, needed_team_2h: float) -> dict:
+    """Legacy single-bucket scanner — kept for backward compat with scenario block."""
     state_rows = [r for r in rows
                   if ht_margin_bucket(r["h1_margin"]) == margin_bkt
                   and quarter_state(r["q1_margin"] > 0, r["q2_margin"] > 0) == q_state]
@@ -824,6 +1243,157 @@ def conditional_scanner(rows: list, margin_bkt: str, q_state: str, ht_total_bkt:
         "h2_total_over":   pct_str(sum(1 for r in state_rows if r["h2_total"]  >= needed_2h),  n),
         "team_q3_over":    pct_str(sum(1 for r in state_rows if r["q3_team"]   >= needed_team_q3), n),
         "team_2h_over":    pct_str(sum(1 for r in state_rows if r["h2_team"]   >= needed_team_2h), n),
+    }
+
+
+# ── ТЗ §10: full conditional history zones ───────────────────────────────────
+
+def _cond_zone_block(sub_rows: list, pooled_n: int, label: str) -> dict:
+    """
+    ТЗ §10: compute conditional stats + over/under zones for one bucket.
+    Returns format matching ТЗ §10 spec exactly.
+    """
+    n = len(sub_rows)
+    if n == 0:
+        return {"condition": label, "n": 0, "coverage": 0.0, "metrics": {}, "zones": []}
+
+    coverage = round(n / pooled_n, 3) if pooled_n > 0 else 0.0
+
+    h2_vals   = [r["h2_total"]      for r in sub_rows]
+    q3_vals   = [r["q3_total"]      for r in sub_rows]
+    aq3_vals  = [r["after3q_total"] for r in sub_rows]
+    q4_vals   = [r["q4_total"]      for r in sub_rows]
+
+    def _stats(vals):
+        if not vals:
+            return {}
+        s = sorted(vals)
+        nn = len(s)
+        def _p(p):
+            k = (nn - 1) * p / 100.0
+            lo, hi = math.floor(k), math.ceil(k)
+            return round(s[lo] * (hi - k) + s[hi] * (k - lo), 2) if lo != hi else round(s[int(k)], 2)
+        return {
+            "avg":    round(sum(vals) / nn, 2),
+            "median": _p(50),
+            "min":    round(s[0], 2),
+            "max":    round(s[-1], 2),
+            "p25":    _p(25),
+            "p75":    _p(75),
+            "p90":    _p(90),
+        }
+
+    metrics = {
+        "avg_h2_total":    _stats(h2_vals).get("avg"),
+        "median_h2_total": _stats(h2_vals).get("median"),
+        "min_h2_total":    _stats(h2_vals).get("min"),
+        "max_h2_total":    _stats(h2_vals).get("max"),
+        "p25_h2_total":    _stats(h2_vals).get("p25"),
+        "p75_h2_total":    _stats(h2_vals).get("p75"),
+        "p90_h2_total":    _stats(h2_vals).get("p90"),
+    }
+
+    zones = []
+    for market, vals, lines in [
+        ("H2_TOTAL",     h2_vals,  H2_TOTAL_LINES),
+        ("Q3_TOTAL",     q3_vals,  Q3_TOTAL_LINES),
+        ("AFTER3Q_TOTAL",aq3_vals, AFTER3Q_TOTAL_LINES),
+        ("Q4_TOTAL",     q4_vals,  Q4_TOTAL_LINES),
+    ]:
+        for line in lines:
+            for side, pred in [("OVER", lambda v, l=line: v > l), ("UNDER", lambda v, l=line: v <= l)]:
+                hits = sum(1 for v in vals if pred(v))
+                r_val = round(hits / n, 3) if n > 0 else 0.0
+                sm    = round((hits + 1) / (n + 2), 3)
+                zones.append({
+                    "market":   market,
+                    "line":     line,
+                    "side":     side,
+                    "hits":     hits,
+                    "n":        n,
+                    "rate":     r_val,
+                    "smoothed": sm,
+                    "zone":     _zone_label(r_val),
+                })
+
+    return {"condition": label, "n": n, "coverage": coverage, "metrics": metrics, "zones": zones}
+
+
+# Fixed-value HT total buckets per ТЗ §10
+_HT_TOTAL_BUCKETS = [
+    ("ht_le60",   lambda r: r["h1_total"] <= 60),
+    ("ht_61_70",  lambda r: 61 <= r["h1_total"] <= 70),
+    ("ht_71_80",  lambda r: 71 <= r["h1_total"] <= 80),
+    ("ht_81_90",  lambda r: 81 <= r["h1_total"] <= 90),
+    ("ht_91_100", lambda r: 91 <= r["h1_total"] <= 100),
+    ("ht_101p",   lambda r: r["h1_total"] >= 101),
+]
+
+_HT_MARGIN_BUCKETS = [
+    ("margin_tie",   lambda r: r["h1_margin"] == 0),
+    ("margin_1_4",   lambda r: 1 <= abs(r["h1_margin"]) <= 4),
+    ("margin_5_9",   lambda r: 5 <= abs(r["h1_margin"]) <= 9),
+    ("margin_10_14", lambda r: 10 <= abs(r["h1_margin"]) <= 14),
+    ("margin_15_19", lambda r: 15 <= abs(r["h1_margin"]) <= 19),
+    ("margin_20p",   lambda r: abs(r["h1_margin"]) >= 20),
+]
+
+_Q_STATE_BUCKETS = [
+    ("qstate_2_0", lambda r: quarter_state(r["q1_margin"] > 0, r["q2_margin"] > 0) == "2-0"),
+    ("qstate_1_1", lambda r: quarter_state(r["q1_margin"] > 0, r["q2_margin"] > 0) == "1-1"),
+    ("qstate_0_2", lambda r: quarter_state(r["q1_margin"] > 0, r["q2_margin"] > 0) == "0-2"),
+]
+
+_TEAM_STATE_BUCKETS = [
+    ("team_leading",  lambda r: r["h1_margin"] > 0),
+    ("team_trailing", lambda r: r["h1_margin"] < 0),
+    ("team_tied",     lambda r: r["h1_margin"] == 0),
+]
+
+
+def compute_conditional_history_zones(rows_a: list, rows_b: list, h2h_rows: list) -> dict:
+    """
+    ТЗ §10: enumerate all conditional bucket combinations.
+    Pooled = rows_a + rows_b.  H2H computed separately.
+    """
+    pooled = rows_a + rows_b
+    pooled_n = len(pooled)
+
+    def _buckets(rows, bucket_defs, suffix=""):
+        out = []
+        for label, pred in bucket_defs:
+            sub = [r for r in rows if pred(r)]
+            out.append(_cond_zone_block(sub, pooled_n, label + suffix))
+        return out
+
+    # by_ht_total_bucket
+    by_ht_total = _buckets(pooled, _HT_TOTAL_BUCKETS)
+
+    # by_ht_margin_bucket
+    by_ht_margin = _buckets(pooled, _HT_MARGIN_BUCKETS)
+
+    # by_quarter_state_after_h1
+    by_qstate = _buckets(pooled, _Q_STATE_BUCKETS)
+
+    # by_team_state_after_h1
+    by_team_state = _buckets(pooled, _TEAM_STATE_BUCKETS)
+
+    # combined_buckets: cross product of ht_total × ht_margin × qstate (most useful combos)
+    combined = []
+    for ht_lbl, ht_pred in _HT_TOTAL_BUCKETS:
+        for mg_lbl, mg_pred in _HT_MARGIN_BUCKETS:
+            for qs_lbl, qs_pred in _Q_STATE_BUCKETS:
+                combo_label = f"{ht_lbl}_{mg_lbl}_{qs_lbl}"
+                sub = [r for r in pooled if ht_pred(r) and mg_pred(r) and qs_pred(r)]
+                if len(sub) >= 3:  # skip empty/tiny combos
+                    combined.append(_cond_zone_block(sub, pooled_n, combo_label))
+
+    return {
+        "by_ht_total_bucket":       by_ht_total,
+        "by_ht_margin_bucket":      by_ht_margin,
+        "by_quarter_state_after_h1": by_qstate,
+        "by_team_state_after_h1":   by_team_state,
+        "combined_buckets":         combined,
     }
 
 
@@ -2236,6 +2806,71 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
     bk_h1_lines_for_hist = extract_bk_half_total_lines(lines_data) if lines_data else []
     hist_half_total = history_half_total(rows_a, rows_b, h2h_rows, bk_h1_lines_for_hist)
 
+    # ── ТЗ §5A: H1 total zones (full threshold list) ─────────────────────────
+    hist_h1_total_zones   = history_h1_total_zones(rows_a, rows_b, h2h_rows)
+    # ── ТЗ §5B: Team H1 points zones (scored + allowed) ─────────────────────
+    hist_h1_team_pts      = history_h1_team_points_zones(rows_a, rows_b, h2h_rows)
+    # ── ТЗ §6A: H2 total zones ───────────────────────────────────────────────
+    hist_h2_total_zones   = history_h2_total_zones(rows_a, rows_b, h2h_rows)
+    # ── ТЗ §6B: Team H2 points zones (scored + allowed) ─────────────────────
+    hist_h2_team_pts      = history_h2_team_points_zones(rows_a, rows_b, h2h_rows)
+    # ── ТЗ §7A: Q3 total zones ───────────────────────────────────────────────
+    hist_q3_total_zones   = history_q3_total_zones(rows_a, rows_b, h2h_rows)
+    # ── ТЗ §7B: Team Q3 points zones ─────────────────────────────────────────
+    hist_q3_team_pts      = history_q3_team_points_zones(rows_a, rows_b, h2h_rows)
+    # ── ТЗ §8A: After 3Q total zones ─────────────────────────────────────────
+    hist_after3q_total_zones  = history_after3q_total_zones(rows_a, rows_b, h2h_rows)
+    # ── ТЗ §8B: Team after 3Q points zones ───────────────────────────────────
+    hist_after3q_team_pts     = history_after3q_team_points_zones(rows_a, rows_b, h2h_rows)
+    # ── ТЗ §9A: Q4 total zones ───────────────────────────────────────────────
+    hist_q4_total_zones   = history_q4_total_zones(rows_a, rows_b, h2h_rows)
+    # ── ТЗ §9B: Team Q4 points zones ─────────────────────────────────────────
+    hist_q4_team_pts      = history_q4_team_points_zones(rows_a, rows_b, h2h_rows)
+
+    # ── ТЗ §10: conditional history zones ────────────────────────────────
+    cond_history_zones = compute_conditional_history_zones(rows_a, rows_b, h2h_rows)
+
+    # ── ТЗ §11: zone_summary — collect entries ≥78% across all markets ───
+    def _collect_zone_summary(block, min_zone_pct: float) -> list:
+        """Return threshold entries where pooled_rate >= min_zone_pct."""
+        out = []
+        if isinstance(block, dict):
+            thresholds = block.get("thresholds", [])
+        elif isinstance(block, list):
+            thresholds = block
+        else:
+            return out
+        for e in thresholds:
+            if e.get("pooled_rate", 0) >= min_zone_pct:
+                out.append(e)
+        return out
+
+    def _collect_team_zone_summary(team_block: dict, min_zone_pct: float) -> list:
+        out = []
+        if not isinstance(team_block, dict):
+            return out
+        for sub in ("team_a_scored", "team_a_allowed", "team_b_scored", "team_b_allowed"):
+            out.extend(_collect_zone_summary(team_block.get(sub, {}), min_zone_pct))
+        return out
+
+    def _zone_summary_for(total_block, team_block, pct) -> list:
+        return _collect_zone_summary(total_block, pct) + _collect_team_zone_summary(team_block, pct)
+
+    zone_summary = {}
+    for prefix, t_blk, tp_blk in [
+        ("h1",       hist_h1_total_zones,     hist_h1_team_pts),
+        ("h2",       hist_h2_total_zones,     hist_h2_team_pts),
+        ("q3",       hist_q3_total_zones,     hist_q3_team_pts),
+        ("after_3q", hist_after3q_total_zones, hist_after3q_team_pts),
+        ("q4",       hist_q4_total_zones,     hist_q4_team_pts),
+    ]:
+        for pct_label, pct_val in [
+            ("100", 1.0), ("95", 0.95), ("90", 0.90), ("85", 0.85),
+            ("80", 0.80), ("78", 0.78),
+        ]:
+            key = f"{prefix}_{pct_label}_zones"
+            zone_summary[key] = _zone_summary_for(t_blk, tp_blk, pct_val)
+
     history_zones = {
         "match_total": hist_match_total,
         "q1_total": hist_q1_total,
@@ -2251,6 +2886,20 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
         "at_least_one_quarter_a": hist_atleast1q_a,
         "at_least_one_quarter_b": hist_atleast1q_b,
         "half_total": hist_half_total,
+        # ── ТЗ §5-9: Basketball History Zones Module ──────────────────────
+        "h1_total_zones":        hist_h1_total_zones,
+        "h1_team_points_zones":  hist_h1_team_pts,
+        "h2_total_zones":        hist_h2_total_zones,
+        "h2_team_points_zones":  hist_h2_team_pts,
+        "q3_total_zones":        hist_q3_total_zones,
+        "q3_team_points_zones":  hist_q3_team_pts,
+        "after3q_total_zones":   hist_after3q_total_zones,
+        "after3q_team_points_zones": hist_after3q_team_pts,
+        "q4_total_zones":        hist_q4_total_zones,
+        "q4_team_points_zones":  hist_q4_team_pts,
+        # ── ТЗ §10-11 ─────────────────────────────────────────────────────
+        "conditional_history_zones": cond_history_zones,
+        "zone_summary": zone_summary,
     }
 
     # Conditional scanner
@@ -2372,6 +3021,40 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
     _anti_a = anti_sweep_profile(qpf_rows_a, qpf_rows_h2h)
     _anti_b = anti_sweep_profile(qpf_rows_b, qpf_rows_h2h)
 
+    # ── Quarter pattern analysis (sweep, at-least-one-quarter, etc.) ────
+    quarter_patterns_a = quarter_pattern_analysis(rows_a, team_label="team_a")
+    quarter_patterns_b = quarter_pattern_analysis(rows_b, team_label="team_b")
+    quarter_patterns_h2h = quarter_pattern_analysis(h2h_rows, team_label="h2h") if h2h_rows else {"n": 0, "status": "NO_DATA"}
+
+    # ── Similar scenario Q3/Q4 stat profile ──────────────────────────────
+    _pooled_n = len(rows_a) + len(rows_b)
+    similar_scenario = similar_scenario_q3_q4_stat_profile(
+        main=main,
+        rows_a=rows_a,
+        rows_b=rows_b,
+        stage=_derive_stage(main.get("st", "")),
+        pooled_n=_pooled_n,
+    )
+
+    # ── Live protection calc ──────────────────────────────────────────────
+    live_protection = live_protection_calc(
+        main=main,
+        pre_match_stat=pre_match_stat,
+        live_calibrated=live_calibrated,
+        history_zones=history_zones,
+        lines_data=lines_data,
+    )
+
+    # ── Pre-match protection calc ─────────────────────────────────────────
+    pre_match_protection = pre_match_protection_calc(
+        main=main,
+        pre_match_stat=pre_match_stat,
+        history_zones=history_zones,
+        lines_data=lines_data,
+        rows_a=rows_a,
+        rows_b=rows_b,
+    )
+
     # Build final JSON package
     return {
         "sample_strength": sample_strength,
@@ -2451,6 +3134,14 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
         "pre_match_stat": pre_match_stat,
         "live_calibrated": live_calibrated,
         "candidates": candidates,
+        "quarter_patterns": {
+            "team_a": quarter_patterns_a,
+            "team_b": quarter_patterns_b,
+            "h2h": quarter_patterns_h2h,
+        },
+        "similar_scenario_q3_q4_stat_profile": similar_scenario,
+        "live_protection": live_protection,
+        "pre_match_protection": pre_match_protection,
         "blockers": (
             (["SAMPLE_FAIL"] if not sample["recommendation_allowed"] else []) +
             (["STAT_OFF"]    if stat_sp["status"] == "OFF" else []) +
@@ -2467,6 +3158,797 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
             )
         ),
     }
+
+# ═══════════════════════════════════════════════════════════════════════
+# ADVANCED QUARTER PATTERNS — "скільки раз команда програвала 4-0"
+#   та "скільки раз не кидала хоча б X в одній з четвертей"
+# ═══════════════════════════════════════════════════════════════════════
+
+def quarter_pattern_analysis(rows: list, team_label: str = "team") -> dict:
+    """
+    Розширений аналіз по четвертях для однієї команди:
+    - Скільки разів програвала ВСІ 4 чверті (4-0 по чвертях)
+    - Скільки разів хоча б в одній чверті набирала X+
+    - Скільки разів НЕ набирала хоча б X в жодній чверті
+    - Sweep (програла 4-0) та reverse sweep (виграла 4-0)
+    - Паттерни типу "Q1 win + Q2 loss → що потім"
+    """
+    n = len(rows)
+    if n == 0:
+        return {"n": 0, "status": "NO_DATA"}
+
+    def q_wins(r):
+        return [
+            r["q1_team"] > r["q1_opp"],
+            r["q2_team"] > r["q2_opp"],
+            r["q3_team"] > r["q3_opp"],
+            r["q4_team"] > r["q4_opp"],
+        ]
+
+    # ── Sweep / reverse sweep ─────────────────────────────────────────
+    lost_all_4   = sum(1 for r in rows if all(not w for w in q_wins(r)))
+    won_all_4    = sum(1 for r in rows if all(w for w in q_wins(r)))
+    lost_3_plus  = sum(1 for r in rows if sum(not w for w in q_wins(r)) >= 3)
+    won_3_plus   = sum(1 for r in rows if sum(w for w in q_wins(r)) >= 3)
+
+    # ── Хоча б X в одній чверті vs жодного X ─────────────────────────
+    at_least_one_q = {}
+    never_reached_q = {}
+    thresholds = [15, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 28, 30, 32]
+    for t in thresholds:
+        hit_at_least_once = sum(1 for r in rows if max(r["q1_team"], r["q2_team"], r["q3_team"], r["q4_team"]) >= t)
+        never_hit = n - hit_at_least_once
+        at_least_one_q[str(t)] = {
+            "hits": hit_at_least_once, "rate": rate(hit_at_least_once, n),
+            "smoothed": round((hit_at_least_once + 1) / (n + 2), 3),
+            "fraction": pct_str(hit_at_least_once, n),
+        }
+        never_reached_q[str(t)] = {
+            "hits": never_hit, "rate": rate(never_hit, n),
+            "smoothed": round((never_hit + 1) / (n + 2), 3),
+            "fraction": pct_str(never_hit, n),
+        }
+
+    # ── Патерн: Q3 або Q4 хоча б X (без умов по Q1/Q2) ──────────────
+    at_least_one_2h_q = {}
+    for t in thresholds:
+        hits = sum(1 for r in rows if r["q3_team"] >= t or r["q4_team"] >= t)
+        at_least_one_2h_q[str(t)] = {"hits": hits, "rate": rate(hits, n), "fraction": pct_str(hits, n)}
+
+    # ── Паттерн: якщо Q1+Q2 не досягли X — чи досягли Q3/Q4 ─────────
+    recovery_after_ht = {}
+    for t in [18, 19, 20, 21, 22, 23, 25]:
+        ht_low = [r for r in rows if r["q1_team"] < t and r["q2_team"] < t]
+        if ht_low:
+            recovered = sum(1 for r in ht_low if r["q3_team"] >= t or r["q4_team"] >= t)
+            recovery_after_ht[str(t)] = {
+                "sample_ht_low": len(ht_low),
+                "recovered": recovered,
+                "rate": rate(recovered, len(ht_low)),
+                "fraction": pct_str(recovered, len(ht_low)),
+            }
+
+    # ── Per-quarter stats ─────────────────────────────────────────────
+    per_q_avg = {}
+    for qk, ok in [("q1_team","q1_opp"), ("q2_team","q2_opp"), ("q3_team","q3_opp"), ("q4_team","q4_opp")]:
+        label = qk.split("_")[0].upper()
+        vals = [r[qk] for r in rows]
+        ovals = [r[ok] for r in rows]
+        per_q_avg[label] = {
+            "avg_own":      round(statistics.mean(vals), 2) if vals else None,
+            "avg_allowed":  round(statistics.mean(ovals), 2) if ovals else None,
+            "win_rate":     rate(sum(1 for r in rows if r[qk] > r[ok]), n),
+            "win_fraction": pct_str(sum(1 for r in rows if r[qk] > r[ok]), n),
+        }
+
+    # ── Consecutive quarter patterns ─────────────────────────────────
+    # Програв Q3, виграв Q4 (comeback в 2H)
+    q3loss_q4win = sum(1 for r in rows if r["q3_team"] < r["q3_opp"] and r["q4_team"] > r["q4_opp"])
+    # Виграв Q3, програв Q4 (розтратив перевагу)
+    q3win_q4loss = sum(1 for r in rows if r["q3_team"] > r["q3_opp"] and r["q4_team"] < r["q4_opp"])
+
+    return {
+        "n": n,
+        "sweep_patterns": {
+            "lost_all_4_quarters": {
+                "hits": lost_all_4, "rate": rate(lost_all_4, n),
+                "fraction": pct_str(lost_all_4, n),
+                "note": "Програла ВСІ 4 чверті (4-0 по чвертях)",
+            },
+            "won_all_4_quarters": {
+                "hits": won_all_4, "rate": rate(won_all_4, n),
+                "fraction": pct_str(won_all_4, n),
+                "note": "Виграла ВСІ 4 чверті",
+            },
+            "lost_3_or_more_quarters": {
+                "hits": lost_3_plus, "rate": rate(lost_3_plus, n),
+                "fraction": pct_str(lost_3_plus, n),
+            },
+            "won_3_or_more_quarters": {
+                "hits": won_3_plus, "rate": rate(won_3_plus, n),
+                "fraction": pct_str(won_3_plus, n),
+            },
+        },
+        "at_least_one_quarter_X_plus": at_least_one_q,
+        "never_reached_X_in_any_quarter": never_reached_q,
+        "at_least_one_2h_quarter_X_plus": at_least_one_2h_q,
+        "recovery_after_low_ht": recovery_after_ht,
+        "per_quarter_profile": per_q_avg,
+        "q3_q4_transitions": {
+            "q3_loss_then_q4_win": {
+                "hits": q3loss_q4win, "rate": rate(q3loss_q4win, n),
+                "fraction": pct_str(q3loss_q4win, n),
+            },
+            "q3_win_then_q4_loss": {
+                "hits": q3win_q4loss, "rate": rate(q3win_q4loss, n),
+                "fraction": pct_str(q3win_q4loss, n),
+            },
+        },
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SIMILAR SCENARIO Q3/Q4 STAT PROFILE  (ТЗ similar_scenario_q3_q4_stat_profile)
+# ═══════════════════════════════════════════════════════════════════════
+
+def _margin_bucket_label(margin: int) -> str:
+    a = abs(margin)
+    if a == 0:    return "tie"
+    if a <= 4:    return "1-4"
+    if a <= 9:    return "5-9"
+    if a <= 14:   return "10-14"
+    if a <= 19:   return "15-19"
+    return "20+"
+
+def _total_bucket_label(total: float, hist_totals: list) -> str:
+    if not hist_totals:
+        return "normal"
+    p25 = percentile(hist_totals, 25)
+    p75 = percentile(hist_totals, 75)
+    p90 = percentile(hist_totals, 90)
+    if total >= p90: return "very_high"
+    if total >= p75: return "high"
+    if total >= p25: return "normal"
+    return "low"
+
+def _quarter_win_state_full(row: dict) -> str:
+    """'2-0' / '2-1' / '1-2' / '0-2' / '3-0' / '0-3' etc. based on q1..q3 margins."""
+    wins = sum([
+        row["q1_margin"] > 0,
+        row["q2_margin"] > 0,
+        row.get("q3_margin", 0) > 0,
+    ])
+    losses = 3 - wins
+    return f"{wins}-{losses}"
+
+def _lead_trail_state(margin: int) -> str:
+    if margin >= 10:  return "blowout"
+    if margin >= 1:   return "team_leading"
+    if margin == 0:   return "close_game"
+    if margin >= -9:  return "team_trailing"
+    return "blowout_trail"
+
+def _tempo_label_from_row(row: dict) -> str:
+    """Estimate tempo label from a hist row using poss/efg/fta fields."""
+    poss = row.get("poss", 0)
+    efg  = row.get("efg", 0)
+    ftr  = row.get("ftr", 0)
+    if poss == 0:
+        return "UNKNOWN"
+    if poss >= 80 and efg >= 0.55:  return "REAL_HIGH"
+    if poss >= 80 and efg < 0.50:   return "FAKE_HIGH"
+    if poss <= 65 and efg >= 0.55:  return "FAKE_LOW"
+    if poss <= 65 and efg < 0.48:   return "REAL_LOW"
+    if ftr >= 0.35:                  return "FAKE_VOLUME"
+    return "NORMAL"
+
+def _smoothed_rate(hits: int, n: int, k: int = 10) -> float:
+    if n == 0: return 0.0
+    return round((hits + 1) / (n + 2), 3)
+
+def _credibility(n: int, k: int = 10) -> float:
+    return round(n / (n + k), 3)
+
+def _pattern_score(hits: int, n: int, base_history: float, k: int = 10) -> float:
+    cred = _credibility(n, k)
+    smooth = _smoothed_rate(hits, n)
+    return round(cred * smooth + (1 - cred) * base_history, 3)
+
+def _sample_status(n: int) -> str:
+    if n < 3:   return "informational_only"
+    if n <= 5:  return "shrinkage_only"
+    if n <= 9:  return "usable"
+    return "strong_candidate"
+
+def _build_segment_profile(rows: list, q_key_team: str, q_key_opp: str,
+                            base_history_pts: float, pooled_n: int) -> dict:
+    """
+    Build own-scoring + allowed profile for one quarter segment (Q3 or Q4).
+    q_key_team: 'q3_team', q_key_opp: 'q3_opp'
+    """
+    n = len(rows)
+    if n == 0:
+        return {"n": 0, "status": "NO_DATA"}
+
+    pts_own    = [r[q_key_team] for r in rows]
+    pts_allow  = [r[q_key_opp]  for r in rows]
+    fga_vals   = [r.get("FGA", 0) for r in rows]
+    fgm_vals   = [r.get("FGA", 0) - r.get("FGA", 0) * (1 - r.get("efg", 0.5)) for r in rows]  # approx
+    p2a_vals   = [r.get("2PA", 0) for r in rows]
+    p3a_vals   = [r.get("3PA", 0) for r in rows]
+    fta_vals   = [r.get("FTA", 0) for r in rows]
+    orb_vals   = [r.get("ORB", 0) for r in rows]
+    to_vals    = [r.get("TO", 0)  for r in rows]
+    poss_vals  = [r.get("poss", 0) for r in rows]
+    efg_vals   = [r.get("efg", 0)  for r in rows]
+    fouls_vals = [r.get("fouls", 0) for r in rows]
+
+    def avg(lst): return round(statistics.mean(lst), 2) if lst else None
+    def med(lst): return round(statistics.median(lst), 2) if lst else None
+    def p25v(lst): return round(percentile(lst, 25), 2) if lst else None
+    def p75v(lst): return round(percentile(lst, 75), 2) if lst else None
+
+    # Hit rates: team points X+ in this quarter
+    hit_rates_own = {}
+    for t in [15, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 28, 30]:
+        h = sum(1 for v in pts_own if v >= t)
+        hit_rates_own[str(t)] = {
+            "hits": h, "rate": rate(h, n),
+            "smoothed": _smoothed_rate(h, n),
+            "fraction": pct_str(h, n),
+            "credibility": _credibility(n),
+            "pattern_score": _pattern_score(h, n, base_history_pts),
+            "included_in_p_final": "YES" if n >= 10 and rate(h, n) >= 0.70 else
+                                   ("SHRINKAGE" if 3 <= n <= 9 else "OFF"),
+        }
+
+    # Hit rates: opponent allowed X+ in this quarter
+    hit_rates_allowed = {}
+    for t in [15, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 28, 30]:
+        h = sum(1 for v in pts_allow if v >= t)
+        hit_rates_allowed[str(t)] = {
+            "hits": h, "rate": rate(h, n),
+            "smoothed": _smoothed_rate(h, n),
+            "fraction": pct_str(h, n),
+        }
+
+    # Quarter total (combined)
+    q_totals = [pts_own[i] + pts_allow[i] for i in range(n)]
+    hit_rates_qtotal = {}
+    for t in [36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56]:
+        h = sum(1 for v in q_totals if v >= t)
+        hit_rates_qtotal[str(t)] = {
+            "hits": h, "rate": rate(h, n),
+            "smoothed": _smoothed_rate(h, n),
+            "fraction": pct_str(h, n),
+        }
+
+    # ExtraPoss per row
+    extra_poss_vals = [r.get("extra_poss", r.get("ORB", 0) - r.get("TO", 0)) for r in rows]
+
+    # OffRtg per row (100 * pts / poss)
+    off_rtg_vals = [100 * pts_own[i] / poss_vals[i] if poss_vals[i] > 0 else 0 for i in range(n)]
+
+    coverage = round(n / pooled_n, 3) if pooled_n > 0 else None
+
+    # tempo distribution
+    tempo_counts = {}
+    for r in rows:
+        tl = _tempo_label_from_row(r)
+        tempo_counts[tl] = tempo_counts.get(tl, 0) + 1
+
+    conflict_check = {
+        "own_scoring_gate": (
+            "aligned" if n >= 6 and avg(pts_own) and avg(pts_own) >= 20 else
+            "weak" if n >= 3 else "OFF"
+        ),
+        "opponent_allowed_gate": (
+            "aligned" if n >= 6 and avg(pts_allow) and avg(pts_allow) >= 20 else
+            "partial" if n >= 3 else "OFF"
+        ),
+        "live_stat_alignment": "requires_live_data",
+        "verdict_impact": (
+            "support_strong" if n >= 10 else
+            "support_weak" if n >= 3 else "OFF"
+        ),
+    }
+
+    return {
+        "n": n,
+        "sample_status": _sample_status(n),
+        "coverage": coverage,
+        # Own scoring profile
+        "own_scoring": {
+            "avg_points":   avg(pts_own),
+            "median_points": med(pts_own),
+            "p25_points":   p25v(pts_own),
+            "p75_points":   p75v(pts_own),
+            "min_points":   min(pts_own) if pts_own else None,
+            "max_points":   max(pts_own) if pts_own else None,
+            "avg_poss":     avg(poss_vals),
+            "avg_fga":      avg(fga_vals),
+            "avg_2pa":      avg(p2a_vals),
+            "avg_3pa":      avg(p3a_vals),
+            "avg_fta":      avg(fta_vals),
+            "avg_orb":      avg(orb_vals),
+            "avg_to":       avg(to_vals),
+            "avg_fouls":    avg(fouls_vals),
+            "avg_efg":      round(statistics.mean([e for e in efg_vals if e > 0]) * 100, 1) if any(efg_vals) else None,
+            "avg_extra_poss": avg(extra_poss_vals),
+            "avg_offrtg":   round(statistics.mean([v for v in off_rtg_vals if v > 0]), 1) if any(off_rtg_vals) else None,
+        },
+        # Opponent allowed profile
+        "opponent_allowed": {
+            "avg_points_allowed": avg(pts_allow),
+            "median_points_allowed": med(pts_allow),
+            "p25_allowed":  p25v(pts_allow),
+            "p75_allowed":  p75v(pts_allow),
+        },
+        "tempo_distribution": tempo_counts,
+        # Hit rates
+        "hit_rates_own_pts": hit_rates_own,
+        "hit_rates_allowed_pts": hit_rates_allowed,
+        "hit_rates_quarter_total": hit_rates_qtotal,
+        "conflict_check": conflict_check,
+    }
+
+
+def similar_scenario_q3_q4_stat_profile(
+    main: dict,
+    rows_a: list,
+    rows_b: list,
+    stage: str = None,
+    pooled_n: int = None,
+) -> dict:
+    """
+    ТЗ similar_scenario_q3_q4_stat_profile:
+    Знаходить схожі сценарії в історії та розраховує Q3/Q4 профіль.
+    """
+    if not rows_a and not rows_b:
+        return {"status": "NO_DATA"}
+
+    # ── Визначаємо поточний стан матчу ────────────────────────────────
+    hs  = safe_int(main.get("hs"))
+    aws = safe_int(main.get("as_"))
+    q1h = safe_int(main.get("q1h")); q1a = safe_int(main.get("q1a"))
+    q2h = safe_int(main.get("q2h")); q2a = safe_int(main.get("q2a"))
+    q3h = safe_int(main.get("q3h")); q3a = safe_int(main.get("q3a"))
+
+    h1_total   = q1h + q2h + q1a + q2a
+    cur_total  = hs + aws
+    cur_margin = hs - aws
+    st = main.get("st", "")
+    _stage = stage or _derive_stage(st)
+
+    # After3Q: знаємо q1..q3
+    after3q_home = q1h + q2h + q3h
+    after3q_away = q1a + q2a + q3a
+    after3q_margin = after3q_home - after3q_away
+    after3q_total  = after3q_home + after3q_away
+
+    # Гістограма тоталів по команді A для бакетів
+    hist_totals_a = [r["total"] for r in rows_a] if rows_a else []
+    pn = pooled_n or (len(rows_a) + len(rows_b))
+
+    cur_margin_bkt  = _margin_bucket_label(cur_margin)
+    cur_total_bkt   = _total_bucket_label(cur_total, hist_totals_a)
+    lead_trail      = _lead_trail_state(cur_margin)
+
+    # Quarter state (скільки чвертей виграла команда A)
+    q_wins_a = sum([q1h > q1a, q2h > q2a, q3h > q3a])
+    q_losses_a = 3 - q_wins_a
+    q_state_str = f"{q_wins_a}-{q_losses_a}"
+
+    # ── Base history rate (overall Q3 avg для команди A) ─────────────
+    q3_pts_all_a = [r["q3_team"] for r in rows_a] if rows_a else []
+    base_q3_rate = rate(sum(1 for v in q3_pts_all_a if v >= 20), len(q3_pts_all_a)) if q3_pts_all_a else 0.5
+    q4_pts_all_a = [r["q4_team"] for r in rows_a] if rows_a else []
+    base_q4_rate = rate(sum(1 for v in q4_pts_all_a if v >= 20), len(q4_pts_all_a)) if q4_pts_all_a else 0.5
+
+    # ── Фільтр схожих сценаріїв для команди A ────────────────────────
+    def _filter_similar(rows: list, margin_bkt: str, total_bkt: str,
+                        q_state: str, lead_trail: str) -> list:
+        """Exact match — всі 4 фільтри."""
+        exact = [
+            r for r in rows
+            if _margin_bucket_label(r["h1_margin"]) == margin_bkt
+            and _total_bucket_label(r["h1_total"], hist_totals_a) == total_bkt
+            and _quarter_win_state_full(r) == q_state
+            and _lead_trail_state(r["h1_margin"]) == lead_trail
+        ]
+        # Wider fallback: тільки margin + lead_trail
+        wider = [
+            r for r in rows
+            if _margin_bucket_label(r["h1_margin"]) == margin_bkt
+            and _lead_trail_state(r["h1_margin"]) == lead_trail
+        ]
+        return exact, wider
+
+    exact_a, wider_a = _filter_similar(rows_a, cur_margin_bkt, cur_total_bkt, q_state_str, lead_trail)
+    exact_b, wider_b = _filter_similar(rows_b, cur_margin_bkt, cur_total_bkt, q_state_str, lead_trail)
+
+    # ── Будуємо профілі по Q3 та Q4 ──────────────────────────────────
+    # Team A exact
+    q3_profile_a_exact = _build_segment_profile(exact_a, "q3_team", "q3_opp", base_q3_rate, pn)
+    q4_profile_a_exact = _build_segment_profile(exact_a, "q4_team", "q4_opp", base_q4_rate, pn)
+    # Team A wider fallback
+    q3_profile_a_wider = _build_segment_profile(wider_a, "q3_team", "q3_opp", base_q3_rate, pn)
+    q4_profile_a_wider = _build_segment_profile(wider_a, "q4_team", "q4_opp", base_q4_rate, pn)
+
+    # Team B exact
+    q3_profile_b_exact = _build_segment_profile(exact_b, "q3_team", "q3_opp", base_q3_rate, pn)
+    q4_profile_b_exact = _build_segment_profile(exact_b, "q4_team", "q4_opp", base_q4_rate, pn)
+    # Team B wider fallback
+    q3_profile_b_wider = _build_segment_profile(wider_b, "q3_team", "q3_opp", base_q3_rate, pn)
+    q4_profile_b_wider = _build_segment_profile(wider_b, "q4_team", "q4_opp", base_q4_rate, pn)
+
+    # ── Required remaining threshold ─────────────────────────────────
+    # після 3Q: скільки треба в Q4 для конкретного total
+    required_q4_thresholds = {}
+    for line in [130.5, 135.5, 140.5, 145.5, 150.5, 155.5, 160.5, 165.5, 170.5, 175.5, 180.5]:
+        needed = math.floor(line) + 1 - after3q_total
+        if needed > 0:
+            required_q4_thresholds[str(line)] = {
+                "line": line,
+                "after3q_total": after3q_total,
+                "needed_in_q4": needed,
+                "feasibility": (
+                    "HIGH" if needed <= 38 else
+                    "MEDIUM" if needed <= 46 else
+                    "LOW"
+                ),
+            }
+
+    # ── Projection impact ─────────────────────────────────────────────
+    # Яка сторона підтримується паттернами
+    own_avg_q3 = q3_profile_a_exact.get("own_scoring", {}).get("avg_points")
+    allow_avg_q3 = q3_profile_a_exact.get("opponent_allowed", {}).get("avg_points_allowed")
+    support_side = "neutral"
+    if own_avg_q3 and allow_avg_q3:
+        combined_q3 = own_avg_q3 + allow_avg_q3
+        if combined_q3 >= 46:   support_side = "over"
+        elif combined_q3 <= 38: support_side = "under"
+
+    return {
+        "stage": _stage,
+        "condition": {
+            "score_state":                 f"{hs}-{aws}",
+            "margin_bucket":               cur_margin_bkt,
+            "current_total_bucket":        cur_total_bkt,
+            "lead_trail_state":            lead_trail,
+            "quarter_state":               q_state_str,
+            "after3q_total":               after3q_total,
+            "after3q_margin":              after3q_margin,
+        },
+        "required_q4_thresholds": required_q4_thresholds,
+        # Team A
+        "team_a_q3_exact": q3_profile_a_exact,
+        "team_a_q4_exact": q4_profile_a_exact,
+        "team_a_q3_wider": q3_profile_a_wider,
+        "team_a_q4_wider": q4_profile_a_wider,
+        # Team B
+        "team_b_q3_exact": q3_profile_b_exact,
+        "team_b_q4_exact": q4_profile_b_exact,
+        "team_b_q3_wider": q3_profile_b_wider,
+        "team_b_q4_wider": q4_profile_b_wider,
+        # Sample info
+        "sample_info": {
+            "team_a_exact_n": len(exact_a),
+            "team_a_wider_n": len(wider_a),
+            "team_b_exact_n": len(exact_b),
+            "team_b_wider_n": len(wider_b),
+            "pooled_valid_n": pn,
+            "exact_coverage_a": round(len(exact_a) / pn, 3) if pn > 0 else None,
+            "wider_coverage_a": round(len(wider_a) / pn, 3) if pn > 0 else None,
+        },
+        "projection_impact": {
+            "support_side":   support_side,
+            "blocker":        len(exact_a) < 3 and len(wider_a) < 3,
+            "reason": (
+                "exact_sample_too_small" if len(exact_a) < 3 else
+                "using_wider_fallback"   if len(exact_a) < 6 else
+                "exact_sample_sufficient"
+            ),
+        },
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# LIVE PROTECTION FORMULA  (розрахунки для live-ставки з хеджем)
+# ═══════════════════════════════════════════════════════════════════════
+
+def live_protection_calc(
+    main: dict,
+    pre_match_stat: dict,
+    live_calibrated: dict,
+    history_zones: dict,
+    lines_data: dict = None,
+) -> dict:
+    """
+    Live Protection: розраховує поточний стан ставки і рекомендовані
+    hedge-дії для захисту прибутку або обмеження збитків.
+
+    Ключові метрики:
+    - LiveEdge: різниця між моделлю і лінією
+    - LiveConfidence: довіра до live-проекції (функція хвилин і eFG overheat)
+    - HedgeRecommendation: якщо LiveEdge знизився нижче порогу — рекомендація хеджу
+    - ProtectionScore: 0-100, скільки відсотків від початкової кромки збережено
+    """
+    st = main.get("st", "")
+    tour = main.get("tour", "")
+
+    if _is_match_finished(st):
+        return {"status": "FINISHED", "note": "Match is over, live protection not applicable."}
+    if not live_calibrated or live_calibrated.get("status") == "NO_DATA":
+        return {"status": "NO_DATA"}
+
+    min_played = live_calibrated.get("min_played", 0)
+    min_left   = live_calibrated.get("min_left", 0)
+    q_dur      = live_calibrated.get("q_duration_min", 10)
+    live_total = live_calibrated.get("LiveCalibrated_Total")
+    pre_total  = pre_match_stat.get("PreFinal_Total") if pre_match_stat else None
+
+    # ── Поточні BK лінії ─────────────────────────────────────────────
+    bk_match_lines = extract_bk_match_total_lines(lines_data) if lines_data else []
+    current_line = bk_match_lines[len(bk_match_lines) // 2] if bk_match_lines else None
+
+    # ── LiveEdge ──────────────────────────────────────────────────────
+    live_edge = None
+    if live_total is not None and current_line is not None:
+        live_edge = round(live_total - current_line, 2)
+
+    # ── LiveConfidence (0..1) ─────────────────────────────────────────
+    # Залежить від:
+    #   - хвилин зіграних (більше → вище довіра)
+    #   - overheat eFG (якщо eFG сильно вище норми → знижуємо довіру)
+    lc_home = live_calibrated.get("home", {})
+    lc_away = live_calibrated.get("away", {})
+    overheat_h = lc_home.get("overheat_pts", 0)
+    overheat_a = lc_away.get("overheat_pts", 0)
+    avg_overheat = (abs(overheat_h) + abs(overheat_a)) / 2
+
+    trust_base = lc_home.get("LiveTrust", 0.5)  # вже є в live_calibrated
+    if avg_overheat >= 25:
+        live_confidence = round(trust_base * 0.50, 3)
+    elif avg_overheat >= 15:
+        live_confidence = round(trust_base * 0.70, 3)
+    elif avg_overheat >= 8:
+        live_confidence = round(trust_base * 0.85, 3)
+    else:
+        live_confidence = round(trust_base, 3)
+
+    # ── ProtectionScore (0-100): скільки % часу на ставку лишилось ───
+    total_min = 4 * q_dur
+    protection_score = round((min_left / total_min) * 100, 1) if total_min > 0 else 0
+
+    # ── HedgeRecommendation ───────────────────────────────────────────
+    hedge_rec = "NO_ACTION"
+    hedge_reason = []
+
+    if live_edge is not None:
+        if live_edge < -3.0:
+            hedge_rec = "CONSIDER_HEDGE"
+            hedge_reason.append(f"LiveEdge={live_edge}: модель нижче лінії на {abs(live_edge)}")
+        elif live_edge < -1.5:
+            hedge_rec = "MONITOR"
+            hedge_reason.append(f"LiveEdge={live_edge}: наближається до негативного")
+
+    if live_confidence < 0.35:
+        hedge_rec = "CONSIDER_HEDGE"
+        hedge_reason.append(f"LiveConfidence={live_confidence}: дуже низька (сильний overheat eFG)")
+    elif live_confidence < 0.50 and hedge_rec == "NO_ACTION":
+        hedge_rec = "MONITOR"
+        hedge_reason.append(f"LiveConfidence={live_confidence}: помірно низька")
+
+    if min_left <= q_dur and protection_score <= 25:
+        if hedge_rec == "NO_ACTION" and live_edge and abs(live_edge) < 2.0:
+            hedge_rec = "PARTIAL_HEDGE_POSSIBLE"
+            hedge_reason.append("Залишилась <1 чверть, ставка близько до лінії — часткове хеджування")
+
+    # ── Live vs Pre порівняння ────────────────────────────────────────
+    live_vs_pre = None
+    if live_total is not None and pre_total is not None:
+        live_vs_pre = {
+            "delta": round(live_total - pre_total, 2),
+            "direction": "OVER_TRACKING" if live_total > pre_total else "UNDER_TRACKING",
+            "magnitude": (
+                "LARGE"  if abs(live_total - pre_total) >= 8 else
+                "MEDIUM" if abs(live_total - pre_total) >= 4 else
+                "SMALL"
+            ),
+        }
+
+    # ── Tempo drift (зміна темпу відносно норми) ─────────────────────
+    fga_h = lc_home.get("Rem_FGA", 0)
+    fga_a = lc_away.get("Rem_FGA", 0)
+    tempo_signal = "NORMAL"
+    if min_played > 0:
+        proj_total_fga_per_min = (fga_h + fga_a) / min_left if min_left > 0 else 0
+        if proj_total_fga_per_min >= 5.0:   tempo_signal = "HIGH_TEMPO"
+        elif proj_total_fga_per_min <= 3.0: tempo_signal = "LOW_TEMPO"
+
+    return {
+        "status": "ACTIVE",
+        "min_played": min_played,
+        "min_left":   min_left,
+        "live_calibrated_total": live_total,
+        "pre_match_total":       pre_total,
+        "current_bk_line":       current_line,
+        "live_edge":             live_edge,
+        "live_confidence":       live_confidence,
+        "protection_score":      protection_score,
+        "hedge_recommendation":  hedge_rec,
+        "hedge_reasons":         hedge_reason,
+        "live_vs_pre":           live_vs_pre,
+        "avg_efg_overheat":      round(avg_overheat, 2),
+        "tempo_signal":          tempo_signal,
+        "interpretation": (
+            "Модель вище лінії — ставка на OVER утримує edge"
+            if live_edge and live_edge >= 2.0 else
+            "Модель нижче лінії — розглянь хедж або вихід"
+            if live_edge and live_edge <= -2.0 else
+            "Нейтральна зона — продовжуй моніторинг"
+        ),
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# PRE-MATCH PROTECTION FORMULA  (розрахунки для захисту pre-live ставки)
+# ═══════════════════════════════════════════════════════════════════════
+
+def pre_match_protection_calc(
+    main: dict,
+    pre_match_stat: dict,
+    history_zones: dict,
+    lines_data: dict = None,
+    rows_a: list = None,
+    rows_b: list = None,
+) -> dict:
+    """
+    Pre-Match Protection: аналіз edge до початку гри.
+    Визначає:
+    - PreEdge: різниця між проекцією і BK лінією
+    - HistoryEdge: різниця між hist_avg і BK лінією
+    - ConflictGate: чи є конфлікт між проекцією і статистикою
+    - LineMovement: чи рухається лінія проти нас
+    - ConfidenceGate: фінальний сигнал допуску до ставки
+    """
+    if not pre_match_stat or pre_match_stat.get("status") == "NO_DATA":
+        return {"status": "NO_DATA"}
+
+    rows_a = rows_a or []
+    rows_b = rows_b or []
+
+    pre_total = pre_match_stat.get("PreFinal_Total")
+    pre_margin = pre_match_stat.get("PreFinal_Margin")
+
+    # ── BK лінії ─────────────────────────────────────────────────────
+    bk_match_lines = extract_bk_match_total_lines(lines_data) if lines_data else []
+    mid_line = bk_match_lines[len(bk_match_lines) // 2] if bk_match_lines else None
+
+    bk_hcp_lines = extract_bk_match_handicap_lines(lines_data, "Match") if lines_data else []
+    mid_hcp = bk_hcp_lines[len(bk_hcp_lines) // 2] if bk_hcp_lines else None
+
+    # ── PreEdge ───────────────────────────────────────────────────────
+    pre_edge_total = round(pre_total - mid_line, 2) if (pre_total and mid_line) else None
+    pre_edge_hcp   = round(pre_margin - mid_hcp, 2) if (pre_margin and mid_hcp) else None
+
+    # ── HistoryEdge: середній тотал команд vs BK лінія ───────────────
+    hist_totals_a = [r["total"] for r in rows_a] if rows_a else []
+    hist_totals_b = [r["total"] for r in rows_b] if rows_b else []
+    pooled_totals = hist_totals_a + hist_totals_b
+    hist_avg_total = round(statistics.mean(pooled_totals), 2) if pooled_totals else None
+    hist_edge_total = round(hist_avg_total - mid_line, 2) if (hist_avg_total and mid_line) else None
+
+    # ── ConflictGate ─────────────────────────────────────────────────
+    conflict_gate = "ALIGNED"
+    conflict_reasons = []
+    if pre_edge_total is not None and hist_edge_total is not None:
+        if (pre_edge_total > 0 and hist_edge_total < -2) or (pre_edge_total < 0 and hist_edge_total > 2):
+            conflict_gate = "CONFLICT"
+            conflict_reasons.append(
+                f"PreEdge={pre_edge_total} протилежний HistEdge={hist_edge_total}"
+            )
+    if pre_edge_total is not None and abs(pre_edge_total) < 1.0:
+        conflict_gate = "THIN_EDGE"
+        conflict_reasons.append("PreEdge < 1.0: край дуже вузький")
+
+    # ── LineMovement (якщо є opening vs current у lines_data) ────────
+    line_movement = None
+    if lines_data and bk_match_lines:
+        mt = lines_data.get("match_total", [])
+        moves = []
+        for e in mt:
+            over_open = e.get("overOpen")
+            over_curr = e.get("overOdd") or e.get("over_odd")
+            line_val  = e.get("line")
+            if over_open and over_curr and line_val:
+                try:
+                    delta_odds = round(float(over_curr) - float(over_open), 3)
+                    moves.append({"line": line_val, "delta_odds": delta_odds})
+                except (TypeError, ValueError):
+                    pass
+        if moves:
+            avg_move = round(statistics.mean([m["delta_odds"] for m in moves]), 3)
+            line_movement = {
+                "avg_odds_delta": avg_move,
+                "direction": "SHORTENING" if avg_move < -0.05 else "DRIFTING" if avg_move > 0.05 else "STABLE",
+                "details": moves[:5],
+            }
+
+    # ── Hit rates по BK лініях (over/under) ─────────────────────────
+    over_rates_by_line = {}
+    if mid_line and hist_totals_a:
+        for line in bk_match_lines[:5]:  # топ-5 BK ліній
+            h_a = sum(1 for v in hist_totals_a if v > line)
+            h_b = sum(1 for v in hist_totals_b if v > line)
+            na, nb = len(hist_totals_a), len(hist_totals_b)
+            over_rates_by_line[str(line)] = {
+                "team_a_over_rate": rate(h_a, na),
+                "team_b_over_rate": rate(h_b, nb),
+                "pooled_over_rate": rate(h_a + h_b, na + nb),
+                "fraction_a": pct_str(h_a, na),
+                "fraction_b": pct_str(h_b, nb),
+            }
+
+    # ── ConfidenceGate ────────────────────────────────────────────────
+    confidence_gate = "GO"
+    confidence_reasons = []
+
+    if conflict_gate == "CONFLICT":
+        confidence_gate = "PASS"
+        confidence_reasons.append("PreEdge vs HistEdge конфлікт — не грати")
+    elif conflict_gate == "THIN_EDGE":
+        confidence_gate = "REDUCE_STAKE"
+        confidence_reasons.append("Вузький edge — зменшити ставку або пропустити")
+    elif pre_edge_total and abs(pre_edge_total) < 2.0 and hist_edge_total and abs(hist_edge_total) < 2.0:
+        confidence_gate = "REDUCE_STAKE"
+        confidence_reasons.append("Обидва edges < 2 — ставка можлива але з обмеженим сайзингом")
+
+    if line_movement and line_movement["direction"] == "SHORTENING":
+        if confidence_gate == "GO":
+            confidence_gate = "REDUCE_STAKE"
+        confidence_reasons.append("Лінія скорочується (shortening) — розумний гравець ставить раніше")
+
+    # ── ORB/TO balance (penalty для pre-match) ────────────────────────
+    orb_a = round(statistics.mean([r.get("ORB", 0) for r in rows_a]), 2) if rows_a else None
+    orb_b = round(statistics.mean([r.get("ORB", 0) for r in rows_b]), 2) if rows_b else None
+    to_a  = round(statistics.mean([r.get("TO", 0) for r in rows_a]), 2)  if rows_a else None
+    to_b  = round(statistics.mean([r.get("TO", 0) for r in rows_b]), 2)  if rows_b else None
+
+    return {
+        "status": "ACTIVE",
+        "pre_projection_total": pre_total,
+        "pre_projection_margin": pre_margin,
+        "bk_mid_line_total":    mid_line,
+        "bk_mid_line_hcp":      mid_hcp,
+        "pre_edge_total":       pre_edge_total,
+        "pre_edge_hcp":         pre_edge_hcp,
+        "hist_avg_total":       hist_avg_total,
+        "hist_edge_total":      hist_edge_total,
+        "conflict_gate":        conflict_gate,
+        "conflict_reasons":     conflict_reasons,
+        "line_movement":        line_movement,
+        "confidence_gate":      confidence_gate,
+        "confidence_reasons":   confidence_reasons,
+        "over_rates_by_line":   over_rates_by_line,
+        "orb_to_balance": {
+            "avg_orb_a": orb_a, "avg_orb_b": orb_b,
+            "avg_to_a":  to_a,  "avg_to_b":  to_b,
+            "net_extra_poss_a": round(orb_a - to_a, 2) if (orb_a and to_a) else None,
+            "net_extra_poss_b": round(orb_b - to_b, 2) if (orb_b and to_b) else None,
+        },
+        "interpretation": (
+            "GO: strong pre-edge, aligned history, no conflict"
+            if confidence_gate == "GO" and pre_edge_total and pre_edge_total >= 3.0 else
+            "GO with caution: edge exists but thin or minor conflict"
+            if confidence_gate == "GO" else
+            "REDUCE_STAKE: edge too thin or line moving against"
+            if confidence_gate == "REDUCE_STAKE" else
+            "PASS: conflict between projection and history — no bet"
+        ),
+    }
+
 
 # ─────────────────────────────────────────────
 # RESULT MERGER — map process_match output → result.json skeleton
@@ -2528,6 +4010,9 @@ def build_result_json(match_result: dict, lines_data: dict = None,
         except (TypeError, ValueError):
             pooled_n = None
     h2h_n = sg.get("h2h_n")
+    # NOTE: data_quality is rebuilt at the bottom of this function from raw sources.
+    # This intermediate variable is kept only so intermediate blocks that reference
+    # `data_quality` (e.g. data_quality_legacy) do not break. It is NOT emitted.
     data_quality = {
         "stat_support": "ON" if stat_sp.get("status") == "ON" else "OFF",
         "required_fields_present": stat_sp.get("required_fields", []),
@@ -2544,12 +4029,8 @@ def build_result_json(match_result: dict, lines_data: dict = None,
         "current_match_excluded": True,
         "technical_20_0_excluded": True,
         "lines_stale_warning": _lines_stale_w,
-        # старые поля сохраняются
         "sample_gate": sg,
         "sample_strength": r.get("sample_strength"),
-        "live_stat_support": r.get("live_stat_support", {}),
-        "blockers": r.get("blockers", []),
-        "final_signal": r.get("final_signal"),
     }
 
     # ── bookmaker_lines (новая структура + старые ключи) ──────────────────
@@ -2994,72 +4475,78 @@ def build_result_json(match_result: dict, lines_data: dict = None,
     if raw_block:
         raw_data["raw_block"]   = raw_block
 
+    # ── ТЗ §11: Build strict top-level data_quality (calculator mode) ───
+    _hz = r.get("history_zones", {})
+    _sg = r.get("sample_gate", {})
+    _stat_sp = r.get("stat_support", {})
+    _top_data_quality = {
+        "team_a_valid_games":       _sg.get("team_a_valid_games", 0),
+        "team_b_valid_games":       _sg.get("team_b_valid_games", 0),
+        "pooled_valid_games":       _sg.get("pooled_n", 0),
+        "h2h_valid_games":          _sg.get("h2h_n", 0),
+        "current_match_excluded":   True,
+        "technical_games_excluded": True,
+        "missing_fields":           _stat_sp.get("missing_fields", []),
+        "sample_warning":           _sg.get("warning"),
+        "lines_stale_warning":      _lines_stale_w,
+    }
+
+    # ── ТЗ §11: Build strict history_zones (no data_quality/cond/summary nested) ──
+    _history_zones_clean = {
+        "h1_total":             _hz.get("h1_total_zones", {}),
+        "h1_team_points":       _hz.get("h1_team_points_zones", {}),
+        "h2_total":             _hz.get("h2_total_zones", {}),
+        "h2_team_points":       _hz.get("h2_team_points_zones", {}),
+        "q3_total":             _hz.get("q3_total_zones", {}),
+        "q3_team_points":       _hz.get("q3_team_points_zones", {}),
+        "after_3q_total":       _hz.get("after3q_total_zones", {}),
+        "after_3q_team_points": _hz.get("after3q_team_points_zones", {}),
+        "q4_total":             _hz.get("q4_total_zones", {}),
+        "q4_team_points":       _hz.get("q4_team_points_zones", {}),
+    }
+
+    # ── ТЗ §11: conditional_history_zones and zone_summary at top level ──
+    _top_conditional_history_zones = _hz.get("conditional_history_zones", {})
+    _top_zone_summary = _hz.get("zone_summary", {})
+
     return {
-        # ══ НОВАЯ СТРУКТУРА (schema v3) ══════════════════════════════════
-        "schema_version": "basketball_line_eval_v3.0",
+        # ── ТЗ §11: Required top-level keys ─────────────────────────────
+        "schema_version": "basketball_history_zones_v1.0",
 
-        # ── 1. Контекст матча (новый расширенный блок) ───────────────────
-        "match": match_block,
+        # ── meta — match identity & live state ───────────────────────────
+        "meta": {
+            "match_id":   meta.get("match_id"),
+            "match":      meta.get("match"),
+            "tournament": meta.get("tournament"),
+            "date":       meta.get("date"),
+            "url":        meta.get("url"),
+            "stage":      meta.get("stage"),
+            "score":      meta.get("score"),
+            "q1":         meta.get("q1"),
+            "q2":         meta.get("q2"),
+            "h1_total":   meta.get("h1_total"),
+            "current_total": meta.get("current_total"),
+        },
 
-        # ── 2. Качество данных (верхний уровень) ─────────────────────────
-        "data_quality": data_quality,
+        # ── logic — all computed analysis blocks ─────────────────────────
+        "logic": {
+            # ТЗ §11: data_quality
+            "data_quality": _top_data_quality,
 
-        # ── 3. Линии букмекеров (новая структура + старые ключи) ─────────
-        "bookmaker_lines": bookmaker_lines,
+            # ТЗ §11: history_zones — zone data only, no nested blocks
+            "history_zones": _history_zones_clean,
 
-        # ── 4. Живая статистика команд ───────────────────────────────────
-        "live_team_stats": live_team_stats,
+            # ТЗ §10: conditional_history_zones
+            "conditional_history_zones": _top_conditional_history_zones,
 
-        # ── 5. Проекции ──────────────────────────────────────────────────
-        "projections": projections,
+            # ТЗ §11: zone_summary
+            "zone_summary": _top_zone_summary,
+        },
 
-        # ── 6. История по точным линиям ──────────────────────────────────
-        "history_by_exact_line": history_by_exact_line,
+        # ── lines — bookmaker lines (raw + enriched) ─────────────────────
+        "lines": bookmaker_lines,
 
-        # ── 7. Сценарные паттерны по линиям ─────────────────────────────
-        "scenario_patterns_by_line": scenario_patterns_by_line,
-
-        # ── 8. Оценки линий (главный вывод по ставкам) ───────────────────
-        "line_evaluations": line_evaluations,
-
-        # ══ СТАРАЯ СТРУКТУРА (обратная совместимость) ════════════════════
-
-        # ── 9. meta (старый) ─────────────────────────────────────────────
-        "meta": meta,
-
-        # ── 10. Линии букмекеров (старый плоский формат) ─────────────────
-        # уже включено в bookmaker_lines выше
-
-        # ── 11. Текущее состояние матча ───────────────────────────────────
-        "score_state": score_state,
-
-        # ── 12. Итоговый вердикт ─────────────────────────────────────────
-        "final_verdict": final_verdict,
-
-        # ── 13. Рынки — кандидаты ────────────────────────────────────────
-        "markets_evaluation": markets_evaluation,
-
-        # ── 14. Формулы: проекции, пороги, калибровка ────────────────────
-        "stat_conditioned_line_profiles": stat_conditioned_line_profiles,
-
-        # ── 15. Сценарии и чекпоинты ──────────────────────────────────────
-        "scenario_zones": scenario_zones,
-        "checkpoint_matrices": checkpoint_matrices,
-
-        # ── 16. Профиль по четвертям ──────────────────────────────────────
-        "quarter_result_profile": quarter_result_profile,
-
-        # ── 17. Стат-выравнивание ─────────────────────────────────────────
-        "stat_alignment": stat_alignment,
-
-        # ── 18. Исторические зоны и перцентили ────────────────────────────
-        "history_zones": hz,
-        "stat_zones": stat_zones,
-
-        # ── 19. Бокссcore текущего матча ──────────────────────────────────
-        "live_boxscore": live_boxscore,
-
-        # ── 20. Сырые данные ──────────────────────────────────────────────
+        # ── raw_data — source records passed into this match block ────────
         "raw_data": raw_data,
     }
 
@@ -3067,7 +4554,7 @@ def build_result_json(match_result: dict, lines_data: dict = None,
 # ─────────────────────────────────────────────
 # ENTRYPOINT — loop over all match blocks
 # ─────────────────────────────────────────────
-def run(filepath: str, lines_path: str = LINES_FILE) -> list:
+def run(filepath: str, lines_path: str) -> list:
     path = Path(filepath)
     if not path.exists():
         raise FileNotFoundError(f"File not found: {filepath}")
@@ -3107,30 +4594,34 @@ def run(filepath: str, lines_path: str = LINES_FILE) -> list:
 
 
 def main():
-    filepath = PARSEDATAFILE
-    with open(filepath, "r", encoding="utf-8") as f:
-        raw = json.load(f)
-    if not isinstance(raw, list):
-        print(f"ERROR: Expected a JSON array at top level, got {type(raw).__name__}", file=sys.stderr)
+    if len(sys.argv) < 3:
+        print("Usage: math_script.py <h2h_file> <line_result_file>", file=sys.stderr)
         sys.exit(1)
-    sources = [r.get("src", "") for r in raw[:10]]
-    print(sources)
+
+    h2h_path         = sys.argv[1]   # data/<homeSlug>_vs_<awaySlug>_<matchId>.json
+    line_result_path = sys.argv[2]   # data/line_result_<matchId>.json
+
+    for fpath in (h2h_path, line_result_path):
+        if not os.path.isfile(fpath):
+            print(f"[math_script] ERROR: file not found: {fpath}", file=sys.stderr)
+            sys.exit(1)
+
+    m = re.search(r'_([A-Za-z0-9]+).json$', h2h_path)
+    match_id = m.group(1) if m else 'unknown'
+
+    print(f"[math_script] Processing match {match_id}")
+
     try:
-        results = run(filepath)
-        
+        results = run(h2h_path, line_result_path)
     except FileNotFoundError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
+        print(f"[math_script] ERROR: {e}", file=sys.stderr)
         sys.exit(1)
     except json.JSONDecodeError as e:
-        print(f"ERROR: Invalid JSON — {e}", file=sys.stderr)
+        print(f"[math_script] ERROR: Invalid JSON — {e}", file=sys.stderr)
         sys.exit(1)
 
-    # Output to stdout as JSON (pipe-friendly for Node.js or other callers)
-    results_out = [mr for mr, _, _ in results]
-    print(json.dumps(results_out, ensure_ascii=False, indent=2))
-
-    # ── Merge into result.json skeleton ──────────────────────────────────
-    lines_data = load_lines()
+    # Load lines for build_result_json (already validated above)
+    lines_data = load_lines(line_result_path)
 
     if len(results) == 1:
         match_result, parsed, raw_block = results[0]
@@ -3142,18 +4633,18 @@ def main():
             for mr, p, rb in results
         ]
 
-    # ── Overwrite the source file (preserve its original name) ─────────
-    # Reuse the exact filename from PARSEDATAFILE so the bash script can
-    # always reference it by its existing name — no rename, no duplicate,
-    # no spaces-vs-underscores mismatch.
-    output_path = os.path.abspath(filepath)
+    output_path = Path(h2h_path).parent / f"result_{match_id}.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(merged, f, ensure_ascii=False, indent=2)
-    filename = os.path.basename(output_path)
-    print(f"[result written → {output_path}]", file=sys.stderr)
-    # Signal the bash script which file to scp
-    print(f"__OUTPUT_FILE__:{filename}", file=sys.stderr)
+
+    print(f"[math_script] ✓ Result written to {output_path}")
+    # Signal the caller which file was written
+    print(f"__OUTPUT_FILE__:{output_path.name}", file=sys.stderr)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"[math_script] FATAL: {e}", file=sys.stderr)
+        sys.exit(1)

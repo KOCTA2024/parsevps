@@ -1,0 +1,5 @@
+node_modules
+.git
+output
+dist
+debug.log

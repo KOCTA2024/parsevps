@@ -378,13 +378,16 @@ function extractBookmakers(raw) {
 // ─── Головна функція ──────────────────────────────────────────────────────────
 
 /**
- * @param {string} matchId      — eventId (наприклад "jqZHZsIa")
- * @param {string} outputDir    — директорія для line_result.json
+ * @param {string} matchId        — eventId (наприклад "jqZHZsIa")
+ * @param {string} outputDir      — directory where the file is written
  * @param {object} [participants] — { homeId: "rJqHNXt2", awayId: "zDW2oyZ8" }
- *                                  (беруться з основного скрипту парсингу матчу)
+ *                                  (taken from the main match parser)
+ * @param {string} [lineFilename] — output filename, default "line_result_<matchId>.json"
+ *                                  Pass an explicit name to avoid collisions in concurrent runs.
  * @returns {Promise<object>}
  */
-export async function fetchAndSaveLines(matchId, outputDir, participants = null) {
+export async function fetchAndSaveLines(matchId, outputDir, participants = null, lineFilename = null) {
+  lineFilename = lineFilename ?? `line_result_${matchId}.json`;
   const url = buildLinesUrl(matchId);
   console.log(`\n--- Завантаження ліній (findOddsByEventId)... ---`);
   console.log(`  URL: ${url}`);
@@ -400,7 +403,7 @@ export async function fetchAndSaveLines(matchId, outputDir, participants = null)
     console.warn('⚠ line_result: порожня відповідь');
     const empty = { error: 'empty_response', url, matchId };
     fs.mkdirSync(outputDir, { recursive: true });
-    fs.writeFileSync(path.join(outputDir, 'line_result.json'), JSON.stringify(empty, null, 2), 'utf-8');
+    fs.writeFileSync(path.join(outputDir, lineFilename), JSON.stringify(empty, null, 2), 'utf-8');
     return empty;
   }
 
@@ -410,7 +413,7 @@ export async function fetchAndSaveLines(matchId, outputDir, participants = null)
   if (!parsed) {
     const fallback = { error: 'parse_failed', matchId, url };
     fs.mkdirSync(outputDir, { recursive: true });
-    fs.writeFileSync(path.join(outputDir, 'line_result.json'), JSON.stringify(fallback, null, 2), 'utf-8');
+    fs.writeFileSync(path.join(outputDir, lineFilename), JSON.stringify(fallback, null, 2), 'utf-8');
     return fallback;
   }
 
@@ -425,7 +428,7 @@ export async function fetchAndSaveLines(matchId, outputDir, participants = null)
   }
 
   fs.mkdirSync(outputDir, { recursive: true });
-  const outPath = path.join(outputDir, 'line_result.json');
+  const outPath = path.join(outputDir, lineFilename);
   fs.writeFileSync(outPath, JSON.stringify(parsed, null, 2), 'utf-8');
   console.log(`✅ Лінії збережено: ${outPath}`);
 

@@ -1,0 +1,562 @@
+PYTHON MODULE: HISTORY ZONES ONLY — H1 / H2 / Q3 / HT→3Q
+
+====================================================================
+0) ГОЛОВНИЙ ПРИНЦИП
+====================================================================
+
+ЗАВДАННЯ PYTHON:
+Python НЕ робить прогноз.
+Python НЕ дає ставку.
+Python НЕ пише PLAY / PASS / recommendation.
+Python НЕ оцінює коефіцієнти.
+Python НЕ аналізує live-статистику як модель.
+Python НЕ вирішує, що краще ставити.
+Python НЕ рахує P_final / P_live / P_scenario.
+
+Python тільки рахує історичні зони по даних історії:
+- Team A last35
+- Team B last35
+- pooled sample Team A + Team B
+- H2H окремо
+
+Результат Python = чисті розрахунки:
+- скільки разів було Over / Under по кожному threshold
+- hits / N
+- hit-rate %
+- smoothed probability
+- 70 / 75 / 78 / 80 / 85 / 90 / 95 / 100% зони
+- average / median / min / max / p25 / p75 / p90
+- missing fields / OFF
+
+Python = калькулятор історичних зон.
+GPT / модель потім читає ці зони й окремо робить аналіз.
+
+====================================================================
+1) DATA INPUT
+====================================================================
+
+Python має взяти історичні матчі:
+
+Team A last35:
+- Q1 points for / against
+- Q2 points for / against
+- Q3 points for / against
+- Q4 points for / against
+- final points for / against
+
+Team B last35:
+- Q1 points for / against
+- Q2 points for / against
+- Q3 points for / against
+- Q4 points for / against
+- final points for / against
+
+H2H:
+- Q1 points
+- Q2 points
+- Q3 points
+- Q4 points
+- final points
+
+Поточний матч виключити з історії.
+Технічні матчі 20:0 / 0:20 / 0:0 виключити.
+
+Якщо в даних немає потрібного поля:
+- field_status = "OFF"
+- не рахувати цю зону
+- не підставляти середнє
+- не вигадувати значення
+
+====================================================================
+2) BASIC CALCULATED FIELDS
+====================================================================
+
+Для кожного історичного матчу Python має створити поля:
+
+H1_team_points = Q1_team_points + Q2_team_points
+H1_opponent_points = Q1_opp_points + Q2_opp_points
+H1_total = Q1_total + Q2_total
+
+H2_team_points = Q3_team_points + Q4_team_points
+H2_opponent_points = Q3_opp_points + Q4_opp_points
+H2_total = Q3_total + Q4_total
+
+Q3_team_points = Q3_team_points
+Q3_opponent_points = Q3_opp_points
+Q3_total = Q3_team_points + Q3_opp_points
+
+After_3Q_team_points = Q1_team_points + Q2_team_points + Q3_team_points
+After_3Q_opponent_points = Q1_opp_points + Q2_opp_points + Q3_opp_points
+After_3Q_total = Q1_total + Q2_total + Q3_total
+
+Q4_total = Q4_team_points + Q4_opp_points
+Final_total = final_team_points + final_opp_points
+
+Final_margin = final_team_points - final_opp_points
+H1_margin = H1_team_points - H1_opponent_points
+H2_margin = H2_team_points - H2_opponent_points
+Q3_margin = Q3_team_points - Q3_opponent_points
+After_3Q_margin = After_3Q_team_points - After_3Q_opponent_points
+
+====================================================================
+3) HIT-RATE FORMULAS
+====================================================================
+
+Для кожного threshold рахувати обидві сторони.
+
+Для Over:
+over_hits = count(value > line)
+over_rate = over_hits / N
+over_smoothed = (over_hits + 1) / (N + 2)
+
+Для Under:
+under_hits = count(value <= line)
+under_rate = under_hits / N
+under_smoothed = (under_hits + 1) / (N + 2)
+
+Для pooled:
+pooled_hits = team_a_hits + team_b_hits
+pooled_N = team_a_N + team_b_N
+pooled_rate = pooled_hits / pooled_N
+pooled_smoothed = (pooled_hits + 1) / (pooled_N + 2)
+
+H2H:
+H2H рахувати окремо.
+H2H НЕ змішувати з pooled.
+
+====================================================================
+4) ZONE LABELS
+====================================================================
+
+Python має присвоїти label кожній зоні:
+
+if rate == 1.00:
+    zone = "100%"
+elif rate >= 0.95:
+    zone = "95%+"
+elif rate >= 0.90:
+    zone = "90%+"
+elif rate >= 0.85:
+    zone = "85%+"
+elif rate >= 0.80:
+    zone = "80%+"
+elif rate >= 0.78:
+    zone = "78%+"
+elif rate >= 0.75:
+    zone = "75%+"
+elif rate >= 0.70:
+    zone = "70%+"
+else:
+    zone = "below_70"
+
+Це не прогноз.
+Це тільки історична зона.
+
+====================================================================
+5) 1ST HALF / H1 ZONES
+====================================================================
+
+Python має рахувати такі зони:
+
+A) H1 TOTAL ZONES
+Для кожного threshold:
+- H1 total Over
+- H1 total Under
+
+Threshold list:
+30.5, 35.5, 40.5, 45.5, 50.5, 55.5, 60.5, 65.5, 70.5,
+75.5, 80.5, 85.5, 90.5, 95.5, 100.5, 105.5, 110.5
+
+Для кожного threshold вивести:
+{
+  "market": "H1_TOTAL",
+  "line": 90.5,
+  "side": "OVER",
+  "team_a_hits": 0,
+  "team_a_n": 35,
+  "team_a_rate": 0.0,
+  "team_a_smoothed": 0.027,
+  "team_a_zone": "below_70",
+  "team_b_hits": 0,
+  "team_b_n": 35,
+  "team_b_rate": 0.0,
+  "team_b_smoothed": 0.027,
+  "team_b_zone": "below_70",
+  "pooled_hits": 0,
+  "pooled_n": 70,
+  "pooled_rate": 0.0,
+  "pooled_smoothed": 0.014,
+  "pooled_zone": "below_70",
+  "h2h_hits": 0,
+  "h2h_n": 5,
+  "h2h_rate": 0.0,
+  "h2h_smoothed": 0.143,
+  "h2h_zone": "below_70"
+}
+
+B) TEAM H1 POINTS ZONES
+Для кожної команди:
+- Team A H1 scored Over / Under
+- Team A H1 allowed Over / Under
+- Team B H1 scored Over / Under
+- Team B H1 allowed Over / Under
+
+Threshold list:
+10.5, 12.5, 14.5, 15.5, 16.5, 18.5, 20.5, 21.5, 22.5,
+24.5, 25.5, 27.5, 30.5, 32.5, 35.5, 37.5, 40.5,
+42.5, 45.5, 50.5, 55.5
+
+====================================================================
+6) 2ND HALF / H2 ZONES
+====================================================================
+
+Python має рахувати такі зони:
+
+A) H2 TOTAL ZONES
+Для кожного threshold:
+- H2 total Over
+- H2 total Under
+
+Threshold list:
+30.5, 35.5, 40.5, 45.5, 50.5, 55.5, 60.5, 65.5, 70.5,
+75.5, 80.5, 85.5, 90.5, 95.5, 100.5, 105.5, 110.5,
+115.5, 120.5
+
+B) TEAM H2 POINTS ZONES
+Для кожної команди:
+- Team A H2 scored Over / Under
+- Team A H2 allowed Over / Under
+- Team B H2 scored Over / Under
+- Team B H2 allowed Over / Under
+
+Threshold list:
+10.5, 12.5, 14.5, 15.5, 16.5, 18.5, 20.5, 21.5, 22.5,
+24.5, 25.5, 27.5, 30.5, 32.5, 35.5, 37.5, 40.5,
+42.5, 45.5, 50.5, 55.5, 60.5
+
+====================================================================
+7) Q3 ZONES
+====================================================================
+
+Python має рахувати такі зони:
+
+A) Q3 TOTAL ZONES
+Для кожного threshold:
+- Q3 total Over
+- Q3 total Under
+
+Threshold list:
+25.5, 28.5, 30.5, 32.5, 34.5, 35.5, 36.5, 38.5,
+40.5, 42.5, 44.5, 45.5, 46.5, 48.5, 50.5, 52.5,
+55.5, 58.5, 60.5
+
+B) TEAM Q3 POINTS ZONES
+Для кожної команди:
+- Team A Q3 scored Over / Under
+- Team A Q3 allowed Over / Under
+- Team B Q3 scored Over / Under
+- Team B Q3 allowed Over / Under
+
+Threshold list:
+5.5, 7.5, 8.5, 10.5, 12.5, 14.5, 15.5, 16.5,
+18.5, 20.5, 21.5, 22.5, 24.5, 25.5, 27.5, 30.5,
+32.5, 35.5, 37.5, 40.5
+
+====================================================================
+8) HT → END OF Q3 CHECKPOINT ZONES
+====================================================================
+
+Python має рахувати checkpoint-зони після 3-ї чверті.
+
+A) AFTER 3Q TOTAL ZONES
+Для кожного threshold:
+- after_3Q_total Over
+- after_3Q_total Under
+
+Threshold list:
+70.5, 75.5, 80.5, 85.5, 90.5, 95.5, 100.5, 105.5,
+110.5, 115.5, 120.5, 125.5, 130.5, 135.5, 140.5,
+145.5, 150.5, 155.5, 160.5
+
+B) TEAM AFTER 3Q POINTS ZONES
+Для кожної команди:
+- Team A after_3Q scored Over / Under
+- Team A after_3Q allowed Over / Under
+- Team B after_3Q scored Over / Under
+- Team B after_3Q allowed Over / Under
+
+Threshold list:
+30.5, 35.5, 40.5, 45.5, 50.5, 55.5, 60.5, 65.5,
+70.5, 75.5, 80.5, 85.5, 90.5, 95.5, 100.5
+
+====================================================================
+9) REQUIRED Q4 ZONES FROM AFTER 3Q
+====================================================================
+
+Python має рахувати історичні Q4-зони.
+Це теж тільки статистика, без висновку.
+
+A) Q4 TOTAL ZONES
+Для кожного threshold:
+- Q4 total Over
+- Q4 total Under
+
+Threshold list:
+20.5, 22.5, 24.5, 25.5, 27.5, 30.5, 32.5, 35.5,
+37.5, 40.5, 42.5, 45.5, 47.5, 50.5, 52.5, 55.5,
+58.5, 60.5
+
+B) TEAM Q4 POINTS ZONES
+Для кожної команди:
+- Team A Q4 scored Over / Under
+- Team A Q4 allowed Over / Under
+- Team B Q4 scored Over / Under
+- Team B Q4 allowed Over / Under
+
+Threshold list:
+5.5, 7.5, 8.5, 10.5, 12.5, 14.5, 15.5, 16.5,
+18.5, 20.5, 21.5, 22.5, 24.5, 25.5, 27.5, 30.5,
+32.5, 35.5, 37.5, 40.5
+
+====================================================================
+10) CONDITIONAL HISTORY ZONES ONLY
+====================================================================
+
+Python може рахувати conditional history, але НЕ робити висновок.
+
+Умови для групування:
+
+HT total bucket:
+<=60
+61-70
+71-80
+81-90
+91-100
+101+
+
+HT margin bucket:
+tie
+1-4
+5-9
+10-14
+15-19
+20+
+
+Quarter state after H1:
+2-0
+1-1
+0-2
+
+Team state:
+team_leading
+team_trailing
+team_tied
+
+Для кожного bucket рахувати:
+- N
+- coverage = N / pooled_N
+- avg H2 total
+- median H2 total
+- min H2 total
+- max H2 total
+- p25 H2 total
+- p75 H2 total
+- p90 H2 total
+- H2 total over/under thresholds
+- Q3 total over/under thresholds
+- after_3Q total over/under thresholds
+- Q4 total over/under thresholds
+
+Формат:
+{
+  "condition": "HT_total_61_70_margin_tie_1_1",
+  "n": 8,
+  "coverage": 0.114,
+  "metrics": {
+    "avg_h2_total": 78.4,
+    "median_h2_total": 77,
+    "min_h2_total": 62,
+    "max_h2_total": 94,
+    "p25_h2_total": 70,
+    "p75_h2_total": 85,
+    "p90_h2_total": 91
+  },
+  "zones": [
+    {
+      "market": "H2_TOTAL",
+      "line": 80.5,
+      "side": "OVER",
+      "hits": 3,
+      "n": 8,
+      "rate": 0.375,
+      "smoothed": 0.4,
+      "zone": "below_70"
+    }
+  ]
+}
+
+ВАЖЛИВО:
+Conditional zones = тільки статистика.
+Не писати:
+- good
+- bad
+- play
+- pass
+- value
+- recommend
+- safe
+- risky
+
+====================================================================
+11) OUTPUT JSON STRUCTURE
+====================================================================
+
+Python має повертати JSON такого типу:
+
+{
+  "data_quality": {
+    "team_a_valid_games": 35,
+    "team_b_valid_games": 35,
+    "pooled_valid_games": 70,
+    "h2h_valid_games": 5,
+    "current_match_excluded": true,
+    "technical_games_excluded": true,
+    "missing_fields": []
+  },
+  "history_zones": {
+    "h1_total": [],
+    "h1_team_points": [],
+    "h2_total": [],
+    "h2_team_points": [],
+    "q3_total": [],
+    "q3_team_points": [],
+    "after_3q_total": [],
+    "after_3q_team_points": [],
+    "q4_total": [],
+    "q4_team_points": []
+  },
+  "conditional_history_zones": {
+    "by_ht_total_bucket": [],
+    "by_ht_margin_bucket": [],
+    "by_quarter_state_after_h1": [],
+    "by_team_state_after_h1": [],
+    "combined_buckets": []
+  },
+  "zone_summary": {
+    "h1_100_zones": [],
+    "h1_95_zones": [],
+    "h1_90_zones": [],
+    "h1_85_zones": [],
+    "h1_80_zones": [],
+    "h1_78_zones": [],
+    "h2_100_zones": [],
+    "h2_95_zones": [],
+    "h2_90_zones": [],
+    "h2_85_zones": [],
+    "h2_80_zones": [],
+    "h2_78_zones": [],
+    "q3_100_zones": [],
+    "q3_95_zones": [],
+    "q3_90_zones": [],
+    "q3_85_zones": [],
+    "q3_80_zones": [],
+    "q3_78_zones": [],
+    "after_3q_100_zones": [],
+    "after_3q_95_zones": [],
+    "after_3q_90_zones": [],
+    "after_3q_85_zones": [],
+    "after_3q_80_zones": [],
+    "after_3q_78_zones": [],
+    "q4_100_zones": [],
+    "q4_95_zones": [],
+    "q4_90_zones": [],
+    "q4_85_zones": [],
+    "q4_80_zones": [],
+    "q4_78_zones": []
+  }
+}
+
+====================================================================
+12) OUTPUT EXCEL TABLES
+====================================================================
+
+Крім JSON, Python бажано має створити Excel з листами:
+
+1. Data_Quality
+2. H1_Total_Zones
+3. H1_Team_Zones
+4. H2_Total_Zones
+5. H2_Team_Zones
+6. Q3_Total_Zones
+7. Q3_Team_Zones
+8. After3Q_Total_Zones
+9. After3Q_Team_Zones
+10. Q4_Total_Zones
+11. Q4_Team_Zones
+12. Conditional_HT_Total
+13. Conditional_HT_Margin
+14. Conditional_Quarter_State
+15. Zone_Summary_78plus
+16. Zone_Summary_80plus
+17. Zone_Summary_90plus
+18. Zone_Summary_100
+
+Excel має містити тільки розрахунки.
+Без прогнозів і ставок.
+
+====================================================================
+13) STRICTLY FORBIDDEN FOR PYTHON
+====================================================================
+
+Python не має писати:
+- PLAY
+- PASS
+- BET
+- VALUE
+- STRONG BET
+- recommendation
+- best pick
+- ставити
+- брати
+- прогноз
+- ймовірність проходу ставки
+- P_final
+- P_live
+- P_scenario
+- live projection
+- edge
+- bankroll
+- odds value
+
+Python має писати тільки:
+- market
+- line
+- side
+- hits
+- N
+- rate
+- smoothed
+- zone
+- avg
+- median
+- min
+- max
+- p25
+- p75
+- p90
+- sample
+- missing fields
+- OFF
+
+====================================================================
+14) FINAL RULE
+====================================================================
+
+Python = калькулятор історичних зон.
+
+Модель / GPT вже потім читає ці зони і робить аналіз.
+
+Python не аналізує.
+Python не прогнозує.
+Python не радить ставку.
+Python тільки рахує.

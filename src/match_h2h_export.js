@@ -2,12 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import { chromium } from 'playwright';
 import XLSX from 'xlsx';
-import readline from 'readline';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import https from 'https';
 import zlib from 'zlib';
 import { fetchAndSaveLines } from './parse_lines.js';
+import { slugify } from './utils/slugify.js';
  
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,39 +32,41 @@ const DEFAULT_H2H_LIMIT = 5;
  
 // ─── utils ────────────────────────────────────────────────────────────────────
  
-function clearOutputDirectory() {
-  if (fs.existsSync(OUTPUT_PATH)) {
-    for (const file of fs.readdirSync(OUTPUT_PATH)) {
-      try { fs.unlinkSync(path.join(OUTPUT_PATH, file)); } catch {}
-    }
-    console.log('--- Папку outputs очищено ---');
-  } else {
-    fs.mkdirSync(OUTPUT_PATH, { recursive: true });
-  }
-}
- 
-function askQuestion(query) {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise(resolve => rl.question(query, ans => { rl.close(); resolve(ans); }));
-}
- 
 function parseArgs() {
   const args = process.argv.slice(2);
   const options = {
     matchUrl : null,
+    matchId  : null,   // supplied by worker via --matchId <ID>
+    homeSlug : null,   // supplied by worker via --home <slug>
+    awaySlug : null,   // supplied by worker via --away <slug>
     limit    : DEFAULT_LIMIT,
     h2hLimit : DEFAULT_H2H_LIMIT,
-    fileType : 'xlsx',
+    fileType : 'json',
     fileName : null,
   };
-  for (const arg of args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    // Named-flag style: --matchId <ID>  --home <slug>  --away <slug>
+    if (arg === '--matchId'   && args[i + 1]) { options.matchId  = args[++i]; continue; }
+    if (arg === '--home'      && args[i + 1]) { options.homeSlug = args[++i]; continue; }
+    if (arg === '--away'      && args[i + 1]) { options.awaySlug = args[++i]; continue; }
+    if (arg === '--fileType'  && args[i + 1]) { options.fileType = args[++i].toLowerCase(); continue; }
+    if (arg === '--fileName'  && args[i + 1]) { options.fileName = args[++i]; continue; }
+    if (arg === '--limit'     && args[i + 1]) { options.limit    = Number(args[++i]) || DEFAULT_LIMIT; continue; }
+    if (arg === '--h2hLimit'  && args[i + 1]) { options.h2hLimit = Number(args[++i]) || DEFAULT_H2H_LIMIT; continue; }
+    if (arg === '--matchUrl'  && args[i + 1]) { options.matchUrl = args[++i]; continue; }
+    // Legacy key=value style still supported
     if (arg.startsWith('matchUrl='))  options.matchUrl  = arg.slice('matchUrl='.length);
     if (arg.startsWith('limit='))     options.limit     = Number(arg.slice('limit='.length))    || DEFAULT_LIMIT;
     if (arg.startsWith('h2hLimit=')) options.h2hLimit  = Number(arg.slice('h2hLimit='.length)) || DEFAULT_H2H_LIMIT;
     if (arg.startsWith('fileType=')) options.fileType  = arg.slice('fileType='.length).toLowerCase();
     if (arg.startsWith('fileName=')) options.fileName  = arg.slice('fileName='.length);
   }
-  if (!options.matchUrl) throw new Error('❌ Missing required argument: matchUrl=<flashscore-url>');
+  // When called from the worker, matchId + slugs are provided; matchUrl is optional.
+  // When called interactively, matchUrl is required.
+  if (!options.matchId && !options.matchUrl) {
+    throw new Error('❌ Provide either --matchId <ID> (worker mode) or matchUrl=<flashscore-url> (interactive mode)');
+  }
   return options;
 }
  
@@ -775,10 +777,11 @@ function writeJson(rows, fileName) {
 // ─── main ─────────────────────────────────────────────────────────────────────
  
 async function main() {
-  clearOutputDirectory();
+  ensureOutputDir();
   const options = parseArgs();
-  const userChoice = await askQuestion('');
-  options.fileType = userChoice.trim() === '2' ? 'json' : 'xlsx';
+  // fileType береться з аргументу fileType=json|xlsx (або --fileType json|xlsx).
+  // Дефолт — xlsx. Readline більше не потрібен.
+  console.log(`--- Формат виводу: ${options.fileType} ---`);
  
   const chromePath = fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : undefined;
  
@@ -805,8 +808,10 @@ async function main() {
     ],
   });
   try {
-    const matchId = extractMid(options.matchUrl);
-    const sportId = options.matchUrl.includes('basketball') ? '5' : '1';
+    // Worker mode: --matchId <ID> is passed directly.
+    // Interactive mode: derive matchId from ?mid= query param in matchUrl.
+    const matchId = options.matchId ?? extractMid(options.matchUrl);
+    const sportId = (options.matchUrl || '').includes('basketball') ? '5' : '1';
  
     console.log('--- Отримання fsign через Playwright... ---');
  
@@ -875,19 +880,23 @@ async function main() {
       awayId: mainMatch.awayTeamId ?? awayMatches[0]?.awayTeamId ?? null,
     };
     console.log(`  participants: homeId=${participants.homeId}, awayId=${participants.awayId}`);
-    await fetchAndSaveLines(matchId, OUTPUT_PATH, participants);
-    // Копіюємо line_result.json → src/data/ щоб Python міг його читати
-    const DATA_DIR = path.join(__dirname, 'data');
+
+    // Build per-match filenames so concurrent jobs never collide.
+    // Worker supplies --home / --away slugs; interactive mode falls back to slugify(name).
+    const resolvedHomeSlug = options.homeSlug ?? slugify(homeName || 'home');
+    const resolvedAwaySlug = options.awaySlug ?? slugify(awayName || 'away');
+
+    const DATA_DIR      = path.join(__dirname, '..', 'data');
+    const lineFilename  = `line_result_${matchId}.json`;
+    const dataBaseName  = options.fileName
+      ? sanitizeFileName(options.fileName)
+      : `${resolvedHomeSlug}_vs_${resolvedAwaySlug}_${matchId}`;
+
     fs.mkdirSync(DATA_DIR, { recursive: true });
-    try {
-      fs.copyFileSync(
-        path.join(OUTPUT_PATH, 'line_result.json'),
-        path.join(DATA_DIR, 'line_result.json')
-      );
-      console.log(`  ✅ line_result.json → ${DATA_DIR}`);
-    } catch (e) {
-      console.warn(`  ⚠ Не вдалося скопіювати line_result.json: ${e.message}`);
-    }
+
+    // fetchAndSaveLines now writes directly to DATA_DIR with the isolated filename.
+    await fetchAndSaveLines(matchId, DATA_DIR, participants, lineFilename);
+    console.log(`  ✅ ${lineFilename} → ${DATA_DIR}`);
  
     if (!homeName || !awayName) {
       if (mainMatch.homeName) homeName = mainMatch.homeName;
@@ -949,21 +958,15 @@ async function main() {
       }),
     ];
  
-    const rawName  = options.fileName || `${transliterate(homeName)}_vs_${transliterate(awayName)}`;
-    const baseName = sanitizeFileName(rawName);
-    const outputFile = options.fileType === 'json'
-      ? writeJson(payload, baseName)
-      : writeXlsx(payload, baseName);
- 
-    // Зберігаємо payload як JSON у src/data/ для Python
-    const payloadPath = path.join(DATA_DIR, `${baseName}.json`);
+    // Зберігаємо payload як JSON у data/ з ізольованим ім'ям (matchId у назві)
+    const payloadPath = path.join(DATA_DIR, `${dataBaseName}.json`);
     fs.writeFileSync(payloadPath, JSON.stringify(payload, null, 2), 'utf-8');
     console.log(`✅ Data для Python: ${payloadPath}`);
     fs.appendFileSync(
       path.join(__dirname, 'log.txt'),
-      `[${new Date().toLocaleString('ru-RU')}] ${outputFile}\n`
+      `[${new Date().toLocaleString('ru-RU')}] ${payloadPath}\n`
     );
-    console.log(`\n✅ Success! File saved: ${outputFile}`);
+    console.log(`\n✅ Success! File saved: ${payloadPath}`);
  
   } finally {
     await mainContext.close();

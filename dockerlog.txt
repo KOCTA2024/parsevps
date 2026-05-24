@@ -1,0 +1,1472 @@
+worker-1  | [worker] Started. Listening on queue "match-analysis" | Redis redis:6379 | Concurrency: 2
+worker-1  | [worker][job:I7QImUgD] Starting analysis — Ліман 3x3 vs DeQing 3x3 [СВІТ: Світовий тур 3x3 Шанхай] (scheduled fire: 2026-05-23T12:35:00.000Z)
+worker-1  | [worker][job:I7QImUgD] Step 1 → node /app/src/match_h2h_export.js --matchId I7QImUgD --home Liman_3x3 --away DeQing_3x3
+worker-1  | --- Формат виводу: json ---
+worker-1  | --- Отримання fsign через Playwright... ---
+worker-1  | fsign: SW9D1eZo, prefix: 35
+worker-1  | --- Завантаження df_hh_... ---
+worker-1  | Teams: Ліман 3x3 vs DeQing 3x3
+worker-1  | Home: 50, Away: 4, H2H: 1
+worker-1  |
+worker-1  | --- Збагачення 39 матчів (dc_ + sur + st)... ---
+worker-1  |   ✓ Ліман 3x3 vs DeQing 3x3 (I7QImUgD)
+worker-1  |   ✓ Уб 3x3 vs Ліман 3x3 (0tHgBhHi)
+worker-1  |   ✓ Ліман 3x3 vs Антверпен ТОПдеск 3x3 (jTlBWgV1)
+worker-1  |   ✓ Ліман 3x3 vs Цибона 3x3 (I1y4YF0k)
+worker-1  |   ✓ Ліман 3x3 vs Црвена Звезда Н. С. 3x3 (AsNAkjP0)
+worker-1  |   ✓ Уб 3x3 vs Ліман 3x3 (Wr0BGGWQ)
+worker-1  |   ✓ Скайлайнерс 3x3 vs Ліман 3x3 (46iTO7X7)
+worker-1  |   ✓ Ліман 3x3 vs Торонто 3x3 (EesuKS4M)
+worker-1  |   ✓ Ліман 3x3 vs Цукуба 3x3 (6VwXLlzA)
+worker-1  |   ✓ Ліман 3x3 vs DeQing 3x3 (WQjdkKge)
+worker-1  |   ✓ Ліман 3x3 vs Маямі 3x3 (0YWG1Osh)
+worker-1  |   ✓ Ліман 3x3 vs Taipei WanBao 3x3 (t48hXCpS)
+worker-1  |   ✓ Ліман 3x3 vs Скайлайнерс 3x3 (jJuXCKro)
+worker-1  |   ✓ Уб 3x3 vs Ліман 3x3 (4hQqTNFa)
+worker-1  |   ✓ Ліман 3x3 vs Раудондваріс 3x3 (MDY9Fqcn)
+worker-1  |   ✓ Ліман 3x3 vs Тулуза 3x3 (fPdXoXB7)
+worker-1  |   ✓ Ліман 3x3 vs Амстердам 3x3 (42bksdzJ)
+worker-1  |   ✓ Ріффа 3x3 vs Ліман 3x3 (QueBnNyI)
+worker-1  |   ✓ Ліман 3x3 vs Відень 3x3 (82ezzkPa)
+worker-1  |   ✓ Ліман 3x3 vs Скайлайнерс 3x3 (8prJwQak)
+worker-1  |   ✓ Лондон 3x3 vs Ліман 3x3 (A94MK6kt)
+worker-1  |   ✓ Ліман 3x3 vs Раудондваріс 3x3 (6cqBaybk)
+worker-1  |   ✓ Ліман 3x3 vs Улан-Батор 3x3 (KO7LAzoR)
+worker-1  |   ✓ Ліман 3x3 vs Улан-Батор 3x3 (QPYRjbYi)
+worker-1  |   ✓ Ліман 3x3 vs Ріффа 3x3 (SE07iqc2)
+worker-1  |   ✓ Ліман 3x3 vs Марбелья 3x3 (EcyAtLoB)
+worker-1  |   ✓ Ліман 3x3 vs Партизан 3x3 (Uo1oKQUa)
+worker-1  |   ✓ Ріффа 3x3 vs Ліман 3x3 (EVCVuWA6)
+worker-1  |   ✓ Ліман 3x3 vs Шанхай 3x3 (8WCxMn0m)
+worker-1  |   ✓ Ліман 3x3 vs Відень 3x3 (vLpAm11N)
+worker-1  |   ✓ Ліман 3x3 vs Скайлайнерс 3x3 (xW8VH1sK)
+worker-1  |   ✓ Ліман 3x3 vs Дебрецен 3x3 (CxkifbkD)
+worker-1  |   ✓ Ліман 3x3 vs Маямі 3x3 (dtsGYwHl)
+worker-1  |   ✓ Амстердам 3x3 vs Ліман 3x3 (OSEM3lFE)
+worker-1  |   ✓ Ліман 3x3 vs Раудондваріс 3x3 (OxM3HUKs)
+worker-1  |   ✓ DeQing 3x3 vs Црвена Звезда Н. С. 3x3 (A1D4BXoK)
+worker-1  |   ✓ DeQing 3x3 vs Бордо 3x3 (xEl07kLG)
+worker-1  |   ✓ Уб 3x3 vs DeQing 3x3 (Umoh9Bj4)
+worker-1  |   ✓ Ліман 3x3 vs Барселона 3x3 (YawqFOvI)
+worker-1  |   participants: homeId=Cz5W7YRI, awayId=zZleWOsn
+worker-1  |
+worker-1  | --- Завантаження ліній (findOddsByEventId)... ---
+worker-1  |   URL: https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=I7QImUgD&projectId=35&geoIpCode=UA&geoIpSubdivisionCode=UA30
+worker-1  | ✅ Лінії збережено: /app/data/line_result_I7QImUgD.json
+worker-1  |   ✅ line_result_I7QImUgD.json → /app/data
+worker-1  | Resolved names for file: Ліман 3x3 vs DeQing 3x3
+worker-1  | ✅ Data для Python: /app/data/Liman_3x3_vs_DeQing_3x3_I7QImUgD.json
+worker-1  | --- Process finished ---
+worker-1  | [worker][job:I7QImUgD] Step 1 exited with code 0
+worker-1  | [worker][job:I7QImUgD] Step 2 → python3 /app/src/math_script.py /app/data/Liman_3x3_vs_DeQing_3x3_I7QImUgD.json /app/data/line_result_I7QImUgD.json
+worker-1  | [math_script] FATAL: '>=' not supported between instances of 'NoneType' and 'float'
+worker-1  | [math_script] Processing match I7QImUgD
+worker-1  | [worker][job:I7QImUgD] Step 2 exited with code 1
+worker-1  | STDERR: [math_script] FATAL: '>=' not supported between instances of 'NoneType' and 'float'
+worker-1  | [worker] ✗ Job I7QImUgD failed (attempt 1/3): Calculator (math_script.py) failed with exit code 1. STDERR: [math_script] FATAL: '>=' not supported between instances of 'NoneType' and 'float'
+worker-1  | [worker][job:I7QImUgD] Starting analysis — Ліман 3x3 vs DeQing 3x3 [СВІТ: Світовий тур 3x3 Шанхай] (scheduled fire: 2026-05-23T12:35:00.000Z)
+worker-1  | [worker][job:I7QImUgD] Step 1 → node /app/src/match_h2h_export.js --matchId I7QImUgD --home Liman_3x3 --away DeQing_3x3
+worker-1  | --- Формат виводу: json ---
+worker-1  | --- Отримання fsign через Playwright... ---
+worker-1  | fsign: SW9D1eZo, prefix: 35
+worker-1  | --- Завантаження df_hh_... ---
+worker-1  | Teams: Ліман 3x3 vs DeQing 3x3
+worker-1  | Home: 50, Away: 4, H2H: 1
+worker-1  |
+worker-1  | --- Збагачення 39 матчів (dc_ + sur + st)... ---
+worker-1  |   ✓ Ліман 3x3 vs Црвена Звезда Н. С. 3x3 (AsNAkjP0)
+worker-1  |   ✓ Уб 3x3 vs Ліман 3x3 (0tHgBhHi)
+worker-1  |   ✓ Ліман 3x3 vs DeQing 3x3 (I7QImUgD)
+worker-1  |   ✓ Ліман 3x3 vs Антверпен ТОПдеск 3x3 (jTlBWgV1)
+worker-1  |   ✓ Ліман 3x3 vs Цибона 3x3 (I1y4YF0k)
+worker-1  |   ✓ Уб 3x3 vs Ліман 3x3 (Wr0BGGWQ)
+worker-1  |   ✓ Скайлайнерс 3x3 vs Ліман 3x3 (46iTO7X7)
+worker-1  |   ✓ Ліман 3x3 vs DeQing 3x3 (WQjdkKge)
+worker-1  |   ✓ Ліман 3x3 vs Цукуба 3x3 (6VwXLlzA)
+worker-1  |   ✓ Ліман 3x3 vs Торонто 3x3 (EesuKS4M)
+worker-1  |   ✓ Ліман 3x3 vs Маямі 3x3 (0YWG1Osh)
+worker-1  |   ✓ Ліман 3x3 vs Скайлайнерс 3x3 (jJuXCKro)
+worker-1  |   ✓ Ліман 3x3 vs Раудондваріс 3x3 (MDY9Fqcn)
+worker-1  |   ✓ Ліман 3x3 vs Taipei WanBao 3x3 (t48hXCpS)
+worker-1  |   ✓ Уб 3x3 vs Ліман 3x3 (4hQqTNFa)
+worker-1  |   ✓ Ліман 3x3 vs Тулуза 3x3 (fPdXoXB7)
+worker-1  |   ✓ Ліман 3x3 vs Скайлайнерс 3x3 (8prJwQak)
+worker-1  |   ✓ Ліман 3x3 vs Амстердам 3x3 (42bksdzJ)
+worker-1  |   ✓ Ріффа 3x3 vs Ліман 3x3 (QueBnNyI)
+worker-1  |   ✓ Ліман 3x3 vs Відень 3x3 (82ezzkPa)
+worker-1  |   ✓ Ліман 3x3 vs Раудондваріс 3x3 (6cqBaybk)
+worker-1  |   ✓ Ліман 3x3 vs Улан-Батор 3x3 (QPYRjbYi)
+worker-1  |   ✓ Ліман 3x3 vs Ріффа 3x3 (SE07iqc2)
+worker-1  |   ✓ Лондон 3x3 vs Ліман 3x3 (A94MK6kt)
+worker-1  |   ✓ Ліман 3x3 vs Улан-Батор 3x3 (KO7LAzoR)
+worker-1  |   ✓ Ріффа 3x3 vs Ліман 3x3 (EVCVuWA6)
+worker-1  |   ✓ Ліман 3x3 vs Марбелья 3x3 (EcyAtLoB)
+worker-1  |   ✓ Ліман 3x3 vs Партизан 3x3 (Uo1oKQUa)
+worker-1  |   ✓ Ліман 3x3 vs Шанхай 3x3 (8WCxMn0m)
+worker-1  |   ✓ Ліман 3x3 vs Відень 3x3 (vLpAm11N)
+worker-1  |   ✓ Ліман 3x3 vs Маямі 3x3 (dtsGYwHl)
+worker-1  |   ✓ Ліман 3x3 vs Скайлайнерс 3x3 (xW8VH1sK)
+worker-1  |   ✓ Амстердам 3x3 vs Ліман 3x3 (OSEM3lFE)
+worker-1  |   ✓ Ліман 3x3 vs Раудондваріс 3x3 (OxM3HUKs)
+worker-1  |   ✓ Ліман 3x3 vs Дебрецен 3x3 (CxkifbkD)
+worker-1  |   ✓ DeQing 3x3 vs Црвена Звезда Н. С. 3x3 (A1D4BXoK)
+worker-1  |   ✓ DeQing 3x3 vs Бордо 3x3 (xEl07kLG)
+worker-1  |   ✓ Ліман 3x3 vs Барселона 3x3 (YawqFOvI)
+worker-1  |   ✓ Уб 3x3 vs DeQing 3x3 (Umoh9Bj4)
+worker-1  |   participants: homeId=Cz5W7YRI, awayId=zZleWOsn
+worker-1  |
+worker-1  | --- Завантаження ліній (findOddsByEventId)... ---
+worker-1  |   URL: https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=I7QImUgD&projectId=35&geoIpCode=UA&geoIpSubdivisionCode=UA30
+worker-1  | ✅ Лінії збережено: /app/data/line_result_I7QImUgD.json
+worker-1  |   ✅ line_result_I7QImUgD.json → /app/data
+worker-1  | Resolved names for file: Ліман 3x3 vs DeQing 3x3
+worker-1  | ✅ Data для Python: /app/data/Liman_3x3_vs_DeQing_3x3_I7QImUgD.json
+worker-1  | --- Process finished ---
+worker-1  | [worker][job:I7QImUgD] Step 1 exited with code 0
+worker-1  | [worker][job:I7QImUgD] Step 2 → python3 /app/src/math_script.py /app/data/Liman_3x3_vs_DeQing_3x3_I7QImUgD.json /app/data/line_result_I7QImUgD.json
+worker-1  | [math_script] FATAL: '>=' not supported between instances of 'NoneType' and 'float'
+worker-1  | [math_script] Processing match I7QImUgD
+worker-1  | [worker][job:I7QImUgD] Step 2 exited with code 1
+worker-1  | STDERR: [math_script] FATAL: '>=' not supported between instances of 'NoneType' and 'float'
+worker-1  | [worker] ✗ Job I7QImUgD failed (attempt 2/3): Calculator (math_script.py) failed with exit code 1. STDERR: [math_script] FATAL: '>=' not supported between instances of 'NoneType' and 'float'
+worker-1  | [worker][job:I7QImUgD] Starting analysis — Ліман 3x3 vs DeQing 3x3 [СВІТ: Світовий тур 3x3 Шанхай] (scheduled fire: 2026-05-23T12:35:00.000Z)
+worker-1  | [worker][job:I7QImUgD] Step 1 → node /app/src/match_h2h_export.js --matchId I7QImUgD --home Liman_3x3 --away DeQing_3x3
+worker-1  | --- Формат виводу: json ---
+worker-1  | --- Отримання fsign через Playwright... ---
+worker-1  | fsign: SW9D1eZo, prefix: 35
+worker-1  | --- Завантаження df_hh_... ---
+worker-1  | Teams: Ліман 3x3 vs DeQing 3x3
+worker-1  | Home: 50, Away: 4, H2H: 1
+worker-1  |
+worker-1  | --- Збагачення 39 матчів (dc_ + sur + st)... ---
+worker-1  |   ✓ Ліман 3x3 vs Црвена Звезда Н. С. 3x3 (AsNAkjP0)
+worker-1  |   ✓ Ліман 3x3 vs DeQing 3x3 (I7QImUgD)
+worker-1  |   ✓ Ліман 3x3 vs Цибона 3x3 (I1y4YF0k)
+worker-1  |   ✓ Уб 3x3 vs Ліман 3x3 (0tHgBhHi)
+worker-1  |   ✓ Ліман 3x3 vs Антверпен ТОПдеск 3x3 (jTlBWgV1)
+worker-1  |   ✓ Скайлайнерс 3x3 vs Ліман 3x3 (46iTO7X7)
+worker-1  |   ✓ Уб 3x3 vs Ліман 3x3 (Wr0BGGWQ)
+worker-1  |   ✓ Ліман 3x3 vs Цукуба 3x3 (6VwXLlzA)
+worker-1  |   ✓ Ліман 3x3 vs DeQing 3x3 (WQjdkKge)
+worker-1  |   ✓ Ліман 3x3 vs Торонто 3x3 (EesuKS4M)
+worker-1  |   ✓ Уб 3x3 vs Ліман 3x3 (4hQqTNFa)
+worker-1  |   ✓ Ліман 3x3 vs Скайлайнерс 3x3 (jJuXCKro)
+worker-1  |   ✓ Ліман 3x3 vs Раудондваріс 3x3 (MDY9Fqcn)
+worker-1  |   ✓ Ліман 3x3 vs Taipei WanBao 3x3 (t48hXCpS)
+worker-1  |   ✓ Ліман 3x3 vs Маямі 3x3 (0YWG1Osh)
+worker-1  |   ✓ Ліман 3x3 vs Тулуза 3x3 (fPdXoXB7)
+worker-1  |   ✓ Ліман 3x3 vs Скайлайнерс 3x3 (8prJwQak)
+worker-1  |   ✓ Ліман 3x3 vs Амстердам 3x3 (42bksdzJ)
+worker-1  |   ✓ Ріффа 3x3 vs Ліман 3x3 (QueBnNyI)
+worker-1  |   ✓ Ліман 3x3 vs Відень 3x3 (82ezzkPa)
+worker-1  |   ✓ Ліман 3x3 vs Раудондваріс 3x3 (6cqBaybk)
+worker-1  |   ✓ Ліман 3x3 vs Улан-Батор 3x3 (KO7LAzoR)
+worker-1  |   ✓ Ліман 3x3 vs Улан-Батор 3x3 (QPYRjbYi)
+worker-1  |   ✓ Лондон 3x3 vs Ліман 3x3 (A94MK6kt)
+worker-1  |   ✓ Ліман 3x3 vs Ріффа 3x3 (SE07iqc2)
+worker-1  |   ✓ Ліман 3x3 vs Марбелья 3x3 (EcyAtLoB)
+worker-1  |   ✓ Ліман 3x3 vs Партизан 3x3 (Uo1oKQUa)
+worker-1  |   ✓ Ріффа 3x3 vs Ліман 3x3 (EVCVuWA6)
+worker-1  |   ✓ Ліман 3x3 vs Відень 3x3 (vLpAm11N)
+worker-1  |   ✓ Ліман 3x3 vs Шанхай 3x3 (8WCxMn0m)
+worker-1  |   ✓ Ліман 3x3 vs Дебрецен 3x3 (CxkifbkD)
+worker-1  |   ✓ Ліман 3x3 vs Маямі 3x3 (dtsGYwHl)
+worker-1  |   ✓ Ліман 3x3 vs Скайлайнерс 3x3 (xW8VH1sK)
+worker-1  |   ✓ Амстердам 3x3 vs Ліман 3x3 (OSEM3lFE)
+worker-1  |   ✓ Ліман 3x3 vs Раудондваріс 3x3 (OxM3HUKs)
+worker-1  |   ✓ Ліман 3x3 vs Барселона 3x3 (YawqFOvI)
+worker-1  |   ✓ Уб 3x3 vs DeQing 3x3 (Umoh9Bj4)
+worker-1  |   ✓ DeQing 3x3 vs Црвена Звезда Н. С. 3x3 (A1D4BXoK)
+worker-1  |   ✓ DeQing 3x3 vs Бордо 3x3 (xEl07kLG)
+worker-1  |   participants: homeId=Cz5W7YRI, awayId=zZleWOsn
+worker-1  |
+worker-1  | --- Завантаження ліній (findOddsByEventId)... ---
+worker-1  |   URL: https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=I7QImUgD&projectId=35&geoIpCode=UA&geoIpSubdivisionCode=UA30
+worker-1  | ✅ Лінії збережено: /app/data/line_result_I7QImUgD.json
+worker-1  |   ✅ line_result_I7QImUgD.json → /app/data
+worker-1  | Resolved names for file: Ліман 3x3 vs DeQing 3x3
+worker-1  | ✅ Data для Python: /app/data/Liman_3x3_vs_DeQing_3x3_I7QImUgD.json
+worker-1  | --- Process finished ---
+worker-1  | [worker][job:I7QImUgD] Step 1 exited with code 0
+worker-1  | [worker][job:I7QImUgD] Step 2 → python3 /app/src/math_script.py /app/data/Liman_3x3_vs_DeQing_3x3_I7QImUgD.json /app/data/line_result_I7QImUgD.json
+worker-1  | [math_script] FATAL: '>=' not supported between instances of 'NoneType' and 'float'
+worker-1  | [math_script] Processing match I7QImUgD
+worker-1  | [worker][job:I7QImUgD] Step 2 exited with code 1
+worker-1  | STDERR: [math_script] FATAL: '>=' not supported between instances of 'NoneType' and 'float'
+worker-1  | [worker] ✗ Job I7QImUgD failed (attempt 3/3): Calculator (math_script.py) failed with exit code 1. STDERR: [math_script] FATAL: '>=' not supported between instances of 'NoneType' and 'float'
+worker-1  | [worker][job:zF3ug0fR] Starting analysis — Ханой Баффалос vs Нячанг Долфінс [В’ЄТНАМ: ВБА] (scheduled fire: 2026-05-23T12:50:00.000Z)
+worker-1  | [worker][job:zF3ug0fR] Step 1 → node /app/src/match_h2h_export.js --matchId zF3ug0fR --home Khanoj_Baffalos --away Nyachang_Dolfins
+worker-1  | [worker][job:pvv5o6Fl] Starting analysis — Трір vs Баварія [НІМЕЧЧИНА: ББЛ - Плей-оф] (scheduled fire: 2026-05-23T12:50:00.000Z)
+worker-1  | [worker][job:pvv5o6Fl] Step 1 → node /app/src/match_h2h_export.js --matchId pvv5o6Fl --home Trir --away Bavariya
+worker-1  | --- Формат виводу: json ---
+worker-1  | --- Формат виводу: json ---
+worker-1  | --- Отримання fsign через Playwright... ---
+worker-1  | --- Отримання fsign через Playwright... ---
+worker-1  |   [Live Scraper] read1="1-а чверть" read2="1-а чверть" using="1-а чверть"
+worker-1  |   [Live Scraper] Фінальний статус: "1-а чверть"
+worker-1  | fsign: SW9D1eZo, prefix: 35
+worker-1  | --- Завантаження df_hh_... ---
+worker-1  | Teams: Ханой Баффалос vs Нячанг Долфінс
+worker-1  | Home: 50, Away: 50, H2H: 21
+worker-1  |
+worker-1  | --- Збагачення 62 матчів (dc_ + sur + st)... ---
+worker-1  |   [Live Scraper] read1="1-а чверть" read2="1-а чверть" using="1-а чверть"
+worker-1  |   [Live Scraper] Фінальний статус: "1-а чверть"
+worker-1  |   [Series Info] "3-й матч. Баварія лідирує у серії 2-0."
+worker-1  | fsign: SW9D1eZo, prefix: 35
+worker-1  | --- Завантаження df_hh_... ---
+worker-1  |   ✓ Ханой Баффалос vs Нячанг Долфінс (zF3ug0fR)
+worker-1  | Teams: Трір vs Баварія
+worker-1  | Home: 50, Away: 50, H2H: 13
+worker-1  |
+worker-1  | --- Збагачення 68 матчів (dc_ + sur + st)... ---
+worker-1  |   ✓ Ханой Баффалос vs Нячанг Долфінс (2B8oXIX7)
+worker-1  |   ✓ Нячанг Долфінс vs Ханой Баффалос (vLUiCf2T)
+worker-1  |   ✓ Ханой Баффалос vs Нячанг Долфінс (ChBrGx34)
+worker-1  |   ✓ Баварія vs Трір (l8hZjSiR)
+worker-1  |   ✓ Баварія vs Трір (GA0cKKc6)
+worker-1  |   ✓ Трір vs Росток (MsfH18qB)
+worker-1  |   ✓ Нячанг Долфінс vs Ханой Баффалос (WfRqEGXG)
+worker-1  |   ✓ Трір vs Баварія (pvv5o6Fl)
+worker-1  |   ✓ Фехта vs Трір (xzztvMOj)
+worker-1  |   ✓ Трір vs Сінтайнікс МБК (OI3kWxLc)
+worker-1  |   ✓ Сайгон Хіт vs Ханой Баффалос (pGORG7G7)
+worker-1  |   ✓ Бонн vs Трір (nDQP6Min)
+worker-1  |   ✓ Трір vs Ольденбург (bJ8uvXHr)
+worker-1  |   ✓ Хошимін Сіті Вінгс vs Ханой Баффалос (nLtuQBgL)
+worker-1  |   ✓ Сайгон Хіт vs Ханой Баффалос (Y7N62mad)
+worker-1  |   ✓ Єна vs Трір (WU9PCfJq)
+worker-1  |   ✓ Ханой Баффалос vs Сайгон Хіт (ChZc49Uq)
+worker-1  |   ✓ Трір vs Баварія (SzScbe4j)
+worker-1  |   ✓ Кантхо Кетфіш vs Ханой Баффалос (2iwlStJi)
+worker-1  |   ✓ Фехта vs Трір (AemGGr3K)
+worker-1  |   ✓ Трір vs Людвігсбург (nqFAtBLj)
+worker-1  |   ✓ Бамберг vs Трір (vFTcSK0t)
+worker-1  |   ✓ Хошимін Сіті Вінгс vs Ханой Баффалос (llDEDs4b)
+worker-1  |   ✓ Ханой Баффалос vs Сайгон Хіт (I7TfcMJH)
+worker-1  |   ✓ Кантхо Кетфіш vs Ханой Баффалос (jD9V9a3N)
+worker-1  |   ✓ Ханой Баффалос vs Сайгон Хіт (lSyv14Kh)
+worker-1  |   ✓ Ханой Баффалос vs Кантхо Кетфіш (zLLNbEwP)
+worker-1  |   ✓ Трір vs Вюрцбург (vy5Yvbpn)
+worker-1  |   ✓ Ханой Баффалос vs Дананг Дрегонс (noA72dv0)
+worker-1  |   ✓ Ханой Баффалос vs Нячанг Долфінс (nJDIgSeS)
+worker-1  |   ✓ Ханой Баффалос vs Нячанг Долфінс (YuuAcAd3)
+worker-1  |   ✓ Гамбург vs Трір (GUZdAI4E)
+worker-1  |   ✓ Ханой Баффалос vs Хошимін Сіті Вінгс (WGYuNTKj)
+worker-1  |   ✓ В Айлендерс vs Ханой Баффалос (vJg1UBSG)
+worker-1  |   ✓ Трір vs Гамбург (WWWEc9ek)
+worker-1  |   ✓ Трір vs Хемніц (tj0VPCMi)
+worker-1  |   ✓ Трір vs Гайдельберг (bowxhp8T)
+worker-1  |   ✓ Ханой Баффалос vs В Айлендерс (IB3rIswf)
+worker-1  |   ✓ Ханой Баффалос vs В Айлендерс (QDO3PPpK)
+worker-1  |   ✓ Дананг Дрегонс vs Ханой Баффалос (CAbUAQVQ)
+worker-1  |   ✓ Нячанг Долфінс vs Ханой Баффалос (O8O3LGqn)
+worker-1  |   ✓ Дананг Дрегонс vs Ханой Баффалос (xhr93rO0)
+worker-1  |   ✓ Росток vs Трір (riIJwfmJ)
+worker-1  |   ✓ Брауншвейг vs Трір (0ltq3VXR)
+worker-1  |   ✓ Ханой Баффалос vs Кантхо Кетфіш (Umhze9cn)
+worker-1  |   ✓ Скайлайнерс vs Трір (80d1iJGP)
+worker-1  |   ✓ Ханой Баффалос vs Нячанг Долфінс (GpS0tArg)
+worker-1  |   ✓ Ульм vs Трір (bPqczLtR)
+worker-1  |   ✓ Ханой Баффалос vs Кантхо Кетфіш (IPlrtMR0)
+worker-1  |   ✓ Ханой Баффалос vs Кантхо Кетфіш (I9OHxSsI)
+worker-1  |   ✓ Кантхо Кетфіш vs Ханой Баффалос (jwmjv0dD)
+worker-1  |   ✓ Трір vs Скайлайнерс (nXlAHZBs)
+worker-1  |   ✓ Трір vs Альба Берлін (QyXGq7cJ)
+worker-1  |   ✓ Кантхо Кетфіш vs Ханой Баффалос (6RMOHwUp)
+worker-1  |   ✓ Нячанг Долфінс vs Ханой Баффалос (vD6rx8Fa)
+worker-1  |   ✓ Хошимін Сіті Вінгс vs Ханой Баффалос (YZqHLnVI)
+worker-1  |   ✓ Ханой Баффалос vs Дананг Дрегонс (SbWTWCwK)
+worker-1  |   ✓ Сінтайнікс МБК vs Трір (UmpTT314)
+worker-1  |   ✓ Ханой Баффалос vs Дананг Дрегонс (vwjZAVG0)
+worker-1  |   ✓ Трір vs Ульм (d4ResKzS)
+worker-1  |   ✓ Ханой Баффалос vs Хошимін Сіті Вінгс (CYEldDv8)
+worker-1  |   ✓ Баварія vs Трір (QNDgvC8C)
+worker-1  |   ✓ Трір vs Бонн (d8mPBVSi)
+worker-1  |   ✓ Нячанг Долфінс vs Кантхо Кетфіш (KWk3qpOa)
+worker-1  |   ✓ Кантхо Кетфіш vs Нячанг Долфінс (fD81OULF)
+worker-1  |   ✓ Нячанг Долфінс vs Кантхо Кетфіш (0EFhQji3)
+worker-1  |   ✓ Кантхо Кетфіш vs Нячанг Долфінс (GzXAKkHr)
+worker-1  |   ✓ Хемніц vs Трір (WthxkTMU)
+worker-1  |   ✓ Вюрцбург vs Трір (bZEwDZ9D)
+worker-1  |   ✓ Нячанг Долфінс vs В Айлендерс (AHtdQKm4)
+worker-1  |   ✓ Дананг Дрегонс vs Нячанг Долфінс (jgmWRXO8)
+worker-1  |   ✓ Нячанг Долфінс vs Хошимін Сіті Вінгс (rD3G0z9C)
+worker-1  |   ✓ Трір vs Баварія (IojfSffm)
+worker-1  |   ✓ Нячанг Долфінс vs Дананг Дрегонс (nqe14wRp)
+worker-1  |   ✓ Трір vs Фехта (IaXzRnG5)
+worker-1  |   ✓ Дананг Дрегонс vs Нячанг Долфінс (2X6y6j2k)
+worker-1  |   ✓ Нячанг Долфінс vs Хошимін Сіті Вінгс (EXBa4I9m)
+worker-1  |   ✓ В Айлендерс vs Нячанг Долфінс (hdzpAmt9)
+worker-1  |   ✓ Людвігсбург vs Трір (Yie0nFat)
+worker-1  |   ✓ Трір vs Єна (W42YVYc2)
+worker-1  |   ✓ Сайгон Хіт vs Нячанг Долфінс (Wfu154gl)
+worker-1  |   ✓ Гайдельберг vs Трір (bwkRXfTk)
+worker-1  |   ✓ В Айлендерс vs Нячанг Долфінс (Wjkkl6Jk)
+worker-1  |   ✓ Нячанг Долфінс vs Сайгон Хіт (zomASkcT)
+worker-1  |   ✓ Ольденбург vs Трір (GhKxmXX0)
+worker-1  |   ✓ Людвігсбург vs Баварія (04tXnS0D)
+worker-1  |   ✓ Баварія vs Фехта (tvrqbh9E)
+worker-1  |   ✓ Баварія vs Альба Берлін (2amxsmLG)
+worker-1  |   ✓ Баварія vs Ольденбург (dW1cUGkA)
+worker-1  |   ✓ Нячанг Долфінс vs Сайгон Хіт (h2egWXc4)
+worker-1  |   ✓ Нячанг Долфінс vs Кантхо Кетфіш (pb5zK38s)
+worker-1  |   ✓ Баварія vs Росток (AcA51cuQ)
+worker-1  |   ✓ Нячанг Долфінс vs Кантхо Кетфіш (b7WH1MhD)
+worker-1  |   ✓ Хошимін Сіті Вінгс vs Нячанг Долфінс (vc0MCn1E)
+worker-1  |   ✓ Нячанг Долфінс vs Сайгон Хіт (z1L8dsCs)
+worker-1  |   ✓ Вюрцбург vs Баварія (2qXcSfKM)
+worker-1  |   ✓ Баварія vs Хемніц (4IOB5IfJ)
+worker-1  |   ✓ Барселона vs Баварія (CMSxHJNP)
+worker-1  |   ✓ Нячанг Долфінс vs Сайгон Хіт (nFR3qjNP)
+worker-1  |   ✓ Сайгон Хіт vs Нячанг Долфінс (6oVx23lK)
+worker-1  |   ✓ Нячанг Долфінс vs Кантхо Кетфіш (z5qr99oD)
+worker-1  |   ✓ Нячанг Долфінс vs Дананг Дрегонс (vPCQz6CU)
+worker-1  |   ✓ Баварія vs Людвігсбург (bTJpet03)
+worker-1  |   ✓ Нячанг Долфінс vs Хошимін Сіті Вінгс (4fh0PUVg)
+worker-1  |   ✓ Мілан vs Баварія (0OWpZZMk)
+worker-1  |   ✓ Віртус Болонья vs Баварія (4K7nwqON)
+worker-1  |   ✓ Сінтайнікс МБК vs Баварія (z5e52hrA)
+worker-1  |   ✓ Баварія vs Фенербахче (zuYUB6PO)
+worker-1  |   ✓ Гамбург vs Баварія (xzDVKfaU)
+worker-1  |   ✓ Кантхо Кетфіш vs Нячанг Долфінс (nuBfIDOQ)
+worker-1  |   ✓ Сайгон Хіт vs Нячанг Долфінс (vLGtbZ9e)
+worker-1  |   participants: homeId=6RVPbZu5, awayId=4h3uu1ZF
+worker-1  |
+worker-1  | --- Завантаження ліній (findOddsByEventId)... ---
+worker-1  |   URL: https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=zF3ug0fR&projectId=35&geoIpCode=UA&geoIpSubdivisionCode=UA30
+worker-1  | ✅ Лінії збережено: /app/data/line_result_zF3ug0fR.json
+worker-1  |   match_1x2: 1 рядків
+worker-1  |   match_total: 1 рядків
+worker-1  |   ✅ line_result_zF3ug0fR.json → /app/data
+worker-1  | Resolved names for file: Ханой Баффалос vs Нячанг Долфінс
+worker-1  | ✅ Data для Python: /app/data/Khanoj_Baffalos_vs_Nyachang_Dolfins_zF3ug0fR.json
+worker-1  | --- Process finished ---
+worker-1  |   ✓ Жальгіріс Каунас vs Баварія (0WItT4aN)
+worker-1  | [worker][job:zF3ug0fR] Step 1 exited with code 0
+worker-1  | [worker][job:zF3ug0fR] Step 2 → python3 /app/src/math_script.py /app/data/Khanoj_Baffalos_vs_Nyachang_Dolfins_zF3ug0fR.json /app/data/line_result_zF3ug0fR.json
+worker-1  |   ✓ Баварія vs Дубай (ttc6vdn1)
+worker-1  |   ✓ Бамберг vs Баварія (tnQs5i3F)
+worker-1  | __OUTPUT_FILE__:result_zF3ug0fR.json
+worker-1  | [math_script] Processing match zF3ug0fR
+worker-1  | [math_script] ✓ Result written to /app/data/result_zF3ug0fR.json
+worker-1  | [worker][job:zF3ug0fR] Step 2 exited with code 0
+worker-1  | STDERR: __OUTPUT_FILE__:result_zF3ug0fR.json
+worker-1  | [worker][job:zF3ug0fR] Cleaned up /app/data/Khanoj_Baffalos_vs_Nyachang_Dolfins_zF3ug0fR.json
+worker-1  | [worker][job:zF3ug0fR] Cleaned up /app/data/line_result_zF3ug0fR.json
+worker-1  | [worker][job:zF3ug0fR] ✓ Analysis chain completed successfully for match zF3ug0fR
+worker-1  | [worker] ✓ Job zF3ug0fR completed. Match: zF3ug0fR | Parser: 0 | Calc: 0
+worker-1  |   ✓ Баварія vs Анадолу Ефес (YuwkFuJk)
+worker-1  |   ✓ Баварія vs Ліон-Віллербан (AuLLlLLq)
+worker-1  |   ✓ Баварія vs Брауншвейг (fBRiWT1E)
+worker-1  |   ✓ Реал Мадрид vs Баварія (pvVqAgyg)
+worker-1  |   ✓ Баварія vs Бамберг (dvERmKmD)
+worker-1  |   ✓ Баварія vs Скайлайнерс (SKBoILKr)
+worker-1  |   ✓ Црвена Звезда vs Баварія (KxDF0t4d)
+worker-1  |   ✓ Маккабі Тель-Авів vs Баварія (U9gIUQHq)
+worker-1  |   ✓ Єна vs Баварія (ldDq29Up)
+worker-1  |   ✓ Баварія vs Париж (xEq6A2FU)
+worker-1  |   ✓ Гайдельберг vs Баварія (E11FbzOh)
+worker-1  |   ✓ Баварія vs Монако (G8tCJuho)
+worker-1  |   ✓ Баварія vs Ульм (b9D7mkbf)
+worker-1  |   ✓ Баварія vs Вюрцбург (GpIGKaOj)
+worker-1  |   ✓ Хапоель Тель Авів vs Баварія (8tQ5oet2)
+worker-1  |   participants: homeId=6LstMRPo, awayId=QL5yPwmQ
+worker-1  |
+worker-1  | --- Завантаження ліній (findOddsByEventId)... ---
+worker-1  |   URL: https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=pvv5o6Fl&projectId=35&geoIpCode=UA&geoIpSubdivisionCode=UA30
+worker-1  | ✅ Лінії збережено: /app/data/line_result_pvv5o6Fl.json
+worker-1  |   match_1x2: 8 рядків
+worker-1  |   match_handicap: 71 рядків
+worker-1  |   match_total: 85 рядків
+worker-1  |   half_total: 18 рядків
+worker-1  |   quarter_total: 4 рядків
+worker-1  |   other: 13 рядків
+worker-1  |   ✅ line_result_pvv5o6Fl.json → /app/data
+worker-1  | Resolved names for file: Трір vs Баварія
+worker-1  | ✅ Data для Python: /app/data/Trir_vs_Bavariya_pvv5o6Fl.json
+worker-1  | --- Process finished ---
+worker-1  | [worker][job:pvv5o6Fl] Step 1 exited with code 0
+worker-1  | [worker][job:pvv5o6Fl] Step 2 → python3 /app/src/math_script.py /app/data/Trir_vs_Bavariya_pvv5o6Fl.json /app/data/line_result_pvv5o6Fl.json
+worker-1  | __OUTPUT_FILE__:result_pvv5o6Fl.json
+worker-1  | [math_script] Processing match pvv5o6Fl
+worker-1  | [math_script] ✓ Result written to /app/data/result_pvv5o6Fl.json
+worker-1  | [worker][job:pvv5o6Fl] Step 2 exited with code 0
+worker-1  | STDERR: __OUTPUT_FILE__:result_pvv5o6Fl.json
+worker-1  | [worker][job:pvv5o6Fl] Cleaned up /app/data/Trir_vs_Bavariya_pvv5o6Fl.json
+worker-1  | [worker][job:pvv5o6Fl] Cleaned up /app/data/line_result_pvv5o6Fl.json
+worker-1  | [worker][job:pvv5o6Fl] ✓ Analysis chain completed successfully for match pvv5o6Fl
+worker-1  | [worker] ✓ Job pvv5o6Fl completed. Match: pvv5o6Fl | Parser: 0 | Calc: 0
+worker-1  | [worker][job:pQjYNW4k] Starting analysis — Аль-Ахлі vs Клуб Афрікен [АФРИКА: BAL - Плей-оф] (scheduled fire: 2026-05-23T13:20:00.000Z)
+worker-1  | [worker][job:pQjYNW4k] Step 1 → node /app/src/match_h2h_export.js --matchId pQjYNW4k --home Al-Akhli --away Klub_Afriken
+worker-1  | --- Формат виводу: json ---
+worker-1  | --- Отримання fsign через Playwright... ---
+worker-1  |   [Live Scraper] read1="1-а чверть" read2="1-а чверть" using="1-а чверть"
+worker-1  |   [Live Scraper] Фінальний статус: "1-а чверть"
+worker-1  |   [Series Info] "1-й матч."
+worker-1  | fsign: SW9D1eZo, prefix: 35
+worker-1  | --- Завантаження df_hh_... ---
+worker-1  | Teams: Аль-Ахлі vs Клуб Афрікен
+worker-1  | Home: 38, Away: 19, H2H: 0
+worker-1  |
+worker-1  | --- Збагачення 55 матчів (dc_ + sur + st)... ---
+worker-1  |   ✓ Аль-Ахлі vs Клуб Афрікен (pQjYNW4k)
+worker-1  |   ✓ Joburg Giants vs Аль-Ахлі (YaYIeNcT)
+worker-1  |   ✓ Аль-Ахлі vs Найробі Сіті Тандер (nPTf1RTi)
+worker-1  |   ✓ Аль-Ахлі vs Dar City (jLxWp6qB)
+worker-1  |   ✓ Аль-Ахлі vs Петру Атлетіку (KIe6UpaU)
+worker-1  |   ✓ RSSB Tigers vs Аль-Ахлі (6mcwdyBD)
+worker-1  |   ✓ Петру Атлетіку vs Аль-Ахлі (nXKi3hj2)
+worker-1  |   ✓ Ріверс Хуперс vs Аль-Ахлі (lIhp1NwI)
+worker-1  |   ✓ Аль-Ахлі vs Аль-Ахлі (4lNGdLMO)
+worker-1  |   ✓ Аль-Ахлі vs Кейптаун (EqlQaktm)
+worker-1  |   ✓ Бангі vs Аль-Ахлі (nLhqY2Xd)
+worker-1  |   ✓ Сіті Ойлерс vs Аль-Ахлі (YuBdAauj)
+worker-1  |   ✓ Аль-Ахлі vs Сіті Ойлерс (EZ8PDYor)
+worker-1  |   ✓ Аль-Ахлі vs Аль-Ахлі (vJBhBuQq)
+worker-1  |   ✓ Аль-Ахлі vs Аль-Ахлі (YyeeV0HF)
+worker-1  |   ✓ Аль-Ахлі vs Бангі (trWHHsmG)
+worker-1  |   ✓ Бейрут Клаб vs Аль-Ахлі (tpizIUWi)
+worker-1  |   ✓ Аль-Ахлі vs Аль-Іттіхад Александрія (6cFJfBPt)
+worker-1  |   ✓ Аль-Ахлі vs Ліболу (CYlvmNZl)
+worker-1  |   ✓ Аль-Ахлі vs Прімейру ді Агушту (zRANn05t)
+worker-1  |   ✓ Прімейру ді Агушту vs Аль-Ахлі (W0Y0LwJI)
+worker-1  |   ✓ АСБ Мазембе vs Аль-Ахлі (0zPs3vU1)
+worker-1  |   ✓ Аль-Ахлі vs Кано Пілларс (8xp3AMyS)
+worker-1  |   ✓ Аль-Ахлі vs Петру Атлетіку (MLsiDOi9)
+worker-1  |   ✓ Етуаль Сахель vs Аль-Ахлі (Iq9NnwZb)
+worker-1  |   ✓ Аль-Ріяді vs Аль-Ахлі (Qw0899J7)
+worker-1  |   ✓ Роял Хуперс vs Аль-Ахлі (rJRuL7Pi)
+worker-1  |   ✓ Аль-Ахлі vs Ліболу (S6JPVORA)
+worker-1  |   ✓ Аль-Ахлі vs Лагос (t6FIANko)
+worker-1  |   ✓ Аль-Ахлі vs Урунарі (zFcJ6WZb)
+worker-1  |   ✓ АСБ Мазембе vs Аль-Ахлі (tnJte0CJ)
+worker-1  |   ✓ АС Сале vs Аль-Ахлі (OGLAMTrt)
+worker-1  |   ✓ Урунарі vs Аль-Ахлі (lxMRIfxl)
+worker-1  |   ✓ Аль-Ахлі vs Роял Хуперс (tnuLeUX5)
+worker-1  |   ✓ Інтер Клуб vs Аль-Ахлі (hxaIZv7e)
+worker-1  |   ✓ Аль-Ахлі vs Манга ББ (pnhRs3aF)
+worker-1  |   ✓ Клуб Афрікен vs Maktown Flyers (h0TdQY2K)
+worker-1  |   ✓ Клуб Афрікен vs JCA Kings (pGZf6DBl)
+worker-1  |   ✓ Клуб Афрікен vs Аль-Ахлі (UVwWkhR7)
+worker-1  |   ✓ ФЮС Рабат vs Клуб Афрікен (rDGrHUP6)
+worker-1  |   ✓ Віль де Дакар vs Клуб Афрікен (42FrCrrA)
+worker-1  |   ✓ Прімейру ді Агушту vs Клуб Афрікен (KGsb8zlj)
+worker-1  |   ✓ АС Сале vs Клуб Афрікен (QTAZO07a)
+worker-1  |   ✓ Прімейру ді Агушту vs Клуб Афрікен (O4QKC8y3)
+worker-1  |   ✓ Петрольє vs Клуб Афрікен (rLZTRhxJ)
+worker-1  |   ✓ Клуб Афрікен vs Нзуй-Манто (dbYYl5qd)
+worker-1  |   ✓ Клуб Афрікен vs Аль-Ахлі (UqIh9ZUA)
+worker-1  |   ✓ Клуб Афрікен vs Спортінг Александрія (Qa551c4B)
+worker-1  |   ✓ Ліболу vs Клуб Афрікен (QDAaDzXH)
+worker-1  |   ✓ Кано Пілларс vs Клуб Афрікен (zoPqBe0b)
+worker-1  |   ✓ Клуб Афрікен vs Прімейру ді Агушту (KM8cmQjE)
+worker-1  |   ✓ Ліболу vs Клуб Афрікен (Wjq2kIb7)
+worker-1  |   ✓ Клуб Афрікен vs Спортінг Александрія (MDwHASUF)
+worker-1  |   ✓ Клуб Афрікен vs Малабо Кінгз (EVxL5wql)
+worker-1  |   ✓ Клуб Афрікен vs Майотта (tSZwdZ12)
+worker-1  |   participants: homeId=xIgd7k1T, awayId=KEoRpXxj
+worker-1  |
+worker-1  | --- Завантаження ліній (findOddsByEventId)... ---
+worker-1  |   URL: https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=pQjYNW4k&projectId=35&geoIpCode=UA&geoIpSubdivisionCode=UA30
+worker-1  | ✅ Лінії збережено: /app/data/line_result_pQjYNW4k.json
+worker-1  |   match_1x2: 5 рядків
+worker-1  |   match_handicap: 21 рядків
+worker-1  |   match_total: 18 рядків
+worker-1  |   half_total: 10 рядків
+worker-1  |   quarter_total: 1 рядків
+worker-1  |   other: 8 рядків
+worker-1  |   ✅ line_result_pQjYNW4k.json → /app/data
+worker-1  | Resolved names for file: Аль-Ахлі vs Клуб Афрікен
+worker-1  | ✅ Data для Python: /app/data/Al-Akhli_vs_Klub_Afriken_pQjYNW4k.json
+worker-1  | --- Process finished ---
+worker-1  | [worker][job:pQjYNW4k] Step 1 exited with code 0
+worker-1  | [worker][job:pQjYNW4k] Step 2 → python3 /app/src/math_script.py /app/data/Al-Akhli_vs_Klub_Afriken_pQjYNW4k.json /app/data/line_result_pQjYNW4k.json
+worker-1  | __OUTPUT_FILE__:result_pQjYNW4k.json
+worker-1  | [math_script] Processing match pQjYNW4k
+worker-1  | [math_script] ✓ Result written to /app/data/result_pQjYNW4k.json
+worker-1  | [worker][job:pQjYNW4k] Step 2 exited with code 0
+worker-1  | STDERR: __OUTPUT_FILE__:result_pQjYNW4k.json
+worker-1  | [worker][job:pQjYNW4k] Cleaned up /app/data/Al-Akhli_vs_Klub_Afriken_pQjYNW4k.json
+worker-1  | [worker][job:pQjYNW4k] Cleaned up /app/data/line_result_pQjYNW4k.json
+worker-1  | [worker][job:pQjYNW4k] ✓ Analysis chain completed successfully for match pQjYNW4k
+worker-1  | [worker] ✓ Job pQjYNW4k completed. Match: pQjYNW4k | Parser: 0 | Calc: 0
+worker-1  | [worker][job:02zjwhac] Starting analysis — Палаєш Нафт Абадан vs Нафт Загрос Джоноубі [ІРАН: Суперліга - Етап переможців] (scheduled fire: 2026-05-23T13:50:00.000Z)
+worker-1  | [worker][job:02zjwhac] Step 1 → node /app/src/match_h2h_export.js --matchId 02zjwhac --home Palaiesh_Naft_Abadan --away Naft_Zagros_Dzhonoubi
+worker-1  | --- Формат виводу: json ---
+worker-1  | --- Отримання fsign через Playwright... ---
+worker-1  | fsign: SW9D1eZo, prefix: 35
+worker-1  | --- Завантаження df_hh_... ---
+worker-1  | Teams: Палаєш Нафт Абадан vs Нафт Загрос Джоноубі
+worker-1  | Home: 50, Away: 22, H2H: 3
+worker-1  |
+worker-1  | --- Збагачення 55 матчів (dc_ + sur + st)... ---
+worker-1  |   ✓ Палаєш Нафт Абадан vs Естеглаль БК (xQdYKAqT)
+worker-1  |   ✓ Нафт Загрос Джоноубі vs Палаєш Нафт Абадан (AVdAQEFi)
+worker-1  |   ✓ Палаєш Нафт Абадан vs Пас Кордестан (QkIKUkXa)
+worker-1  |   ✓ Палаєш Нафт Абадан vs Нафт Загрос Джоноубі (02zjwhac)
+worker-1  |   ✓ Петро Новін Махшахр vs Палаєш Нафт Абадан (nNaaPfeK)
+worker-1  |   ✓ Палаєш Нафт Абадан vs Табіат (Umjb0mMi)
+worker-1  |   ✓ Палаєш Нафт Абадан vs Раад Падафан Ісфахан (2ZPe5Z3l)
+worker-1  |   ✓ Палаєш Нафт Абадан vs Голнур Ісфахан (b59GKB8a)
+worker-1  |   ✓ Махгол Альборз vs Палаєш Нафт Абадан (bR2exyz2)
+worker-1  |   ✓ Палаєш Нафт Абадан vs Шахрдарі Горган (AwzPol7b)
+worker-1  |   ✓ Палаєш Нафт Абадан vs Нафт Загрос Джоноубі (pI19yPXF)
+worker-1  |   ✓ Пас Кордестан vs Палаєш Нафт Абадан (xbkDpZ3K)
+worker-1  |   ✓ Естеглаль БК vs Палаєш Нафт Абадан (QkxrjOn9)
+worker-1  |   ✓ Палаєш Нафт Абадан vs Петро Новін Махшахр (6uxTDzTr)
+worker-1  |   ✓ Раад Падафан Ісфахан vs Палаєш Нафт Абадан (Mk1sygDL)
+worker-1  |   ✓ Палаєш Нафт Абадан vs Махгол Альборз (joJHrlYO)
+worker-1  |   ✓ Табіат vs Палаєш Нафт Абадан (fPSIyFKs)
+worker-1  |   ✓ Шахрдарі Горган vs Палаєш Нафт Абадан (E7n3spi3)
+worker-1  |   ✓ Голнур Ісфахан vs Палаєш Нафт Абадан (fqieEoNG)
+worker-1  |   ✓ Палаєш Нафт Абадан vs Каллех (fcWTSpxA)
+worker-1  |   ✓ Палаєш Нафт Абадан vs Естеглаль БК (zJrfomgU)
+worker-1  |   ✓ Нафт Загрос Джоноубі vs Палаєш Нафт Абадан (ILUs0zo9)
+worker-1  |   ✓ Палаєш Нафт Абадан vs Паєш Парт Шахрод (hfcGdMeE)
+worker-1  |   ✓ Палаєш Нафт Абадан vs Табіат (YFypQnQ0)
+worker-1  |   ✓ Палаєш Нафт Абадан vs Табіат (UJjvC1Gi)
+worker-1  |   ✓ Табіат vs Палаєш Нафт Абадан (vsd5xII0)
+worker-1  |   ✓ Табіат vs Палаєш Нафт Абадан (2DbhlbOp)
+worker-1  |   ✓ Махгол Альборз vs Палаєш Нафт Абадан (MXydLjVa)
+worker-1  |   ✓ Палаєш Нафт Абадан vs Махгол Альборз (d24DjsM6)
+worker-1  |   ✓ Махгол Альборз vs Палаєш Нафт Абадан (YeajtSVQ)
+worker-1  |   ✓ Аяндех Сазан Тегеран vs Палаєш Нафт Абадан (rDDfnz8e)
+worker-1  |   ✓ Палаєш Нафт Абадан vs Махгол Альборз (0zB4h3if)
+worker-1  |   ✓ Палаєш Нафт Абадан vs Петро Новін Махшахр (2eXvh5vH)
+worker-1  |   ✓ Махгол Альборз vs Палаєш Нафт Абадан (fXzqYqmo)
+worker-1  |   ✓ Палаєш Нафт Абадан vs Зоб Ахан (fkUEUAtg)
+worker-1  |   ✓ Паєш Парт Шахрод vs Палаєш Нафт Абадан (GU1E1CC6)
+worker-1  |   ✓ Естеглаль БК vs Нафт Загрос Джоноубі (88m4Fl7j)
+worker-1  |   ✓ Нафт Загрос Джоноубі vs Голнур Ісфахан (hOvvICmf)
+worker-1  |   ✓ Каллех vs Нафт Загрос Джоноубі (M3WfEUnJ)
+worker-1  |   ✓ Естеглаль БК vs Нафт Загрос Джоноубі (63vQAetR)
+worker-1  |   ✓ Табіат vs Нафт Загрос Джоноубі (nmqjbIdL)
+worker-1  |   ✓ Пас Кордестан vs Нафт Загрос Джоноубі (WhOXqSyB)
+worker-1  |   ✓ Раад Падафан Ісфахан vs Нафт Загрос Джоноубі (WI7OIkwC)
+worker-1  |   ✓ Нафт Загрос Джоноубі vs Махгол Альборз (YszcSKf2)
+worker-1  |   ✓ Нафт Загрос Джоноубі vs Шахрдарі Горган (h4Y0ALoo)
+worker-1  |   ✓ Нафт Загрос Джоноубі vs Каллех (OfPwWZlR)
+worker-1  |   ✓ Паєш Парт Шахрод vs Нафт Загрос Джоноубі (0xbJZhkf)
+worker-1  |   ✓ Голнур Ісфахан vs Нафт Загрос Джоноубі (zZrqAhS7)
+worker-1  |   ✓ Нафт Загрос Джоноубі vs Естеглаль БК (lx3ZxFr9)
+worker-1  |   ✓ Нафт Загрос Джоноубі vs Табіат (rLF9pA3C)
+worker-1  |   ✓ Нафт Загрос Джоноубі vs Пас Кордестан (E57qNF5l)
+worker-1  |   ✓ Петро Новін Махшахр vs Нафт Загрос Джоноубі (MDaHJtad)
+worker-1  |   ✓ Нафт Загрос Джоноубі vs Раад Падафан Ісфахан (Q3avITNi)
+worker-1  |   ✓ Махгол Альборз vs Нафт Загрос Джоноубі (rP5L18wB)
+worker-1  |   ✓ Шахрдарі Горган vs Нафт Загрос Джоноубі (Q7eOf0QQ)
+worker-1  |   participants: homeId=zZ3J7YrT, awayId=bgeudgYg
+worker-1  |
+worker-1  | --- Завантаження ліній (findOddsByEventId)... ---
+worker-1  |   URL: https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=02zjwhac&projectId=35&geoIpCode=UA&geoIpSubdivisionCode=UA30
+worker-1  | ✅ Лінії збережено: /app/data/line_result_02zjwhac.json
+worker-1  |   ✅ line_result_02zjwhac.json → /app/data
+worker-1  | Resolved names for file: Палаєш Нафт Абадан vs Нафт Загрос Джоноубі
+worker-1  | ✅ Data для Python: /app/data/Palaiesh_Naft_Abadan_vs_Naft_Zagros_Dzhonoubi_02zjwhac.json
+worker-1  | --- Process finished ---
+worker-1  | [worker][job:02zjwhac] Step 1 exited with code 0
+worker-1  | [worker][job:02zjwhac] Step 2 → python3 /app/src/math_script.py /app/data/Palaiesh_Naft_Abadan_vs_Naft_Zagros_Dzhonoubi_02zjwhac.json /app/data/line_result_02zjwhac.json
+worker-1  | __OUTPUT_FILE__:result_02zjwhac.json
+worker-1  | [math_script] Processing match 02zjwhac
+worker-1  | [math_script] ✓ Result written to /app/data/result_02zjwhac.json
+worker-1  | [worker][job:02zjwhac] Step 2 exited with code 0
+worker-1  | STDERR: __OUTPUT_FILE__:result_02zjwhac.json
+worker-1  | [worker][job:02zjwhac] Cleaned up /app/data/Palaiesh_Naft_Abadan_vs_Naft_Zagros_Dzhonoubi_02zjwhac.json
+worker-1  | [worker][job:02zjwhac] Cleaned up /app/data/line_result_02zjwhac.json
+worker-1  | [worker][job:02zjwhac] ✓ Analysis chain completed successfully for match 02zjwhac
+worker-1  | [worker] ✓ Job 02zjwhac completed. Match: 02zjwhac | Parser: 0 | Calc: 0
+worker-1  | [worker][job:noFYXyIt] Starting analysis — Рітас vs Ювентус [ЛИТВА: ЛКЛ - Плей-оф] (scheduled fire: 2026-05-23T14:10:00.000Z)
+worker-1  | [worker][job:noFYXyIt] Step 1 → node /app/src/match_h2h_export.js --matchId noFYXyIt --home Ritas --away Yuventus
+worker-1  | --- Формат виводу: json ---
+worker-1  | --- Отримання fsign через Playwright... ---
+worker-1  |   [Live Scraper] read1="1-а чверть" read2="1-а чверть" using="1-а чверть"
+worker-1  |   [Live Scraper] Фінальний статус: "1-а чверть"
+worker-1  |   [Series Info] "2-й матч. Ювентус лідирує у серії 1-0."
+worker-1  | fsign: SW9D1eZo, prefix: 35
+worker-1  | --- Завантаження df_hh_... ---
+worker-1  | Teams: Рітас vs Ювентус
+worker-1  | Home: 50, Away: 50, H2H: 50
+worker-1  |
+worker-1  | --- Збагачення 68 матчів (dc_ + sur + st)... ---
+worker-1  |   ✓ Рітас vs Ювентус (noFYXyIt)
+worker-1  |   ✓ Гаргждай vs Рітас (C8c5k4wp)
+worker-1  |   ✓ АЕК Афіни vs Рітас (AB0qwUVr)
+worker-1  |   ✓ Ювентус vs Рітас (MuTeNo4L)
+worker-1  |   ✓ Невежис vs Рітас (OrPHb8Gc)
+worker-1  |   ✓ Рітас vs Тенеріфе (Kxrzfb8D)
+worker-1  |   ✓ Рітас vs Шяуляй (M3YjJucl)
+worker-1  |   ✓ Рітас vs Ювентус (808H4tre)
+worker-1  |   ✓ Лієткабеліс vs Рітас (G0SYTdB6)
+worker-1  |   ✓ Нептунас vs Рітас (KdwhrmWG)
+worker-1  |   ✓ Рітас vs Йонава (QZHITmHN)
+worker-1  |   ✓ Рітас vs Жальгіріс Каунас (xbg4cPzS)
+worker-1  |   ✓ Рітас vs Невежис (nVZB1GVo)
+worker-1  |   ✓ Німбурк vs Рітас (t2Bpn8cL)
+worker-1  |   ✓ Шяуляй vs Рітас (M9g0uQEq)
+worker-1  |   ✓ Рітас vs Гаргждай (GtOJCbOt)
+worker-1  |   ✓ Рітас vs Лієткабеліс (z9moba9m)
+worker-1  |   ✓ Галатасарай vs Рітас (CtHwT2vf)
+worker-1  |   ✓ Жальгіріс Каунас vs Рітас (dISBq0ff)
+worker-1  |   ✓ Рітас vs Німбурк (Yy8xlUS8)
+worker-1  |   ✓ Рітас vs Ле-Ман (zedm5Roo)
+worker-1  |   ✓ Жальгіріс Каунас vs Рітас (SCYib43b)
+worker-1  |   ✓ Ювентус vs Рітас (ATQ1V9Zq)
+worker-1  |   ✓ Рітас vs Лієткабеліс (UVCsPaxB)
+worker-1  |   ✓ Рітас vs Нептунас (G65SGAKj)
+worker-1  |   ✓ Хапоель Холон vs Рітас (nm3Z2aTj)
+worker-1  |   ✓ Рітас vs Галатасарай (Sz2vXBuS)
+worker-1  |   ✓ Йонава vs Рітас (MqUWRzTi)
+worker-1  |   ✓ Нептунас vs Рітас (zDwcFcqn)
+worker-1  |   ✓ Ле-Ман vs Рітас (zcy7PeXa)
+worker-1  |   ✓ Гаргждай vs Рітас (SrMnaogl)
+worker-1  |   ✓ Рітас vs Ювентус (Iy7Wbxa5)
+worker-1  |   ✓ Рітас vs Хапоель Холон (d2d2AsyH)
+worker-1  |   ✓ Рітас vs Шяуляй (Yg89DCMb)
+worker-1  |   ✓ Рітас vs Жальгіріс Каунас (ne7lnvb2)
+worker-1  |   ✓ Жальгіріс Каунас vs Ювентус (rJMaHJR0)
+worker-1  |   ✓ Невежис vs Ювентус (xEoynVWi)
+worker-1  |   ✓ Шяуляй vs Рітас (QT41FYin)
+worker-1  |   ✓ Йонава vs Ювентус (CfIWz5Oj)
+worker-1  |   ✓ Ювентус vs Шяуляй (2eXhZimn)
+worker-1  |   ✓ Ювентус vs Нептунас (2NgQXvCs)
+worker-1  |   ✓ Лієткабеліс vs Ювентус (EwmrjsT1)
+worker-1  |   ✓ Ювентус vs Гаргждай (UXkdao6F)
+worker-1  |   ✓ Ювентус vs Йонава (fewKaf0b)
+worker-1  |   ✓ Нептунас vs Ювентус (noCi5YMU)
+worker-1  |   ✓ Ювентус vs Жальгіріс Каунас (C8HSAxgg)
+worker-1  |   ✓ Ювентус vs Невежис (6XLvir2K)
+worker-1  |   ✓ Гаргждай vs Ювентус (vw2F3LoQ)
+worker-1  |   ✓ Ювентус vs Лієткабеліс (jcP3kVQF)
+worker-1  |   ✓ Шяуляй vs Ювентус (4SoNxhsA)
+worker-1  |   ✓ Шяуляй vs Ювентус (WvX5DyEb)
+worker-1  |   ✓ Ювентус vs Йонава (ldFF2Kat)
+worker-1  |   ✓ Ювентус vs Гаргждай (S6bRgjH8)
+worker-1  |   ✓ Лієткабеліс vs Ювентус (MFvieV6U)
+worker-1  |   ✓ Лієткабеліс vs Ювентус (d0VG47VQ)
+worker-1  |   ✓ Ювентус vs Лієткабеліс (U7MqcixI)
+worker-1  |   ✓ Шяуляй vs Ювентус (AZNgAYcm)
+worker-1  |   ✓ Невежис vs Ювентус (vmcCpRMc)
+worker-1  |   ✓ Ювентус vs Жальгіріс Каунас (fcS9gM5S)
+worker-1  |   ✓ Ювентус vs Невежис (OrkyhirJ)
+worker-1  |   ✓ Ювентус vs Гаргждай (4YIu3HjK)
+worker-1  |   ✓ Йонава vs Ювентус (2T0SgDD6)
+worker-1  |   ✓ Ювентус vs Нептунас (IZwASh1C)
+worker-1  |   ✓ Нептунас vs Ювентус (vTjrEgnJ)
+worker-1  |   ✓ Йонава vs Ювентус (AmaRHymf)
+worker-1  |   ✓ Ювентус vs Лієткабеліс (vopEAKuR)
+worker-1  |   ✓ Ювентус vs Рітас (rROLqiyB)
+worker-1  |   ✓ Невежис vs Ювентус (O0r7lIyR)
+worker-1  |   participants: homeId=UylfCwh5, awayId=d2OmwT1J
+worker-1  |
+worker-1  | --- Завантаження ліній (findOddsByEventId)... ---
+worker-1  |   URL: https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=noFYXyIt&projectId=35&geoIpCode=UA&geoIpSubdivisionCode=UA30
+worker-1  | ✅ Лінії збережено: /app/data/line_result_noFYXyIt.json
+worker-1  |   match_1x2: 8 рядків
+worker-1  |   match_handicap: 41 рядків
+worker-1  |   match_total: 35 рядків
+worker-1  |   half_total: 13 рядків
+worker-1  |   quarter_total: 2 рядків
+worker-1  |   other: 11 рядків
+worker-1  |   ✅ line_result_noFYXyIt.json → /app/data
+worker-1  | Resolved names for file: Рітас vs Ювентус
+worker-1  | ✅ Data для Python: /app/data/Ritas_vs_Yuventus_noFYXyIt.json
+worker-1  | --- Process finished ---
+worker-1  | [worker][job:noFYXyIt] Step 1 exited with code 0
+worker-1  | [worker][job:noFYXyIt] Step 2 → python3 /app/src/math_script.py /app/data/Ritas_vs_Yuventus_noFYXyIt.json /app/data/line_result_noFYXyIt.json
+worker-1  | __OUTPUT_FILE__:result_noFYXyIt.json
+worker-1  | [math_script] Processing match noFYXyIt
+worker-1  | [math_script] ✓ Result written to /app/data/result_noFYXyIt.json
+worker-1  | [worker][job:noFYXyIt] Step 2 exited with code 0
+worker-1  | STDERR: __OUTPUT_FILE__:result_noFYXyIt.json
+worker-1  | [worker][job:noFYXyIt] Cleaned up /app/data/Ritas_vs_Yuventus_noFYXyIt.json
+worker-1  | [worker][job:noFYXyIt] Cleaned up /app/data/line_result_noFYXyIt.json
+worker-1  | [worker][job:noFYXyIt] ✓ Analysis chain completed successfully for match noFYXyIt
+worker-1  | [worker] ✓ Job noFYXyIt completed. Match: noFYXyIt | Parser: 0 | Calc: 0
+worker-1  | [worker][job:AsDWqkp2] Starting analysis — Чівідале vs Ріміні [ІТАЛІЯ: Серія А2 - Плей-оф] (scheduled fire: 2026-05-23T14:20:00.000Z)
+worker-1  | [worker][job:AsDWqkp2] Step 1 → node /app/src/match_h2h_export.js --matchId AsDWqkp2 --home Chividale --away Rimini
+worker-1  | [worker][job:69zsu2VQ] Starting analysis — Алмати vs Атирау [КАЗАХСТАН: Національна ліга - Плей-оф] (scheduled fire: 2026-05-23T14:20:00.000Z)
+worker-1  | [worker][job:69zsu2VQ] Step 1 → node /app/src/match_h2h_export.js --matchId 69zsu2VQ --home Almaty --away Atyrau
+worker-1  | --- Формат виводу: json ---
+worker-1  | --- Формат виводу: json ---
+worker-1  | --- Отримання fsign через Playwright... ---
+worker-1  | --- Отримання fsign через Playwright... ---
+worker-1  |   [Live Scraper] read1="2-а чверть" read2="2-а чверть" using="2-а чверть"
+worker-1  |   [Live Scraper] Фінальний статус: "2-а чверть"
+worker-1  |   [Series Info] "1-й матч."
+worker-1  | fsign: SW9D1eZo, prefix: 35
+worker-1  | --- Завантаження df_hh_... ---
+worker-1  |   [Live Scraper] read1="1-а чверть" read2="1-а чверть" using="1-а чверть"
+worker-1  |   [Live Scraper] Фінальний статус: "1-а чверть"
+worker-1  |   [Series Info] "2-й матч. Ріміні лідирує у серії 1-0."
+worker-1  | fsign: SW9D1eZo, prefix: 35
+worker-1  | --- Завантаження df_hh_... ---
+worker-1  | Teams: Алмати vs Атирау
+worker-1  | Home: 50, Away: 50, H2H: 45
+worker-1  |
+worker-1  | --- Збагачення 63 матчів (dc_ + sur + st)... ---
+worker-1  | Teams: Чівідале vs Ріміні
+worker-1  | Home: 50, Away: 50, H2H: 9
+worker-1  |
+worker-1  | --- Збагачення 70 матчів (dc_ + sur + st)... ---
+worker-1  |   ✓ Алмати vs Атирау (69zsu2VQ)
+worker-1  |   ✓ Алмати vs Каспій Актау (AFzfSbX8)
+worker-1  |   ✓ Чівідале vs Ріміні (AsDWqkp2)
+worker-1  |   ✓ Себастьяні Ріеті vs Чівідале (I99z6yD7)
+worker-1  |   ✓ Алмати vs Каспій Актау (QoyhKy9K)
+worker-1  |   ✓ Чівідале vs Ріміні (OQEOoBFk)
+worker-1  |   ✓ Чівідале vs Себастьяні Ріеті (SpjwMrm4)
+worker-1  |   ✓ Каспій Актау vs Алмати (buq6dYGD)
+worker-1  |   ✓ Каспій Актау vs Алмати (QRpbbfn1)
+worker-1  |   ✓ Себастьяні Ріеті vs Чівідале (zBgoKMHG)
+worker-1  |   ✓ Чівідале vs Себастьяні Ріеті (fXiVN4Ii)
+worker-1  |   ✓ Чівідале vs Ріміні (ObP7wOdn)
+worker-1  |   ✓ Алмати vs Астана (O8xCRsR7)
+worker-1  |   ✓ Туран vs Алмати (juwkkApK)
+worker-1  |   ✓ Алмати vs Атирау (SOXSRjLj)
+worker-1  |   ✓ Алмати vs Туран (OYp3R6hD)
+worker-1  |   ✓ Алмати vs Астана (jFUckoJE)
+worker-1  |   ✓ Чівідале vs Фортітудо Болонья (IN12zJoT)
+worker-1  |   ✓ Чівідале vs Пістоя (QkI883cC)
+worker-1  |   ✓ Руво-ді-Пулья vs Чівідале (SYbo5UjK)
+worker-1  |   ✓ Астана vs Алмати (KfnGD00t)
+worker-1  |   ✓ Астана vs Алмати (zXDceJpC)
+worker-1  |   ✓ Тобол Костанай vs Алмати (hr1XxHTi)
+worker-1  |   ✓ Алмати vs Атирау (IkncXCcT)
+worker-1  |   ✓ Лібертас Ліворно vs Чівідале (tr4WUyhg)
+worker-1  |   ✓ Чівідале vs Розето (KhmrM79L)
+worker-1  |   ✓ Тобол Костанай vs Алмати (0lEoFDyo)
+worker-1  |   ✓ Скафаті vs Чівідале (tn0G78fS)
+worker-1  |   ✓ Алмати vs Каспій Актау (EitbOHEb)
+worker-1  |   ✓ Алмати vs Каспій Актау (6RxjQwpn)
+worker-1  |   ✓ Атирау vs Алмати (6iMta1om)
+worker-1  |   ✓ Атирау vs Алмати (M1a9H91E)
+worker-1  |   ✓ Каспій Актау vs Алмати (YuJEeSve)
+worker-1  |   ✓ Авелліно Баскет vs Чівідале (rFrH4owe)
+worker-1  |   ✓ Чівідале vs Форлі (hOGzjqTP)
+worker-1  |   ✓ Чівідале vs ЮВі Кремона (tjz4STD4)
+worker-1  |   ✓ Каспій Актау vs Алмати (trvz3AnL)
+worker-1  |   ✓ Чівідале vs Пезаро (vc2v3Dpg)
+worker-1  |   ✓ Алмати vs Тобол Костанай (j7GDGdPs)
+worker-1  |   ✓ Алмати vs Тобол Костанай (MJd4d2Qs)
+worker-1  |   ✓ Уранія Мілан vs Чівідале (ziKcfq2L)
+worker-1  |   ✓ Чівідале vs Баскет Торіно (CzSYUSY9)
+worker-1  |   ✓ Астана vs Алмати (UurCbO3d)
+worker-1  |   ✓ Астана vs Алмати (MFv40pZq)
+worker-1  |   ✓ Верона vs Чівідале (8tp7GTJG)
+worker-1  |   ✓ Алмати vs Атирау (byG5i7dT)
+worker-1  |   ✓ Алмати vs Атирау (jBCcgTRG)
+worker-1  |   ✓ Ченто vs Чівідале (KIp32Ryh)
+worker-1  |   ✓ Себастьяні Ріеті vs Чівідале (00Y3X6xI)
+worker-1  |   ✓ Чівідале vs Местре (pURVBY9s)
+worker-1  |   ✓ Тобол Костанай vs Алмати (MuOfZ7zo)
+worker-1  |   ✓ Тобол Костанай vs Алмати (Q9xPvUCN)
+worker-1  |   ✓ ЮВі Кремона vs Чівідале (4jAu5Qdc)
+worker-1  |   ✓ Чівідале vs Бріндізі (2uPUCZeR)
+worker-1  |   ✓ Алмати vs Каспій Актау (MBdapYrn)
+worker-1  |   ✓ Алмати vs Каспій Актау (WnHkQUcU)
+worker-1  |   ✓ Алмати vs Астана (8zgcULhl)
+worker-1  |   ✓ Атирау vs Алмати (lWLWD087)
+worker-1  |   ✓ Ріміні vs Чівідале (Me8R3MaU)
+worker-1  |   ✓ Чівідале vs Авелліно Баскет (zZORguXb)
+worker-1  |   ✓ Алмати vs Астана (MDR5QwhD)
+worker-1  |   ✓ Атирау vs Алмати (GxEIy40E)
+worker-1  |   ✓ Пістоя vs Чівідале (McLPwTt1)
+worker-1  |   ✓ Чівідале vs Уранія Мілан (trIEkWvK)
+worker-1  |   ✓ Чівідале vs Блу Баскет Бергамо (nc0DNGj3)
+worker-1  |   ✓ Астана vs Атирау (ILTQ44Zp)
+worker-1  |   ✓ Атирау vs Астана (pjtmcikQ)
+worker-1  |   ✓ Атирау vs Астана (I1sj0GHl)
+worker-1  |   ✓ Каспій Актау vs Алмати (2ZmqN4oL)
+worker-1  |   ✓ Астана vs Атирау (MHtL5xfR)
+worker-1  |   ✓ Астана vs Атирау (l4rD7bPE)
+worker-1  |   ✓ Пезаро vs Чівідале (xAeaiXhA)
+worker-1  |   ✓ Чівідале vs Лібертас Ліворно (8fmZTxen)
+worker-1  |   ✓ Тобол Костанай vs Атирау (A5XmKwgl)
+worker-1  |   ✓ Чівідале vs Ченто (0CjjaRke)
+worker-1  |   ✓ Бріндізі vs Чівідале (pKWyT29a)
+worker-1  |   ✓ Атирау vs Тобол Костанай (EZoIPaVQ)
+worker-1  |   ✓ Атирау vs Каспій Актау (AuTovLAD)
+worker-1  |   ✓ Розето vs Чівідале (0l838VS8)
+worker-1  |   ✓ Пезаро vs Ріміні (Uchmj0m4)
+worker-1  |   ✓ Атирау vs Каспій Актау (2FPwtst1)
+worker-1  |   ✓ Ріміні vs Пезаро (2yYfYFD4)
+worker-1  |   ✓ Ріміні vs Пезаро (6oYcsNU6)
+worker-1  |   ✓ Чівідале vs Скафаті (WxAPwa6K)
+worker-1  |   ✓ Пезаро vs Ріміні (YXZkqq0f)
+worker-1  |   ✓ Атирау vs Тобол Костанай (rD9xr3Bl)
+worker-1  |   ✓ Астана vs Атирау (rXXEKZDN)
+worker-1  |   ✓ Астана vs Атирау (z7U6MeqB)
+worker-1  |   ✓ Атирау vs Тобол Костанай (nsO6mPmR)
+worker-1  |   ✓ Пезаро vs Ріміні (Q7Wso5Vs)
+worker-1  |   ✓ Пістоя vs Ріміні (40DjqmU0)
+worker-1  |   ✓ Ріміні vs Лібертас Ліворно (nXmdZoAt)
+worker-1  |   ✓ Ріміні vs Скафаті (GIeoudkl)
+worker-1  |   ✓ Ріміні vs Уранія Мілан (6NhsN2C5)
+worker-1  |   ✓ Тобол Костанай vs Атирау (IFVm6zaU)
+worker-1  |   ✓ Розето vs Ріміні (M1B3TqYo)
+worker-1  |   ✓ Фортітудо Болонья vs Ріміні (CnpIbDBc)
+worker-1  |   ✓ Ріміні vs Местре (bsNykI0M)
+worker-1  |   ✓ Атирау vs Астана (0YVR4WH8)
+worker-1  |   ✓ Тобол Костанай vs Атирау (p2Xu8dUH)
+worker-1  |   ✓ Ріміні vs Верона (C47eTOGl)
+worker-1  |   ✓ Атирау vs Астана (YRwtsTP1)
+worker-1  |   ✓ Каспій Актау vs Атирау (vFXebF9D)
+worker-1  |   ✓ Ріміні vs Бріндізі (OSrsc0zg)
+worker-1  |   ✓ Каспій Актау vs Атирау (WMZtMI1K)
+worker-1  |   ✓ Ріміні vs Форлі (tEIjJPzi)
+worker-1  |   ✓ Ріміні vs Авелліно Баскет (Yo2pouP7)
+worker-1  |   ✓ Руво-ді-Пулья vs Ріміні (fJqPupmS)
+worker-1  |   ✓ Атирау vs Тобол Костанай (rLPbMRe3)
+worker-1  |   ✓ Атирау vs Тобол Костанай (GYN6K5QF)
+worker-1  |   ✓ Пезаро vs Ріміні (Kdwfw6qK)
+worker-1  |   ✓ Атирау vs Каспій Актау (AZuu2cAl)
+worker-1  |   ✓ Атирау vs Каспій Актау (Iaqm0yu1)
+worker-1  |   ✓ Ріміні vs Лібертас Ліворно (OhA3d8Sp)
+worker-1  |   ✓ Астана vs Атирау (UsqGtjrB)
+worker-1  |   ✓ Себастьяні Ріеті vs Ріміні (IBy2BsxK)
+worker-1  |   ✓ Ріміні vs ЮВі Кремона (ABVn2Is9)
+worker-1  |   ✓ Астана vs Атирау (rRp8rCDb)
+worker-1  |   ✓ Ріміні vs Ченто (8QyCVp7U)
+worker-1  |   ✓ Тобол Костанай vs Атирау (27PYTCb5)
+worker-1  |   ✓ Тобол Костанай vs Атирау (zLNtSjTH)
+worker-1  |   participants: homeId=tE1SwJZp, awayId=KrROfngr
+worker-1  |
+worker-1  | --- Завантаження ліній (findOddsByEventId)... ---
+worker-1  |   URL: https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=69zsu2VQ&projectId=35&geoIpCode=UA&geoIpSubdivisionCode=UA30
+worker-1  | ✅ Лінії збережено: /app/data/line_result_69zsu2VQ.json
+worker-1  |   match_handicap: 1 рядків
+worker-1  |   match_total: 1 рядків
+worker-1  |   ✅ line_result_69zsu2VQ.json → /app/data
+worker-1  | Resolved names for file: Алмати vs Атирау
+worker-1  | ✅ Data для Python: /app/data/Almaty_vs_Atyrau_69zsu2VQ.json
+worker-1  | --- Process finished ---
+worker-1  | [worker][job:69zsu2VQ] Step 1 exited with code 0
+worker-1  | [worker][job:69zsu2VQ] Step 2 → python3 /app/src/math_script.py /app/data/Almaty_vs_Atyrau_69zsu2VQ.json /app/data/line_result_69zsu2VQ.json
+worker-1  |   ✓ Баскет Торіно vs Ріміні (fsfLMkOa)
+worker-1  | __OUTPUT_FILE__:result_69zsu2VQ.json
+worker-1  | [math_script] Processing match 69zsu2VQ
+worker-1  | [math_script] ✓ Result written to /app/data/result_69zsu2VQ.json
+worker-1  | [worker][job:69zsu2VQ] Step 2 exited with code 0
+worker-1  | STDERR: __OUTPUT_FILE__:result_69zsu2VQ.json
+worker-1  | [worker][job:69zsu2VQ] Cleaned up /app/data/Almaty_vs_Atyrau_69zsu2VQ.json
+worker-1  | [worker][job:69zsu2VQ] Cleaned up /app/data/line_result_69zsu2VQ.json
+worker-1  | [worker][job:69zsu2VQ] ✓ Analysis chain completed successfully for match 69zsu2VQ
+worker-1  | [worker] ✓ Job 69zsu2VQ completed. Match: 69zsu2VQ | Parser: 0 | Calc: 0
+worker-1  | [worker][job:URFi0W2D] Starting analysis — Спуйня vs Староград Гданськ [ПОЛЬЩА: 1. Ліга - Плей-оф] (scheduled fire: 2026-05-23T14:20:00.000Z)
+worker-1  | [worker][job:URFi0W2D] Step 1 → node /app/src/match_h2h_export.js --matchId URFi0W2D --home Spujnya --away Starograd_Gdansk
+worker-1  |   ✓ Ріміні vs Пістоя (QTtyf0ld)
+worker-1  |   ✓ Форлі vs Ріміні (8nNZiJ1B)
+worker-1  |   ✓ Ріміні vs Фортітудо Болонья (pW6KaA3K)
+worker-1  |   ✓ Скафаті vs Ріміні (hIo8Cjr2)
+worker-1  |   ✓ Ченто vs Ріміні (llVSRSnD)
+worker-1  |   ✓ Авелліно Баскет vs Ріміні (djzQxYwH)
+worker-1  |   ✓ Ріміні vs Руво-ді-Пулья (fRw9tGvh)
+worker-1  |   ✓ Ріміні vs Чівідале (lvC0DptK)
+worker-1  |   ✓ Бріндізі vs Ріміні (hnmr1mLr)
+worker-1  |   ✓ Чівідале vs Ріміні (0vmGpYC7)
+worker-1  |   ✓ Ріміні vs Баскет Торіно (M53OpSz2)
+worker-1  |   participants: homeId=xK4ZWDfJ, awayId=WWYB2bAA
+worker-1  |
+worker-1  | --- Завантаження ліній (findOddsByEventId)... ---
+worker-1  |   URL: https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=AsDWqkp2&projectId=35&geoIpCode=UA&geoIpSubdivisionCode=UA30
+worker-1  | ✅ Лінії збережено: /app/data/line_result_AsDWqkp2.json
+worker-1  |   match_1x2: 7 рядків
+worker-1  |   match_handicap: 16 рядків
+worker-1  |   match_total: 18 рядків
+worker-1  |   half_total: 6 рядків
+worker-1  |   quarter_total: 2 рядків
+worker-1  |   other: 8 рядків
+worker-1  |   ✅ line_result_AsDWqkp2.json → /app/data
+worker-1  | Resolved names for file: Чівідале vs Ріміні
+worker-1  | ✅ Data для Python: /app/data/Chividale_vs_Rimini_AsDWqkp2.json
+worker-1  | --- Process finished ---
+worker-1  | [worker][job:AsDWqkp2] Step 1 exited with code 0
+worker-1  | [worker][job:AsDWqkp2] Step 2 → python3 /app/src/math_script.py /app/data/Chividale_vs_Rimini_AsDWqkp2.json /app/data/line_result_AsDWqkp2.json
+worker-1  | __OUTPUT_FILE__:result_AsDWqkp2.json
+worker-1  | [math_script] Processing match AsDWqkp2
+worker-1  | [math_script] ✓ Result written to /app/data/result_AsDWqkp2.json
+worker-1  | [worker][job:AsDWqkp2] Step 2 exited with code 0
+worker-1  | STDERR: __OUTPUT_FILE__:result_AsDWqkp2.json
+worker-1  | [worker][job:AsDWqkp2] Cleaned up /app/data/Chividale_vs_Rimini_AsDWqkp2.json
+worker-1  | [worker][job:AsDWqkp2] Cleaned up /app/data/line_result_AsDWqkp2.json
+worker-1  | [worker][job:AsDWqkp2] ✓ Analysis chain completed successfully for match AsDWqkp2
+worker-1  | [worker] ✓ Job AsDWqkp2 completed. Match: AsDWqkp2 | Parser: 0 | Calc: 0
+worker-1  | [worker][job:6Hj2I9DD] Starting analysis — Бенфіка vs Олівейренсе [ПОРТУГАЛІЯ: ЛПБ - Плей-оф] (scheduled fire: 2026-05-23T14:20:00.000Z)
+worker-1  | [worker][job:6Hj2I9DD] Step 1 → node /app/src/match_h2h_export.js --matchId 6Hj2I9DD --home Benfika --away Olivejrense
+worker-1  | --- Формат виводу: json ---
+worker-1  | --- Отримання fsign через Playwright... ---
+worker-1  | fsign/live-parse error: page.goto: net::ERR_ABORTED at https://www.flashscore.ua/match/URFi0W2D/#/h2h/overall
+worker-1  | Call log:
+worker-1  |   - navigating to "https://www.flashscore.ua/match/URFi0W2D/#/h2h/overall", waiting until "networkidle"
+worker-1  |
+worker-1  | fsign: , prefix: 35
+worker-1  | browserContext.close: Target page, context or browser has been closed
+worker-1  |     at async main (/app/src/match_h2h_export.js:972:5)
+worker-1  | [worker][job:URFi0W2D] Step 1 exited with code 1
+worker-1  | STDERR: fsign/live-parse error: page.goto: net::ERR_ABORTED at https://www.flashscore.ua/match/URFi0W2D/#/h2h/overall
+worker-1  | Call log:
+worker-1  |   - navigating to "https://www.flashscore.ua/match/URFi0W2D/#/h2h/overall", waiting until "networkidle"
+worker-1  |
+worker-1  | browserContext.close: Target page, context or browser has been closed
+worker-1  |     at async main (/app/src/match_h2h_export.js:972:5)
+worker-1  | [worker] ✗ Job URFi0W2D failed (attempt 1/3): Parser (match_h2h_export.js) failed with exit code 1. STDERR: fsign/live-parse error: page.goto: net::ERR_ABORTED at https://www.flashscore.ua/match/URFi0W2D/#/h2h/overall
+worker-1  | Call log:
+worker-1  |   - navigating to "https://www.flashscore.ua/match/URFi0W2D/#/h2h/overall", waiting until "networkidle"
+worker-1  |
+worker-1  | browserContext.close: Target page, context or browser has been closed
+worker-1  |     at async main (/app/src/match_h2h_export.js:972:5)
+worker-1  | [worker][job:jZPSCBcT] Starting analysis — Сокол Празький vs Карвіна [ЧЕХІЯ: 1. Ліга - Вибування] (scheduled fire: 2026-05-23T14:20:00.000Z)
+worker-1  | [worker][job:jZPSCBcT] Step 1 → node /app/src/match_h2h_export.js --matchId jZPSCBcT --home Sokol_Prazkyj --away Karvina
+worker-1  | --- Формат виводу: json ---
+worker-1  | --- Отримання fsign через Playwright... ---
+worker-1  | --- Формат виводу: json ---
+worker-1  | fsign/live-parse error: page.goto: Target page, context or browser has been closed
+worker-1  | Call log:
+worker-1  |   - navigating to "https://www.flashscore.ua/match/6Hj2I9DD/#/h2h/overall", waiting until "networkidle"
+worker-1  |
+worker-1  | fsign: , prefix: 35
+worker-1  | --- Process finished ---
+worker-1  | [worker][job:6Hj2I9DD] Step 1 exited with code 0
+worker-1  | STDERR: fsign/live-parse error: page.goto: Target page, context or browser has been closed
+worker-1  | Call log:
+worker-1  |   - navigating to "https://www.flashscore.ua/match/6Hj2I9DD/#/h2h/overall", waiting until "networkidle"
+worker-1  | [worker][job:6Hj2I9DD] Step 2 → python3 /app/src/math_script.py /app/data/Benfika_vs_Olivejrense_6Hj2I9DD.json /app/data/line_result_6Hj2I9DD.json
+worker-1  | --- Отримання fsign через Playwright... ---
+worker-1  | [math_script] ERROR: file not found: /app/data/Benfika_vs_Olivejrense_6Hj2I9DD.json
+worker-1  | [worker][job:6Hj2I9DD] Step 2 exited with code 1
+worker-1  | STDERR: [math_script] ERROR: file not found: /app/data/Benfika_vs_Olivejrense_6Hj2I9DD.json
+worker-1  | [worker] ✗ Job 6Hj2I9DD failed (attempt 1/3): Calculator (math_script.py) failed with exit code 1. STDERR: [math_script] ERROR: file not found: /app/data/Benfika_vs_Olivejrense_6Hj2I9DD.json
+worker-1  |   [Live Scraper] read1="2-а чверть" read2="2-а чверть" using="2-а чверть"
+worker-1  |   [Live Scraper] Фінальний статус: "2-а чверть"
+worker-1  | fsign: SW9D1eZo, prefix: 35
+worker-1  | --- Завантаження df_hh_... ---
+worker-1  | Teams: Сокол Празький vs Карвіна
+worker-1  | Home: 50, Away: 9, H2H: 1
+worker-1  |
+worker-1  | --- Збагачення 44 матчів (dc_ + sur + st)... ---
+worker-1  |   ✓ Сокол Празький vs Карвіна (jZPSCBcT)
+worker-1  |   ✓ Сокол Празький vs Слован Ч. Поле Брно (As9DGgb4)
+worker-1  |   ✓ Слован Ч. Поле Брно vs Сокол Празький (ANIJfCyo)
+worker-1  |   ✓ Карвіна vs Сокол Празький (6RTu2fqB)
+worker-1  |   ✓ СК Жабовржески vs Сокол Празький (h4NP5xpn)
+worker-1  |   ✓ Сокол Празький vs МС Академі (4YZL3uHD)
+worker-1  |   ✓ Їндржихув Градец vs Сокол Празький (E1dti2X7)
+worker-1  |   ✓ Висока-над-Лабем vs Сокол Празький (0dX0GI0J)
+worker-1  |   ✓ Сокол Празький vs Оломоуц (2u4f06AL)
+worker-1  |   ✓ Сокол Празький vs Висока-над-Лабем (dOAhtoJk)
+worker-1  |   ✓ Сокол Празький vs Їндржихув Градец (p89GVf5U)
+worker-1  |   ✓ Оломоуц vs Сокол Празький (KOQzJHLO)
+worker-1  |   ✓ МС Академі vs Сокол Празький (8pmYmxLb)
+worker-1  |   ✓ Сокол Празький vs Пльзень (IDf5jAnD)
+worker-1  |   ✓ Радотін vs Сокол Празький (pvBYQjOP)
+worker-1  |   ✓ Сокол Празький vs Полабі (6DJRlxfB)
+worker-1  |   ✓ УСК Прага B vs Сокол Празький (MJn8EMY2)
+worker-1  |   ✓ Літомержіце vs Сокол Празький (bBfsaSGP)
+worker-1  |   ✓ Сокол Празький vs Хомутов (vw0pxaA5)
+worker-1  |   ✓ CZ.ACADEMY vs Сокол Празький (KGq13y94)
+worker-1  |   ✓ Валечніці Дєчін vs Сокол Празький (4n8ZN8ke)
+worker-1  |   ✓ Пльзень vs Сокол Празький (CGPv4EbM)
+worker-1  |   ✓ Сокол Празький vs Ліберецко (v5OfVjcL)
+worker-1  |   ✓ Сокол Празький vs Німбурк (bscIoOEO)
+worker-1  |   ✓ Сокол Празький vs Радотін (Uid5KZr3)
+worker-1  |   ✓ Сокол Празький vs Їндржихув Градец (0ULG0p8C)
+worker-1  |   ✓ Сокол Празький vs Літомержіце (6mzyGEhA)
+worker-1  |   ✓ Сокол Празький vs УСК Прага B (xQXTkOwC)
+worker-1  |   ✓ Полабі vs Сокол Празький (d8izlsiR)
+worker-1  |   ✓ Сокол Празький vs CZ.ACADEMY (MPg12t6K)
+worker-1  |   ✓ Сокол Празький vs Валечніці Дєчін (Kbr9yD14)
+worker-1  |   ✓ Сокол Празький vs Світави (4YCnMuK5)
+worker-1  |   ✓ Хомутов vs Сокол Празький (nFBdS8Oj)
+worker-1  |   ✓ Ліберецко vs Сокол Празький (0tW96h2U)
+worker-1  |   ✓ Світави vs Сокол Празький (rJOwO1kg)
+worker-1  |   ✓ СК Жабовржески vs Карвіна (r9MKEXSG)
+worker-1  |   ✓ Опава 2 vs Сокол Празький (ERdblBeT)
+worker-1  |   ✓ Карвіна vs Слован Ч. Поле Брно (0UQX3GEb)
+worker-1  |   ✓ Карвіна vs Пардубіце (nNPuaXW7)
+worker-1  |   ✓ Карвіна vs СК Жабовржески (xUA5IFTi)
+worker-1  |   ✓ Карвіна vs Опава 2010 (viyY31E0)
+worker-1  |   ✓ Карвіна vs Опава (8zXKrytQ)
+worker-1  |   ✓ Карвіна vs Старт Гавіржов (2TfR0qGC)
+worker-1  | ⚠ Could not fetch df_sur_1_dMCAvZzc: getaddrinfo EAI_AGAIN 35.flashscore.ninja
+worker-1  |   ✓ СА Брно vs Карвіна (dMCAvZzc)
+worker-1  |   participants: homeId=6kyOCSHH, awayId=2e2G1G6n
+worker-1  |
+worker-1  | --- Завантаження ліній (findOddsByEventId)... ---
+worker-1  |   URL: https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=jZPSCBcT&projectId=35&geoIpCode=UA&geoIpSubdivisionCode=UA30
+worker-1  | ✅ Лінії збережено: /app/data/line_result_jZPSCBcT.json
+worker-1  |   ✅ line_result_jZPSCBcT.json → /app/data
+worker-1  | Resolved names for file: Сокол Празький vs Карвіна
+worker-1  | ✅ Data для Python: /app/data/Sokol_Prazkyj_vs_Karvina_jZPSCBcT.json
+worker-1  | --- Process finished ---
+worker-1  | [worker][job:jZPSCBcT] Step 1 exited with code 0
+worker-1  | STDERR: ⚠ Could not fetch df_sur_1_dMCAvZzc: getaddrinfo EAI_AGAIN 35.flashscore.ninja
+worker-1  | [worker][job:jZPSCBcT] Step 2 → python3 /app/src/math_script.py /app/data/Sokol_Prazkyj_vs_Karvina_jZPSCBcT.json /app/data/line_result_jZPSCBcT.json
+worker-1  | __OUTPUT_FILE__:result_jZPSCBcT.json
+worker-1  | [math_script] Processing match jZPSCBcT
+worker-1  | [math_script] ✓ Result written to /app/data/result_jZPSCBcT.json
+worker-1  | [worker][job:jZPSCBcT] Step 2 exited with code 0
+worker-1  | STDERR: __OUTPUT_FILE__:result_jZPSCBcT.json
+worker-1  | [worker][job:jZPSCBcT] Cleaned up /app/data/Sokol_Prazkyj_vs_Karvina_jZPSCBcT.json
+worker-1  | [worker][job:jZPSCBcT] Cleaned up /app/data/line_result_jZPSCBcT.json
+worker-1  | [worker][job:jZPSCBcT] ✓ Analysis chain completed successfully for match jZPSCBcT
+worker-1  | [worker] ✓ Job jZPSCBcT completed. Match: jZPSCBcT | Parser: 0 | Calc: 0
+worker-1  | [worker][job:URFi0W2D] Starting analysis — Спуйня vs Староград Гданськ [ПОЛЬЩА: 1. Ліга - Плей-оф] (scheduled fire: 2026-05-23T14:20:00.000Z)
+worker-1  | [worker][job:URFi0W2D] Step 1 → node /app/src/match_h2h_export.js --matchId URFi0W2D --home Spujnya --away Starograd_Gdansk
+worker-1  | --- Формат виводу: json ---
+worker-1  | --- Отримання fsign через Playwright... ---
+worker-1  | [worker][job:6Hj2I9DD] Starting analysis — Бенфіка vs Олівейренсе [ПОРТУГАЛІЯ: ЛПБ - Плей-оф] (scheduled fire: 2026-05-23T14:20:00.000Z)
+worker-1  | [worker][job:6Hj2I9DD] Step 1 → node /app/src/match_h2h_export.js --matchId 6Hj2I9DD --home Benfika --away Olivejrense
+worker-1  | fsign/live-parse error: page.goto: Target page, context or browser has been closed
+worker-1  | Call log:
+worker-1  |   - navigating to "https://www.flashscore.ua/match/URFi0W2D/#/h2h/overall", waiting until "networkidle"
+worker-1  |
+worker-1  | fsign: , prefix: 35
+worker-1  | browserContext.close: Target page, context or browser has been closed
+worker-1  |     at async main (/app/src/match_h2h_export.js:972:5)
+worker-1  | [worker][job:URFi0W2D] Step 1 exited with code 1
+worker-1  | STDERR: fsign/live-parse error: page.goto: Target page, context or browser has been closed
+worker-1  | Call log:
+worker-1  |   - navigating to "https://www.flashscore.ua/match/URFi0W2D/#/h2h/overall", waiting until "networkidle"
+worker-1  |
+worker-1  | browserContext.close: Target page, context or browser has been closed
+worker-1  |     at async main (/app/src/match_h2h_export.js:972:5)
+worker-1  | [worker] ✗ Job URFi0W2D failed (attempt 2/3): Parser (match_h2h_export.js) failed with exit code 1. STDERR: fsign/live-parse error: page.goto: Target page, context or browser has been closed
+worker-1  | Call log:
+worker-1  |   - navigating to "https://www.flashscore.ua/match/URFi0W2D/#/h2h/overall", waiting until "networkidle"
+worker-1  |
+worker-1  | browserContext.close: Target page, context or browser has been closed
+worker-1  |     at async main (/app/src/match_h2h_export.js:972:5)
+worker-1  | --- Формат виводу: json ---
+worker-1  | --- Отримання fsign через Playwright... ---
+worker-1  |   [Live Scraper] read1="2-а чверть" read2="2-а чверть" using="2-а чверть"
+worker-1  |   [Live Scraper] Фінальний статус: "2-а чверть"
+worker-1  |   [Series Info] "2-й матч. Benfica лідирує у серії 1-0."
+worker-1  | fsign: SW9D1eZo, prefix: 35
+worker-1  | --- Завантаження df_hh_... ---
+worker-1  | Teams: Бенфіка vs Олівейренсе
+worker-1  | Home: 50, Away: 50, H2H: 50
+worker-1  |
+worker-1  | --- Збагачення 68 матчів (dc_ + sur + st)... ---
+worker-1  |   ✓ Бенфіка vs Олівейренсе (6Hj2I9DD)
+worker-1  |   ✓ Бенфіка vs Олівейренсе (bimfKVr1)
+worker-1  |   ✓ Брага vs Бенфіка (fJWSxfSs)
+worker-1  |   ✓ Бенфіка vs Брага (MLxYZhMh)
+worker-1  |   ✓ Бенфіка vs Спортінг КП (OQfjNj2t)
+worker-1  |   ✓ Ежгейра vs Бенфіка (2y5OkJHD)
+worker-1  |   ✓ Бенфіка vs Брага (M3ET0qQE)
+worker-1  |   ✓ Бенфіка vs Олівейренсе (f9gxb6gl)
+worker-1  |   ✓ Галітуш Баррейру vs Бенфіка (EZdJpXZG)
+worker-1  |   ✓ Бенфіка vs Васку Да Гама Порту (4Ocj6aJi)
+worker-1  |   ✓ Бенфіка vs Оваренсе (thipYgjB)
+worker-1  |   ✓ Бенфіка vs Брага (CbGkwvuP)
+worker-1  |   ✓ ФК Порту vs Бенфіка (KIvfNxxg)
+worker-1  |   ✓ Бенфіка vs КА Келуш (S6KtGLUP)
+worker-1  |   ✓ Ежгейра vs Бенфіка (pnPYtMu0)
+worker-1  |   ✓ Бенфіка vs Віторія (48R9fm2k)
+worker-1  |   ✓ Імортал vs Бенфіка (Y5CdmWfM)
+worker-1  |   ✓ Бенфіка vs Спортінг КП (jNf6xFt4)
+worker-1  |   ✓ Олівейренсе vs Бенфіка (2NHYuTVb)
+worker-1  |   ✓ Бенфіка vs Оваренсе (nHOaUrdf)
+worker-1  |   ✓ Бенфіка vs Галітуш Баррейру (KK1q8iEb)
+worker-1  |   ✓ Бенфіка vs Ежгейра (MoDyZKIE)
+worker-1  |   ✓ Брага vs Бенфіка (0rR700Ck)
+worker-1  |   ✓ Бенфіка vs ФК Порту (GvuLOlPO)
+worker-1  |   ✓ Васку Да Гама Порту vs Бенфіка (256bvGff)
+worker-1  |   ✓ Бенфіка vs Брага (695bIRre)
+worker-1  |   ✓ Гран Канарія vs Бенфіка (Ie1BJFKb)
+worker-1  |   ✓ Олівейренсе vs Бенфіка (jkVjW4Rs)
+worker-1  |   ✓ Суботіца vs Бенфіка (pp0RphJc)
+worker-1  |   ✓ Оваренсе vs Бенфіка (jRUgcz0t)
+worker-1  |   ✓ Бенфіка vs ФК Порту (CKsSryom)
+worker-1  |   ✓ Бенфіка vs Ле-Ман (tbE1UWYG)
+worker-1  |   ✓ КА Келуш vs Бенфіка (EBzTDGoD)
+worker-1  |   ✓ Віторія vs Бенфіка (86mZyoId)
+worker-1  |   ✓ Бенфіка vs Віторія (bcNOSVKk)
+worker-1  |   ✓ Олівейренсе vs Оваренсе (WtgBKCCD)
+worker-1  |   ✓ Оваренсе vs Олівейренсе (fZztYWj5)
+worker-1  |   ✓ ФК Порту vs Олівейренсе (E1rEYXyf)
+worker-1  |   ✓ Оваренсе vs Олівейренсе (vedI8nX0)
+worker-1  |   ✓ Ле-Ман vs Бенфіка (EBC9SA3T)
+worker-1  |   ✓ Віторія vs Олівейренсе (IThW04sC)
+worker-1  |   ✓ Олівейренсе vs Імортал (4QSdn5SI)
+worker-1  |   ✓ Спортінг КП vs Олівейренсе (ATnHium1)
+worker-1  |   ✓ КА Келуш vs Олівейренсе (fTfnl6t9)
+worker-1  |   ✓ Олівейренсе vs Васку Да Гама Порту (82yPQBro)
+worker-1  |   ✓ Ежгейра vs Олівейренсе (21WAJfyI)
+worker-1  |   ✓ Олівейренсе vs Брага (8vBy5eMO)
+worker-1  |   ✓ Олівейренсе vs Ежгейра (hhYcsjit)
+worker-1  |   ✓ Оваренсе vs Олівейренсе (hlpfl4mQ)
+worker-1  |   ✓ Спортінг КП vs Олівейренсе (jZrG5e1L)
+worker-1  |   ✓ ФК Порту vs Олівейренсе (K2nNYWuT)
+worker-1  |   ✓ Галітуш Баррейру vs Олівейренсе (vovnfv86)
+worker-1  |   ✓ Віторія vs Олівейренсе (KUM7SMQ6)
+worker-1  |   ✓ Олівейренсе vs КА Келуш (hvcBppTH)
+worker-1  |   ✓ Олівейренсе vs Оваренсе (6DqN3iu3)
+worker-1  |   ✓ Олівейренсе vs Віторія (WpbFzYgJ)
+worker-1  |   ✓ Імортал vs Олівейренсе (CGiGRxBl)
+worker-1  |   ✓ Олівейренсе vs Спортінг КП (dUAAKL3L)
+worker-1  |   ✓ Ільябум vs Олівейренсе (YcrWGGn3)
+worker-1  |   ✓ Олівейренсе vs КА Келуш (EogK94k3)
+worker-1  |   ✓ Брага vs Олівейренсе (bHHhUyWg)
+worker-1  |   ✓ Олівейренсе vs Галітуш Баррейру (IHSVyTX2)
+worker-1  |   ✓ Васку Да Гама Порту vs Олівейренсе (YTSQkAbU)
+worker-1  |   ✓ Олівейренсе vs Ежгейра (t0ZrugpC)
+worker-1  |   ✓ Брага vs Олівейренсе (6arpzESF)
+worker-1  |   ✓ Оваренсе vs Олівейренсе (dn2aP7Yj)
+worker-1  |   ✓ Олівейренсе vs ФК Порту (88lwKCdB)
+worker-1  |   ✓ Бенфіка vs Олівейренсе (nZym9erg)
+worker-1  |   participants: homeId=IuodFyui, awayId=GjUUcSsj
+worker-1  |
+worker-1  | --- Завантаження ліній (findOddsByEventId)... ---
+worker-1  |   URL: https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=6Hj2I9DD&projectId=35&geoIpCode=UA&geoIpSubdivisionCode=UA30
+worker-1  | ✅ Лінії збережено: /app/data/line_result_6Hj2I9DD.json
+worker-1  |   match_1x2: 5 рядків
+worker-1  |   match_handicap: 14 рядків
+worker-1  |   match_total: 11 рядків
+worker-1  |   half_total: 4 рядків
+worker-1  |   quarter_total: 3 рядків
+worker-1  |   other: 8 рядків
+worker-1  |   ✅ line_result_6Hj2I9DD.json → /app/data
+worker-1  | Resolved names for file: Бенфіка vs Олівейренсе
+worker-1  | ✅ Data для Python: /app/data/Benfika_vs_Olivejrense_6Hj2I9DD.json
+worker-1  | --- Process finished ---
+worker-1  | [worker][job:6Hj2I9DD] Step 1 exited with code 0
+worker-1  | [worker][job:6Hj2I9DD] Step 2 → python3 /app/src/math_script.py /app/data/Benfika_vs_Olivejrense_6Hj2I9DD.json /app/data/line_result_6Hj2I9DD.json
+worker-1  | __OUTPUT_FILE__:result_6Hj2I9DD.json
+worker-1  | [math_script] Processing match 6Hj2I9DD
+worker-1  | [math_script] ✓ Result written to /app/data/result_6Hj2I9DD.json
+worker-1  | [worker][job:6Hj2I9DD] Step 2 exited with code 0
+worker-1  | STDERR: __OUTPUT_FILE__:result_6Hj2I9DD.json
+worker-1  | [worker][job:6Hj2I9DD] Cleaned up /app/data/Benfika_vs_Olivejrense_6Hj2I9DD.json
+worker-1  | [worker][job:6Hj2I9DD] Cleaned up /app/data/line_result_6Hj2I9DD.json
+worker-1  | [worker][job:6Hj2I9DD] ✓ Analysis chain completed successfully for match 6Hj2I9DD
+worker-1  | [worker] ✓ Job 6Hj2I9DD completed. Match: 6Hj2I9DD | Parser: 0 | Calc: 0
+worker-1  | [worker][job:URFi0W2D] Starting analysis — Спуйня vs Староград Гданськ [ПОЛЬЩА: 1. Ліга - Плей-оф] (scheduled fire: 2026-05-23T14:20:00.000Z)
+worker-1  | [worker][job:URFi0W2D] Step 1 → node /app/src/match_h2h_export.js --matchId URFi0W2D --home Spujnya --away Starograd_Gdansk
+worker-1  | --- Формат виводу: json ---
+worker-1  | --- Отримання fsign через Playwright... ---
+worker-1  |   [Live Scraper] read1="2-а чверть" read2="2-а чверть" using="2-а чверть"
+worker-1  |   [Live Scraper] Фінальний статус: "2-а чверть"
+worker-1  |   [Series Info] "2-й матч. Спуйня Старгард-Щецінскі лідирує у серії 1-0."
+worker-1  | fsign: SW9D1eZo, prefix: 35
+worker-1  | --- Завантаження df_hh_... ---
+worker-1  | Teams: Спуйня vs Староград Гданськ
+worker-1  | Home: 50, Away: 50, H2H: 12
+worker-1  |
+worker-1  | --- Збагачення 70 матчів (dc_ + sur + st)... ---
+worker-1  |   ✓ Староград Гданськ vs Спуйня (dEHq2hY0)
+worker-1  |   ✓ Лодзь vs Спуйня (hOHccOMr)
+worker-1  |   ✓ Спуйня vs Лодзь (MuRR2paL)
+worker-1  |   ✓ Спуйня vs Староград Гданськ (URFi0W2D)
+worker-1  |   ✓ Спуйня vs Лодзь (zPSJ46U8)
+worker-1  |   ✓ Спуйня vs Пельплін (S4dwRUU0)
+worker-1  |   ✓ Пельплін vs Спуйня (CdvvCNAF)
+worker-1  |   ✓ Спуйня vs Пельплін (4WzWDqt3)
+worker-1  |   ✓ Спуйня vs Пельплін (Cxlpjtld)
+worker-1  |   ✓ Пельплін vs Спуйня (AX3SAfiS)
+worker-1  |   ✓ Спуйня vs Іновроцлав (OCp6F9tQ)
+worker-1  |   ✓ Полонія Варшава vs Спуйня (d2AFyfbL)
+worker-1  |   ✓ Ланьцут vs Спуйня (lvdFCnPh)
+worker-1  |   ✓ ВКК Вроцлав vs Спуйня (rcRxAm4m)
+worker-1  |   ✓ Спуйня vs Лешно (2qRCHY6k)
+worker-1  |   ✓ Спуйня vs Познань (tx9yHnbl)
+worker-1  |   ✓ Староград Гданськ vs Спуйня (j3vo7WVF)
+worker-1  |   ✓ Спуйня vs ГКС Тихи (hbNXa9um)
+worker-1  |   ✓ Спуйня vs Майнерс Катовіце (WShHYBPj)
+worker-1  |   ✓ Р. Жешув vs Спуйня (GS0nVxJb)
+worker-1  |   ✓ Зубри Білосток vs Спуйня (AZgO9VjL)
+worker-1  |   ✓ Спуйня vs Лодзь (pxCsLww1)
+worker-1  |   ✓ Спуйня vs Бидгощ (63AdaNWo)
+worker-1  |   ✓ Котвіца Колобжег vs Спуйня (INe1u8OF)
+worker-1  |   ✓ Політехніка Опольська vs Спуйня (vZmQ0Fjg)
+worker-1  |   ✓ Спуйня vs Пельплін (pGI23EBb)
+worker-1  |   ✓ Спуйня vs ВКК Вроцлав (trpOqTE8)
+worker-1  |   ✓ Спуйня vs Полонія Варшава (rkgPzDEt)
+worker-1  |   ✓ Іновроцлав vs Спуйня (0WhoxHe2)
+worker-1  |   ✓ Лешно vs Спуйня (OpMbKiUa)
+worker-1  |   ✓ ГКС Тихи vs Спуйня (lCNJ2S2c)
+worker-1  |   ✓ Спуйня vs Староград Гданськ (SMI1wCZo)
+worker-1  |   ✓ Спуйня vs Ланьцут (pdS22J8E)
+worker-1  |   ✓ Майнерс Катовіце vs Спуйня (SpP4Or9C)
+worker-1  |   ✓ Спуйня vs Р. Жешув (82FtYet9)
+worker-1  |   ✓ Познань vs Спуйня (vNuP6JsA)
+worker-1  |   ✓ Староград Гданськ vs Бидгощ (bZHQIMe4)
+worker-1  |   ✓ Бидгощ vs Староград Гданськ (U5Ah1XNG)
+worker-1  |   ✓ Бидгощ vs Староград Гданськ (dhCp3gg4)
+worker-1  |   ✓ Староград Гданськ vs Бидгощ (z5xQrP7k)
+worker-1  |   ✓ Староград Гданськ vs Ланьцут (CIen1ou0)
+worker-1  |   ✓ Ланьцут vs Староград Гданськ (6N3KDHNt)
+worker-1  |   ✓ Ланьцут vs Староград Гданськ (pWgfaP9C)
+worker-1  |   ✓ Староград Гданськ vs Ланьцут (4hhv37Am)
+worker-1  |   ✓ Зубри Білосток vs Староград Гданськ (dxRO2WdK)
+worker-1  |   ✓ Староград Гданськ vs Бидгощ (xMVljgDE)
+worker-1  |   ✓ Політехніка Опольська vs Староград Гданськ (E17OwPNi)
+worker-1  |   ✓ Староград Гданськ vs Лодзь (tfAO84OH)
+worker-1  |   ✓ Староград Гданськ vs Познань (0dKU7IvH)
+worker-1  |   ✓ Котвіца Колобжег vs Староград Гданськ (dSy25VHP)
+worker-1  |   ✓ Староград Гданськ vs ВКК Вроцлав (zJhvXbln)
+worker-1  |   ✓ Староград Гданськ vs Полонія Варшава (EmALkAak)
+worker-1  |   ✓ Лешно vs Староград Гданськ (0ppnyBpd)
+worker-1  |   ✓ Іновроцлав vs Староград Гданськ (AH0hD4cD)
+worker-1  |   ✓ Староград Гданськ vs Ланьцут (lpZslx7m)
+worker-1  |   ✓ ГКС Тихи vs Староград Гданськ (vZ5PVfiJ)
+worker-1  |   ✓ Староград Гданськ vs Майнерс Катовіце (AcAhC9fT)
+worker-1  |   ✓ Пельплін vs Староград Гданськ (UsiP6mIj)
+worker-1  |   ✓ Познань vs Староград Гданськ (OQ1EfpTQ)
+worker-1  |   ✓ Р. Жешув vs Староград Гданськ (ljf0otjD)
+worker-1  |   ✓ Лодзь vs Староград Гданськ (xf7sey1l)
+worker-1  |   ✓ Бидгощ vs Староград Гданськ (CS5MC0Sj)
+worker-1  |   ✓ Староград Гданськ vs Політехніка Опольська (6gNu4WqJ)
+worker-1  |   ✓ Староград Гданськ vs Зубри Білосток (S4F4PwCd)
+worker-1  |   ✓ Староград Гданськ vs Котвіца Колобжег (M5VXvPAj)
+worker-1  |   ✓ Староград Гданськ vs Спуйня (MunudNGh)
+worker-1  |   ✓ Староград Гданськ vs Іновроцлав (UiK3ayzp)
+worker-1  |   ✓ Полонія Варшава vs Староград Гданськ (hYwFhTMa)
+worker-1  |   ✓ ВКК Вроцлав vs Староград Гданськ (hfXgAhl2)
+worker-1  |   ✓ Спуйня vs Староград Гданськ (K0JuymSb)
+worker-1  |   participants: homeId=f1YRIjxG, awayId=AefsNJK6
+worker-1  |
+worker-1  | --- Завантаження ліній (findOddsByEventId)... ---
+worker-1  |   URL: https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=URFi0W2D&projectId=35&geoIpCode=UA&geoIpSubdivisionCode=UA30
+worker-1  | ✅ Лінії збережено: /app/data/line_result_URFi0W2D.json
+worker-1  |   match_1x2: 5 рядків
+worker-1  |   match_handicap: 14 рядків
+worker-1  |   match_total: 14 рядків
+worker-1  |   half_total: 2 рядків
+worker-1  |   quarter_total: 1 рядків
+worker-1  |   other: 8 рядків
+worker-1  |   ✅ line_result_URFi0W2D.json → /app/data
+worker-1  | Resolved names for file: Спуйня vs Староград Гданськ
+worker-1  | ✅ Data для Python: /app/data/Spujnya_vs_Starograd_Gdansk_URFi0W2D.json
+worker-1  | --- Process finished ---
+worker-1  | [worker][job:URFi0W2D] Step 1 exited with code 0
+worker-1  | [worker][job:URFi0W2D] Step 2 → python3 /app/src/math_script.py /app/data/Spujnya_vs_Starograd_Gdansk_URFi0W2D.json /app/data/line_result_URFi0W2D.json
+worker-1  | __OUTPUT_FILE__:result_URFi0W2D.json
+worker-1  | [math_script] Processing match URFi0W2D
+worker-1  | [math_script] ✓ Result written to /app/data/result_URFi0W2D.json
+worker-1  | [worker][job:URFi0W2D] Step 2 exited with code 0
+worker-1  | STDERR: __OUTPUT_FILE__:result_URFi0W2D.json
+worker-1  | [worker][job:URFi0W2D] Cleaned up /app/data/Spujnya_vs_Starograd_Gdansk_URFi0W2D.json
+worker-1  | [worker][job:URFi0W2D] Cleaned up /app/data/line_result_URFi0W2D.json
+worker-1  | [worker][job:URFi0W2D] ✓ Analysis chain completed successfully for match URFi0W2D
+worker-1  | [worker] ✓ Job URFi0W2D completed. Match: URFi0W2D | Parser: 0 | Calc: 0
+worker-1  | [worker][job:6VLhySLF] Starting analysis — Кімса vs Бока Хуніорс [АРГЕНТИНА: Ліга А - Плей-оф] (scheduled fire: 2026-05-23T14:50:00.000Z)
+worker-1  | [worker][job:6VLhySLF] Step 1 → node /app/src/match_h2h_export.js --matchId 6VLhySLF --home Kimsa --away Boka_Khuniors
+worker-1  | [worker][job:t2e6Vvdo] Starting analysis — Ульм vs Бамберг [НІМЕЧЧИНА: ББЛ - Плей-оф] (scheduled fire: 2026-05-23T14:50:00.000Z)
+worker-1  | [worker][job:t2e6Vvdo] Step 1 → node /app/src/match_h2h_export.js --matchId t2e6Vvdo --home Ulm --away Bamberg
+worker-1  | --- Формат виводу: json ---
+worker-1  | --- Формат виводу: json ---
+worker-1  | --- Отримання fsign через Playwright... ---
+worker-1  | --- Отримання fsign через Playwright... ---
+worker-1  |   [Live Scraper] read1="1-а чверть" read2="1-а чверть" using="1-а чверть"
+worker-1  |   [Live Scraper] Фінальний статус: "1-а чверть"
+worker-1  |   [Series Info] "3-й матч. Bamberg Baskets лідирує у серії 2-0."
+worker-1  | fsign: SW9D1eZo, prefix: 35
+worker-1  | --- Завантаження df_hh_... ---
+worker-1  | Teams: Ульм vs Бамберг
+worker-1  | Home: 50, Away: 50, H2H: 50
+worker-1  |
+worker-1  | --- Збагачення 68 матчів (dc_ + sur + st)... ---
+worker-1  |   [Live Scraper] read1="1-а чверть" read2="1-а чверть" using="1-а чверть"
+worker-1  |   [Live Scraper] Фінальний статус: "1-а чверть"
+worker-1  |   [Series Info] "1-й матч."
+worker-1  | fsign: SW9D1eZo, prefix: 35
+worker-1  | --- Завантаження df_hh_... ---
+worker-1  |   ✓ Бамберг vs Ульм (veK6E203)
+worker-1  |   ✓ Скайлайнерс vs Ульм (8AL28ZSj)
+worker-1  |   ✓ Ульм vs Бамберг (t2e6Vvdo)
+worker-1  | Teams: Кімса vs Бока Хуніорс
+worker-1  | Home: 50, Away: 50, H2H: 50
+worker-1  |
+worker-1  | --- Збагачення 73 матчів (dc_ + sur + st)... ---
+worker-1  |   ✓ Вюрцбург vs Ульм (6LT0oFP8)
+worker-1  |   ✓ Бамберг vs Ульм (YcXKja8d)
+worker-1  |   ✓ Кімса vs Бока Хуніорс (6VLhySLF)
+worker-1  |   ✓ Кімса vs Інстітуто де Кордоба (b9lTWW3t)
+worker-1  |   ✓ Ульм vs Гамбург (ncYhIGeM)
+worker-1  |   ✓ Інстітуто де Кордоба vs Кімса (dSEaZ5iS)
+worker-1  |   ✓ Ульм vs Альба Берлін (Qqcrfq8t)
+worker-1  |   ✓ Кімса vs Інстітуто де Кордоба (EHbzU9XR)
+worker-1  |   ✓ Хемніц vs Ульм (rkmDclvh)
+worker-1  |   ✓ Ульм vs Бамберг (MZ6Lf1t1)
+worker-1  |   ✓ Інстітуто де Кордоба vs Кімса (p0k6Omek)
+worker-1  |   ✓ Кімса vs Інстітуто де Кордоба (t40SVV2F)
+worker-1  |   ✓ Індепендьєнте Оліва vs Кімса (86LYIhjo)
+worker-1  |   ✓ Інстітуто де Кордоба vs Кімса (0KUJONM6)
+worker-1  |   ✓ Росток vs Ульм (Q96HIPk5)
+worker-1  |   ✓ Атенас vs Кімса (Q1GyCpw1)
+worker-1  |   ✓ Брауншвейг vs Ульм (2icc4EDc)
+worker-1  |   ✓ Кімса vs Ла Уньйон (jTHdfLBb)
+worker-1  |   ✓ Гайдельберг vs Ульм (0UH6QbVh)
+worker-1  |   ✓ Ульм vs Бонн (QB3ODLom)
+worker-1  |   ✓ Ульм vs Єна (6i0385hA)
+worker-1  |   ✓ Ульм vs Сінтайнікс МБК (Gt0cZgEN)
+worker-1  |   ✓ Архентіно vs Кімса (KA4siUro)
+worker-1  |   ✓ Олімпіко vs Кімса (2m31z63S)
+worker-1  |   ✓ Кімса vs Обрас Санітаріас (0ny0r00D)
+worker-1  |   ✓ Ульм vs Людвігсбург (8be2qbJs)
+worker-1  |   ✓ Ульм vs Ольденбург (2NXdtg8O)
+worker-1  |   ✓ Кімса vs Обера (n14dQRvS)
+worker-1  |   ✓ Тренто vs Ульм (Mw1Cg8Bb)
+worker-1  |   ✓ Расінг Чивількой vs Кімса (tbbqBkzH)
+worker-1  |   ✓ Ульм vs Трір (bPqczLtR)
+worker-1  |   ✓ Фехта vs Ульм (fZylDZxn)
+worker-1  |   ✓ Кімса vs Хімнасія (rcHqIlUH)
+worker-1  |   ✓ Бур vs Ульм (IsQuJ6Il)
+worker-1  |   ✓ Кімса vs Ферро (dEMMHujt)
+worker-1  |   ✓ Ульм vs Гайдельберг (dUMt8Mvo)
+worker-1  |   ✓ Уньйон де Санта-Фе vs Кімса (rgRX0jfJ)
+worker-1  |   ✓ Ульм vs Будучност (lCuVBASI)
+worker-1  |   ✓ Лондон Лайонс vs Ульм (Y37QewLN)
+worker-1  |   ✓ Баварія vs Ульм (b9D7mkbf)
+worker-1  |   ✓ Кімса vs Пеньяроль (h4WaIcO0)
+worker-1  |   ✓ Гамбург vs Ульм (GCtRDiB6)
+worker-1  |   ✓ Сан-Лоренсо vs Кімса (EDZG4Yff)
+worker-1  |   ✓ Ульм vs Хемніц (jLkzoM65)
+worker-1  |   ✓ Платенсе vs Кімса (K8oAz8nQ)
+worker-1  |   ✓ Ульм vs Брауншвейг (lOsBnFC7)
+worker-1  |   ✓ Бока Хуніорс vs Кімса (fVgOC4fJ)
+worker-1  |   ✓ Кімса vs Сан-Мартін (hrVt0RAD)
+worker-1  |   ✓ Кімса vs Регатас (zqxk2dzp)
+worker-1  |   ✓ Обера vs Кімса (CpX9B0Dc)
+worker-1  |   ✓ Кімса vs Сан-Лоренсо (I9W1r2qB)
+worker-1  |   ✓ Бешикташ vs Ульм (pMXjIWW1)
+worker-1  |   ✓ Ла Уньйон vs Кімса (CWiyc1b4)
+worker-1  |   ✓ Хімнасія vs Кімса (KUAaBL3M)
+worker-1  |   ✓ Кімса vs Платенсе (vg67vKX8)
+worker-1  |   ✓ Трір vs Ульм (d4ResKzS)
+worker-1  |   ✓ Кімса vs Олімпіко (EVIqvBwQ)
+worker-1  |   ✓ Паніоніос vs Ульм (SKHYNtnQ)
+worker-1  |   ✓ Ульм vs Вюрцбург (zk94dgOt)
+worker-1  |   ✓ Ферро vs Кімса (b1sIbrKG)
+worker-1  |   ✓ Кімса vs Бока Хуніорс (IJoqWmBd)
+worker-1  |   ✓ Бамберг vs Ульм (p4hKPCgJ)
+worker-1  |   ✓ Регатас vs Кімса (jDiGfUhL)
+worker-1  |   ✓ Сан-Мартін vs Кімса (df8Dz91k)
+worker-1  |   ✓ Кімса vs Уньйон де Санта-Фе (8SYL1o0l)
+worker-1  |   ✓ Ульм vs Лієткабеліс (ARLMEcQ9)
+worker-1  |   ✓ Кімса vs Індепендьєнте Оліва (bPwySKVP)
+worker-1  |   ✓ Бока Хуніорс vs Обера (UkQeD2Vj)
+worker-1  |   ✓ Альба Берлін vs Ульм (d2pFKQBM)
+worker-1  |   ✓ Обера vs Бока Хуніорс (jw0GXWG5)
+worker-1  |   ✓ Сан-Мартін vs Бока Хуніорс (4t2QVsnm)
+worker-1  |   ✓ Ульм vs Фехта (pUJ6glDN)
+worker-1  |   ✓ Обера vs Бока Хуніорс (OjbOVAoI)
+worker-1  |   ✓ Сінтайнікс МБК vs Бамберг (zZd7luxI)
+worker-1  |   ✓ Бамберг vs Гамбург (0r5dzkH7)
+worker-1  |   ✓ Бока Хуніорс vs Сан-Мартін (YcBfy4OP)
+worker-1  |   ✓ Бамберг vs Бонн (MgcLedqo)
+worker-1  |   ✓ Бока Хуніорс vs Сан-Мартін (t4O8D0WI)
+worker-1  |   ✓ Франка vs Бока Хуніорс (CETMKjFM)
+worker-1  |   ✓ Хемніц vs Бамберг (hbw7PX2k)
+worker-1  |   ✓ Бока Хуніорс vs Обрас Санітаріас (r766Fk9C)
+worker-1  |   ✓ Бамберг vs Ольденбург (bupoKH9C)
+worker-1  |   ✓ Бока Хуніорс vs Фламенгу (IVQJTHEG)
+worker-1  |   ✓ Бамберг vs Єна (z3GorOde)
+worker-1  |   ✓ Фехта vs Бамберг (C2rFiyUi)
+worker-1  |   ✓ Бамберг vs Трір (vFTcSK0t)
+worker-1  |   ✓ Гайдельберг vs Бамберг (KhD9JjI8)
+worker-1  |   ✓ Сан-Лоренсо vs Бока Хуніорс (th5hwNy0)
+worker-1  |   ✓ Бока Хуніорс vs Індепендьєнте Оліва (zH94JSpR)
+worker-1  |   ✓ Ла Уньйон vs Бока Хуніорс (zLqhvl43)
+worker-1  |   ✓ Бока Хуніорс vs Ферро (6NxF8BW8)
+worker-1  |   ✓ Бамберг vs Брауншвейг (jNOyTxZ0)
+worker-1  |   ✓ Бока Хуніорс vs Уньйон де Санта-Фе (bgL4hatB)
+worker-1  |   ✓ Бамберг vs Баварія (tnQs5i3F)
+worker-1  |   ✓ Баварія vs Бамберг (dvERmKmD)
+worker-1  |   ✓ Скайлайнерс vs Бамберг (2ekpfFXa)
+worker-1  |   ✓ Обера vs Бока Хуніорс (YewO37Sj)
+worker-1  |   ✓ Бамберг vs Альба Берлін (xpNXFTU0)
+worker-1  |   ✓ Бока Хуніорс vs Інстітуто де Кордоба (zXrAjvUg)
+worker-1  |   ✓ Бока Хуніорс vs Атенас (YDWg0YLb)
+worker-1  |   ✓ Бока Хуніорс vs Пеньяроль (ShTo63hK)
+worker-1  |   ✓ Вюрцбург vs Бамберг (IBT8oTS6)
+worker-1  |   ✓ Росток vs Бамберг (S6WC3M5k)
+worker-1  |   ✓ Бамберг vs Альба Берлін (0hGWNji4)
+worker-1  |   ✓ Людвігсбург vs Бамберг (Ysttpy9a)
+worker-1  |   ✓ Інстітуто де Кордоба vs Бока Хуніорс (S6u2h0as)
+worker-1  |   ✓ Бока Хуніорс vs Інстітуто де Кордоба (pWaOOqw3)
+worker-1  |   ✓ Бока Хуніорс vs Олімпіко (QXd5jrzp)
+worker-1  |   ✓ Расінг Чивількой vs Бока Хуніорс (bqbkP5yo)
+worker-1  |   ✓ Бамберг vs Фехта (d4wjZbwp)
+worker-1  |   ✓ Бока Хуніорс vs Платенсе (EREkJX9m)
+worker-1  |   ✓ Альба Берлін vs Бамберг (8v52r3Gc)
+worker-1  |   ✓ Бока Хуніорс vs Інстітуто де Кордоба (buYqCG2K)
+worker-1  |   ✓ Мінаш vs Бока Хуніорс (8EcxUxvJ)
+worker-1  |   ✓ Бамберг vs Людвігсбург (xOnVeJkL)
+worker-1  |   ✓ Агуада vs Бока Хуніорс (0lfUVb96)
+worker-1  |   ✓ Архентіно vs Бока Хуніорс (z5ZjGSbU)
+worker-1  |   ✓ Бамберг vs Сінтайнікс МБК (bTgUjkhI)
+worker-1  |   ✓ Сан-Мартін vs Бока Хуніорс (8YJcR39C)
+worker-1  |   ✓ Бамберг vs Вюрцбург (xb3vNelK)
+worker-1  |   ✓ Бонн vs Бамберг (l26zzxT1)
+worker-1  |   ✓ Регатас vs Бока Хуніорс (pGd6Tgjt)
+worker-1  |   ✓ Єна vs Бамберг (lxs7MnsA)
+worker-1  |   ✓ Бамберг vs Гайдельберг (bsJTBZ96)
+worker-1  |   ✓ Бока Хуніорс vs Хімнасія (b30FEQP6)
+worker-1  |   ✓ Бока Хуніорс vs Агуада (W82DZtAs)
+worker-1  |   ✓ Ферро vs Бока Хуніорс (f39vTpVO)
+worker-1  |   ✓ Бока Хуніорс vs Мінаш (Mwy1UoY1)
+worker-1  |   ✓ Бамберг vs Росток (tWwsahqn)
+worker-1  |   ✓ Бамберг vs Гайдельберг (t05xlSzo)
+worker-1  |   ✓ Бока Хуніорс vs Обера (6RpQdMlT)
+worker-1  |   ✓ Ольденбург vs Бамберг (nyF5Utve)
+worker-1  |   ✓ Бамберг vs Скайлайнерс (WMe4SaiA)
+worker-1  |   ✓ Бока Хуніорс vs Кімса (EHke9GOa)
+worker-1  |   ✓ Ульм vs Бамберг (A9O2iXze)
+worker-1  |   ✓ Кімса vs Бока Хуніорс (rcsC5YNO)
+worker-1  |   ✓ Бока Хуніорс vs Кімса (nVm37fgC)
+worker-1  |   participants: homeId=E7pXLvd8, awayId=KdCRV01k
+worker-1  |
+worker-1  | --- Завантаження ліній (findOddsByEventId)... ---
+worker-1  |   URL: https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=6VLhySLF&projectId=35&geoIpCode=UA&geoIpSubdivisionCode=UA30
+worker-1  | ✅ Лінії збережено: /app/data/line_result_6VLhySLF.json
+worker-1  |   match_1x2: 8 рядків
+worker-1  |   match_handicap: 17 рядків
+worker-1  |   match_total: 27 рядків
+worker-1  |   half_total: 8 рядків
+worker-1  |   quarter_total: 2 рядків
+worker-1  |   other: 11 рядків
+worker-1  |   ✅ line_result_6VLhySLF.json → /app/data
+worker-1  | Resolved names for file: Кімса vs Бока Хуніорс
+worker-1  | ✅ Data для Python: /app/data/Kimsa_vs_Boka_Khuniors_6VLhySLF.json
+worker-1  | --- Process finished ---
+worker-1  | [worker][job:6VLhySLF] Step 1 exited with code 0
+worker-1  | [worker][job:6VLhySLF] Step 2 → python3 /app/src/math_script.py /app/data/Kimsa_vs_Boka_Khuniors_6VLhySLF.json /app/data/line_result_6VLhySLF.json
+worker-1  |   ✓ Гамбург vs Бамберг (lKuKUUGt)
+worker-1  |   participants: homeId=8CRfmy39, awayId=fcks1zeJ
+worker-1  |
+worker-1  | --- Завантаження ліній (findOddsByEventId)... ---
+worker-1  |   URL: https://global.ds.lsapp.eu/odds/pq_graphql?_hash=oce&eventId=t2e6Vvdo&projectId=35&geoIpCode=UA&geoIpSubdivisionCode=UA30
+worker-1  | __OUTPUT_FILE__:result_6VLhySLF.json
+worker-1  | [math_script] Processing match 6VLhySLF
+worker-1  | [math_script] ✓ Result written to /app/data/result_6VLhySLF.json
+worker-1  | [worker][job:6VLhySLF] Step 2 exited with code 0
+worker-1  | STDERR: __OUTPUT_FILE__:result_6VLhySLF.json
+worker-1  | [worker][job:6VLhySLF] Cleaned up /app/data/Kimsa_vs_Boka_Khuniors_6VLhySLF.json
+worker-1  | [worker][job:6VLhySLF] Cleaned up /app/data/line_result_6VLhySLF.json
+worker-1  | [worker][job:6VLhySLF] ✓ Analysis chain completed successfully for match 6VLhySLF
+worker-1  | [worker] ✓ Job 6VLhySLF completed. Match: 6VLhySLF | Parser: 0 | Calc: 0
+worker-1  | ✅ Лінії збережено: /app/data/line_result_t2e6Vvdo.json
+worker-1  |   match_1x2: 8 рядків
+worker-1  |   match_handicap: 43 рядків
+worker-1  |   match_total: 81 рядків
+worker-1  |   half_total: 17 рядків
+worker-1  |   quarter_total: 3 рядків
+worker-1  |   other: 13 рядків
+worker-1  |   ✅ line_result_t2e6Vvdo.json → /app/data
+worker-1  | Resolved names for file: Ульм vs Бамберг
+worker-1  | ✅ Data для Python: /app/data/Ulm_vs_Bamberg_t2e6Vvdo.json
+worker-1  | --- Process finished ---
+worker-1  | [worker][job:t2e6Vvdo] Step 1 exited with code 0
+worker-1  | [worker][job:t2e6Vvdo] Step 2 → python3 /app/src/math_script.py /app/data/Ulm_vs_Bamberg_t2e6Vvdo.json /app/data/line_result_t2e6Vvdo.json
+worker-1  | __OUTPUT_FILE__:result_t2e6Vvdo.json
+worker-1  | [math_script] Processing match t2e6Vvdo
+worker-1  | [math_script] ✓ Result written to /app/data/result_t2e6Vvdo.json
+worker-1  | [worker][job:t2e6Vvdo] Step 2 exited with code 0
+worker-1  | STDERR: __OUTPUT_FILE__:result_t2e6Vvdo.json
+worker-1  | [worker][job:t2e6Vvdo] Cleaned up /app/data/Ulm_vs_Bamberg_t2e6Vvdo.json
+worker-1  | [worker][job:t2e6Vvdo] Cleaned up /app/data/line_result_t2e6Vvdo.json
+worker-1  | [worker][job:t2e6Vvdo] ✓ Analysis chain completed successfully for match t2e6Vvdo
+worker-1  | [worker] ✓ Job t2e6Vvdo completed. Match: t2e6Vvdo | Parser: 0 | Calc: 0

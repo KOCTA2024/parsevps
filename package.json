@@ -8,6 +8,7 @@
     "match": "node src/match_h2h_export.js"
   },
   "dependencies": {
+    "bullmq": "^5.77.0",
     "chalk": "^5.6.2",
     "cli-loading-animation": "^1.0.6",
     "cli-progress": "^3.12.0",

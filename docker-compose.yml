@@ -1,0 +1,58 @@
+services:
+
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Worker (всегда живёт, слушает очередь) ────────────────────────────────
+  worker:
+    build: .
+    command: node src/worker.js
+    restart: unless-stopped
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      WORKER_CONCURRENCY: 2
+    volumes:
+      - ./src:/app/src:ro
+      - ./data:/app/data          # шаред data/ для JSON-файлов парсера
+      - state:/app/state          # matches.json живёт здесь, не в src/
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ── Monitor + Orchestrator (cron, раз в 24 ч) ────────────────────────────
+  # Запускает monitor.js → orchestrator.js по расписанию.
+  # supercrond читает /etc/crontabs/root внутри образа.
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: sh -c "while true; do HOUR=$$(date -u +%H); MIN=$$(date -u +%M); if [ \"$$HOUR\" = '12' ] && [ \"$$MIN\" = '20' ]; then node src/monitor.js && node src/orchestrator.js >> /app/state/scheduler.log 2>&1; sleep 61; fi; sleep 30; done"
+    restart: unless-stopped
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # Переопределяем путь к matches.json — теперь он в /app/state/
+      MATCHES_FILE: /app/state/matches.json
+    volumes:
+      - ./src:/app/src:ro
+      - ./data:/app/data
+      - state:/app/state
+      - ./scheduler.crontab:/etc/crontabs/scheduler:ro   # см. файл ниже
+    depends_on:
+      redis:
+        condition: service_healthy
+      worker:
+        condition: service_started
+
+volumes:
+  state:   # изолированный volume для matches.json

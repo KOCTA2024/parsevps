@@ -4,8 +4,8 @@ import zlib from 'zlib';
 import https from 'https';
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const FEED_URL = 'https://35.flashscore.ninja/35/x/feed/f_1_0_3_ua_5';
-const OUTPUT_FILE = 'src/matches.json';
+const FEED_URL = 'https://35.flashscore.ninja/35/x/feed/f_3_0_3_ua_5';
+const OUTPUT_FILE = process.env.MATCHES_FILE || 'src/matches.json';
 
 // ── Extract fsign via headless browser ───────────────────────────────────────
 async function extractFsign() {
