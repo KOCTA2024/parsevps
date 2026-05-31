@@ -26,6 +26,16 @@ try { execSync('rm -rf /tmp/.org.chromium.* /tmp/playwright* /tmp/pw_run_* /tmp/
 const RUN_TMP_DIR = `/tmp/pw_run_${process.pid}_${Date.now()}`;
  
 import { OUTPUT_PATH } from './constants/index.js';
+import { context } from 'esbuild';
+
+// ─── Clean output folder before parsing ──────────────────────────────────────
+const DATA_DIR_EARLY = path.join(__dirname, 'data');
+if (fs.existsSync(DATA_DIR_EARLY)) {
+  for (const file of fs.readdirSync(DATA_DIR_EARLY)) {
+    try { fs.rmSync(path.join(DATA_DIR_EARLY, file), { recursive: true, force: true }); } catch {}
+  }
+
+}
  
 const DEFAULT_LIMIT     = 35;
 const DEFAULT_H2H_LIMIT = 5;
@@ -92,13 +102,21 @@ function formatUnixDate(ts) {
 function parseDcStatus(raw, match) {
   if (!raw || raw.length < 3) return { statusStr: '', liveMinute: null };
   const kv = parseKV(raw.split('~')[0]);
+
+  // DA=3 означає матч офіційно завершений.
+  // DA=1 = заплановано, DA=2 = live, DA=3 = завершено.
+  // Перевіряємо до DI — щоб DI=-1 завершених матчів не давав 'Break'.
+  const da = kv['DA'];
+  if (da === '3') return { statusStr: 'Finished', liveMinute: null };
+  if (da === '1') return { statusStr: 'Not Started', liveMinute: null };
+
   const di = kv['DI'];
   if (di === undefined) return { statusStr: '', liveMinute: null };
   const diNum = Number(di);
   if (diNum === -1) {
-    const statusStr = (match && match.homeScore !== null && match.awayScore !== null)
-      ? 'Finished'
-      : 'Not Started';
+    // DI=-1 + DA=2 = лайв, але годинник зупинено = перерва.
+    const hasScores = match && match.homeScore !== null && match.awayScore !== null;
+    const statusStr = hasScores ? 'Break' : 'Not Started';
     return { statusStr, liveMinute: null };
   }
   return { statusStr: 'Live', liveMinute: diNum };
@@ -124,7 +142,7 @@ async function fetchFeed(feedName, fsign, prefix = '35') {
         'Origin'         : 'https://www.flashscore.ua',
       }
     }, res => {
-      if (res.statusCode !== 200) console.error(`HTTP ${res.statusCode} for ${feedName}`);
+      if (res.statusCode !== 200) {};
       const enc = res.headers['content-encoding'];
       let stream = res;
       if (enc === 'gzip')         stream = res.pipe(zlib.createGunzip());
@@ -422,7 +440,7 @@ function detectBreakLabel(qd, isLive, periodName) {
  
 // ─── Build one flat match row ─────────────────────────────────────────────────
  
-function buildMatchRow(match, sourceLabel, quarterData, statsData, status, periodName, seriesInfo) {
+function buildMatchRow(match, sourceLabel, quarterData, statsData, status, periodName, seriesInfo, htmlTournament, seasonInfo) {
   const qd = quarterData || {};
   const sd = statsData   || {};
   const g  = (key, fallback = '') => sd[key] !== undefined ? sd[key] : fallback;
@@ -437,7 +455,24 @@ function buildMatchRow(match, sourceLabel, quarterData, statsData, status, perio
   const baseStatus    = status !== undefined ? status : (match.status || '');
   const displayStatus = breakLabel || baseStatus;
  
-  const baseTournament = match.tournament || '';
+  // Склеюємо назву турніру: htmlTournament (з DOM) + KF-поле фіду + серійна інфо.
+  // htmlTournament може містити повну назву ("ЛНБ - Плей-оф - Чвертьфінали"),
+  // тоді як KF у фіді може бути скороченою або відсутньою.
+  const feedTournament = match.tournament || '';
+  let baseTournament;
+  if (htmlTournament && htmlTournament.trim()) {
+    const h = htmlTournament.trim();
+    const f = feedTournament.trim();
+    if (!f || h.toLowerCase().includes(f.toLowerCase()) || f.toLowerCase().includes(h.toLowerCase())) {
+      // Один містить інший — беремо довший (більш повний)
+      baseTournament = h.length >= f.length ? h : f;
+    } else {
+      // Різна інформація — склеюємо через " | "
+      baseTournament = `${h} | ${f}`;
+    }
+  } else {
+    baseTournament = feedTournament;
+  }
   const tournament = (seriesInfo && seriesInfo.trim())
     ? (baseTournament ? `${baseTournament} | ${seriesInfo.trim()}` : seriesInfo.trim())
     : baseTournament;
@@ -588,6 +623,10 @@ function buildMatchRow(match, sourceLabel, quarterData, statsData, status, perio
     hftp4: g('Home_FT_Pct_Q4'),       aftp4: g('Away_FT_Pct_Q4'),
  
     url: match.url || '',
+
+    current_season    : (seasonInfo && seasonInfo.current_season) ? seasonInfo.current_season : '',
+    last_season       : (seasonInfo && seasonInfo.last_season)    ? seasonInfo.last_season    : '',
+    last_season_end_dt: (seasonInfo && seasonInfo.last_season_end_date) ? seasonInfo.last_season_end_date : '',
   };
 }
  
@@ -598,10 +637,12 @@ async function extractFsign(context, matchId, sportId = '1') {
   // context — это PersistentContext, переданный из main(). newPage() вызываем напрямую.
  
   const page = await context.newPage();
-  let fsign      = '';
-  let prefix     = '35';
-  let liveStatus = '';
-  let seriesInfo = '';
+  let fsign          = '';
+  let prefix         = '35';
+  let liveStatus     = '';
+  let seriesInfo     = '';
+  let htmlTournament = '';
+  const archiveSeasons = { current_season: '', last_season: '' };
  
   const fsignPromise = new Promise(resolve => {
     context.on('request', req => {
@@ -648,8 +689,14 @@ async function extractFsign(context, matchId, sportId = '1') {
       await page.waitForTimeout(400);
       const read2 = await page.$eval('.detailScore__status .fixedHeaderDuel__detailStatus', el => el.textContent.trim()).catch(() => '');
       let statusText = read2 || read1;
-      console.log(`  [Live Scraper] read1="${read1}" read2="${read2}" using="${statusText}"`);
- 
+
+
+      // Flashscore тепер показує .detailScore__live навіть для завершених матчів.
+      // Якщо текст — "Завершено" або аналог — скидаємо, щоб не потрапило у liveStatus.
+      if (/завершено|finished|ended|закінчено/i.test(statusText)) {
+        statusText = '';
+      }
+
       const htmlSaysBreak = statusText.toLowerCase().includes('перерва');
  
       if (htmlSaysBreak) {
@@ -665,20 +712,15 @@ async function extractFsign(context, matchId, sportId = '1') {
             if (diCheck !== undefined) {
               const diNum = Number(diCheck);
               if (diNum === -1) {
-                // Матч не лайв
-                console.warn(`  [Live Scraper] HTML=Перерва але dc_ DI=-1, ігноруємо`);
-                statusText = '';
-                dcVerified = false;
+                // DI=-1 means clock is stopped — перерва підтверджена
+                // dcVerified remains true — trust the HTML break status
               } else if (diNum >= 0) {
-                // FIX: DI>=0 = активна чверть — перерва вже закінчилась (головна помилка)
-                console.warn(`  [Live Scraper] HTML=Перерва але dc_ DI=${diNum} (активна чверть) — скидаємо`);
+                // DI>=0 = active quarter — the break is already over, DOM is stale
                 statusText = '';
                 dcVerified = false;
               }
             }
-          } catch (e) {
-            console.warn(`  [Live Scraper] dc_ верифікація не вдалась: ${e.message}`);
-          }
+          } catch (e) { /* dc_ verification failed silently */ }
         }
  
         if (dcVerified && statusText) {
@@ -702,11 +744,132 @@ async function extractFsign(context, matchId, sportId = '1') {
         liveStatus = statusText; // "1-а чверть", "2-а чверть" і т.д.
       }
  
-      console.log(`  [Live Scraper] Фінальний статус: "${liveStatus}"`);
+
     }
  
     seriesInfo = await page.$eval('.infoBox__info', el => el.textContent.trim()).catch(() => '');
-    if (seriesInfo) console.log(`  [Series Info] "${seriesInfo}"`);
+
+    // Парсимо назву турніру з HTML-заголовку матчу (wcl-scores-overline-03).
+    // Цей елемент містить повну назву на кшталт "ЛНБ - Плей-оф - Чвертьфінали",
+    // якої може не бути або вона скорочена у KF-полі фіду.
+    // Breadcrumb містить кілька елементів з однаковим data-testid:
+    // "Баскетбол" > "Франція" > "ЛНБ - Плей-оф - Чвертьфінали"
+    // Потрібен саме останній — він містить назву турніру/раунду.
+    htmlTournament = await page.$$eval(
+      '[data-testid="wcl-scores-overline-03"]',
+      els => {
+        const last = els[els.length - 1];
+        return last ? last.textContent.trim() : '';
+      }
+    ).catch(() => '');
+
+
+    // Парсимо архів сезонів турніру через breadcrumb-посилання на сторінці матчу.
+    // Беремо href останнього breadcrumb-посилання (рівень ліги), додаємо /archive/
+    // і робимо прямий HTTP-запит (без Playwright) для отримання списку сезонів.
+    // Потім для останнього (попереднього) сезону отримуємо дату останнього матчу
+    // через прямий запит до flashscore.ninja — так само як і для звичайних матчів.
+    try {
+      const archiveUrl = await page.$$eval(
+        'ol[itemtype*="BreadcrumbList"] a[href], .wcl-breadcrumbList_lC9sI a[href], [data-testid="wcl-breadcrumbsItem"] a[href]',
+        links => {
+          const hrefs = links.map(l => l.getAttribute('href')).filter(Boolean);
+          const last = hrefs[hrefs.length - 1];
+          if (!last) return '';
+          const clean = last.replace(/\/archive\/?$/, '').replace(/\/$/, '');
+          if (clean.startsWith('http')) return clean + '/archive/';
+          return `https://www.flashscore.ua${clean}/archive/`;
+        }
+      ).catch(() => '');
+
+      // Зберігаємо базовий URL ліги (без /archive/) для побудови URL сезону
+      const leagueBaseUrl = archiveUrl
+        ? archiveUrl.replace(/\/archive\/?$/, '')
+        : '';
+
+      if (archiveUrl && fsign) {
+        const archivePage = await context.newPage();
+        const seasons = [];
+        try {
+          await archivePage.goto(archiveUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
+          await archivePage.waitForSelector('[data-testid="wcl-scores-simple-text-01"]', { timeout: 10000 })
+            .catch(() => {});
+
+          // Беремо всі рядки архіву: кожен — посилання <a> що містить span з назвою сезону.
+          // Структура: <a href="/basketball/sport/league[-YYYY-YYYY]/"><span ...>Назва YYYY/YYYY</span></a>
+          // Поточний сезон має href БЕЗ року (/segunda-feb/), решта — з роком (/segunda-feb-2024-2025/).
+          // Рік беремо з тексту span (наприклад "Segunda FEB 2024/2025" → "2024/2025").
+          const seasonLinks = await archivePage.$$eval(
+            'a.archiveTable__column--link',
+            links => links.map(a => ({
+              href: a.getAttribute('href') || '',
+              text: (a.querySelector('[data-testid="wcl-scores-simple-text-01"]') || a).textContent.trim(),
+            }))
+          ).catch(() => []);
+
+          for (const { href, text } of seasonLinks) {
+            const fullUrl = href.startsWith('http')
+              ? href
+              : `https://www.flashscore.ua${href}`;
+            // Рік сезону з тексту: "Segunda FEB 2024/2025" → "2024/2025"
+            const yearMatch = text.match(/(\d{4}[\/\-]\d{4})/);
+            const label = yearMatch ? yearMatch[1].replace('/', '-') : text;
+            seasons.push({ text: label, url: fullUrl });
+          }
+                  console.log('seasons:', JSON.stringify(seasons.slice(0, 3)));
+        } 
+
+        finally {
+          await archivePage.close();
+        }
+
+        // seasons[0] = поточний сезон (href без року), seasons[1] = попередній
+        if (seasons.length > 0) archiveSeasons.current_season = seasons[0].text;
+        if (seasons.length > 1) {
+          archiveSeasons.last_season = seasons[1].text;
+
+          const lastSeasonPageUrl = seasons[1].url.replace(/\/?$/, '') + '/results/';
+          if (lastSeasonPageUrl) {
+            const lastSeasonPage = await context.newPage();
+            try {
+              await lastSeasonPage.goto(lastSeasonPageUrl, { waitUntil: 'domcontentloaded', timeout: 40000 });
+              // На слабкому ВПС DOM може рендеритись після domcontentloaded — чекаємо довше
+              await lastSeasonPage.waitForSelector('.event__time', { timeout: 20000 }).catch(() => {});
+              // Додаткова пауза для стабілізації DOM на слабкому залізі
+              await lastSeasonPage.waitForTimeout(1000);
+
+              // Дата є прямо на сторінці сезону в .event__time (перший текстовий вузол,
+              // без дочірнього div.event__stage). Перший рядок = останній матч за часом.
+              const lastSeasonEndDate = await lastSeasonPage.evaluate(() => {
+                const timeEls = [...document.querySelectorAll('.event__time')];
+                for (const el of timeEls) {
+                  // Беремо тільки перший textNode, ігноруємо вкладені div (event__stage)
+                  for (const node of el.childNodes) {
+                    if (node.nodeType === Node.TEXT_NODE) {
+                      const t = node.textContent.trim();
+                      if (/\d{2}\.\d{2}\.\d{4}/.test(t)) return t;
+                    }
+                  }
+                }
+                return '';
+              }).catch(() => '');
+
+              if (lastSeasonEndDate) {
+                archiveSeasons.last_season_end_date = lastSeasonEndDate;
+              } else {
+                console.warn('⚠ last_season_end_date: .event__time not found on', lastSeasonPageUrl);
+              }
+            } catch (e) {
+              console.warn('⚠ last_season_end_date fetch error:', e.message);
+            } finally {
+              await lastSeasonPage.close();
+            }
+          }
+        }
+      }
+    } catch (archErr) {
+      // Тиха помилка — архів не критичний
+    }
  
   } catch (e) {
     console.error('fsign/live-parse error:', e.message);
@@ -717,7 +880,7 @@ async function extractFsign(context, matchId, sportId = '1') {
     // Чиститься в main() finally після mainContext.close().
   }
  
-  return { fsign, prefix, liveStatus, seriesInfo };
+  return { fsign, prefix, liveStatus, seriesInfo, htmlTournament, archiveSeasons };
 }
  
 // ─── Enrich matches with dc_ + sur + st feeds ─────────────────────────────────
@@ -743,7 +906,6 @@ async function enrichMatches(matches, sportId, fsign, prefix) {
         quarterData: parseSurFeed(rawSur),
         statsData  : mergedStats,
       });
-      console.log(`  ✓ ${m.homeName} vs ${m.awayName} (${m.matchId})`);
     }));
   }
   return enriched;
@@ -816,11 +978,9 @@ async function main() {
     console.log('--- Отримання fsign через Playwright... ---');
  
     // FIX: pass mainContext directly — extractFsign no longer creates its own context
-    const { fsign, prefix, liveStatus, seriesInfo } = await extractFsign(mainContext, matchId, sportId);
-    console.log(`fsign: ${fsign}, prefix: ${prefix}`);
+    const { fsign, prefix, liveStatus, seriesInfo, htmlTournament, archiveSeasons } = await extractFsign(mainContext, matchId, sportId);
     if (!fsign) throw new Error('❌ Could not capture fsign');
  
-    console.log('--- Завантаження df_hh_... ---');
     const rawHh = await fetchFeed(`df_hh_${sportId}_${matchId}`, fsign, prefix);
     if (!rawHh || rawHh.length < 50) throw new Error('❌ Empty df_hh_ response');
  
@@ -830,14 +990,10 @@ async function main() {
     const awaySlice = awayMatches.slice(0, Math.min(options.limit,    awayMatches.length));
     const h2hSlice  = h2hMatches.slice(0,  Math.min(options.h2hLimit, h2hMatches.length));
  
-    console.log(`Teams: ${homeName} vs ${awayName}`);
-    console.log(`Home: ${homeMatches.length}, Away: ${awayMatches.length}, H2H: ${h2hMatches.length}`);
- 
     const mainMatchStub = { matchId, homeName, awayName };
     const allMatches = [mainMatchStub, ...homeSlice, ...awaySlice, ...h2hSlice];
     const uniqueMatches = [...new Map(allMatches.map(m => [m.matchId, m])).values()];
  
-    console.log(`\n--- Збагачення ${uniqueMatches.length} матчів (dc_ + sur + st)... ---`);
     const enrichMap = await enrichMatches(uniqueMatches, sportId, fsign, prefix);
  
     const enrich = id => {
@@ -848,6 +1004,10 @@ async function main() {
       let status = statusStr;
       if (statusStr === 'Live' && liveMinute !== null) {
         status = `Live (${liveMinute}')`;
+      } else if (statusStr === 'Break') {
+        status = 'Live (Перерва)';
+      } else if (statusStr === 'Not Started') {
+        status = 'Not Started';
       }
       return { status, quarterData: quarterData || {}, statsData: statsData || {} };
     };
@@ -879,14 +1039,13 @@ async function main() {
       homeId: mainMatch.homeTeamId ?? homeMatches[0]?.homeTeamId ?? null,
       awayId: mainMatch.awayTeamId ?? awayMatches[0]?.awayTeamId ?? null,
     };
-    console.log(`  participants: homeId=${participants.homeId}, awayId=${participants.awayId}`);
 
     // Build per-match filenames so concurrent jobs never collide.
     // Worker supplies --home / --away slugs; interactive mode falls back to slugify(name).
     const resolvedHomeSlug = options.homeSlug ?? slugify(homeName || 'home');
     const resolvedAwaySlug = options.awaySlug ?? slugify(awayName || 'away');
 
-    const DATA_DIR      = path.join(__dirname, '..', 'data');
+    const DATA_DIR = path.join(__dirname, 'data');
     const lineFilename  = `line_result_${matchId}.json`;
     const dataBaseName  = options.fileName
       ? sanitizeFileName(options.fileName)
@@ -895,8 +1054,7 @@ async function main() {
     fs.mkdirSync(DATA_DIR, { recursive: true });
 
     // fetchAndSaveLines now writes directly to DATA_DIR with the isolated filename.
-    await fetchAndSaveLines(matchId, DATA_DIR, participants, lineFilename);
-    console.log(`  ✅ ${lineFilename} → ${DATA_DIR}`);
+    await fetchAndSaveLines(matchId, DATA_DIR, participants, lineFilename, homeName, awayName, mainContext, liveStatus);
  
     if (!homeName || !awayName) {
       if (mainMatch.homeName) homeName = mainMatch.homeName;
@@ -909,7 +1067,6 @@ async function main() {
         if (!awayName) awayName = ref.awayName;
       }
     }
-    console.log(`Resolved names for file: ${homeName} vs ${awayName}`);
  
     const { dcStatus: dcMainStatus, quarterData: mainQ, statsData: mainS } =
       enrichMap.get(matchId) || { dcStatus: { statusStr: '', liveMinute: null }, quarterData: {}, statsData: {} };
@@ -926,6 +1083,12 @@ async function main() {
       } else {
         mainStatus = `Live (${liveStatus})`;
       }
+    } else if (dcStatusStr === 'Break') {
+      // DI=-1 with scores present but no HTML liveStatus — game is at a break
+      // (halftime or similar). Treat as live so quarter scores are used.
+      mainStatus = 'Live (Перерва)';
+    } else if (dcStatusStr === 'Finished' || dcStatusStr === 'Not Started') {
+      mainStatus = dcStatusStr;
     } else if (dcStatusStr) {
       mainStatus = dcStatusStr === 'Live' && dcMinute !== null
         ? `Live (${dcMinute}')`
@@ -937,7 +1100,7 @@ async function main() {
  
     const payload = [
       sep('Main Match'),
-      buildMatchRow(mainMatch, 'MAIN MATCH', mainQ, mainS, mainStatus, liveStatus, seriesInfo),
+      buildMatchRow(mainMatch, 'MAIN MATCH', mainQ, mainS, mainStatus, liveStatus, seriesInfo, htmlTournament, archiveSeasons),
       blank(),
       sep(`${homeName} Last ${homeSlice.length}`),
       ...homeSlice.map(m => {
@@ -961,18 +1124,15 @@ async function main() {
     // Зберігаємо payload як JSON у data/ з ізольованим ім'ям (matchId у назві)
     const payloadPath = path.join(DATA_DIR, `${dataBaseName}.json`);
     fs.writeFileSync(payloadPath, JSON.stringify(payload, null, 2), 'utf-8');
-    console.log(`✅ Data для Python: ${payloadPath}`);
     fs.appendFileSync(
       path.join(__dirname, 'log.txt'),
       `[${new Date().toLocaleString('ru-RU')}] ${payloadPath}\n`
     );
-    console.log(`\n✅ Success! File saved: ${payloadPath}`);
  
   } finally {
     await mainContext.close();
     // FIX: clean up temp dirs after context is fully closed
     try { execSync(`rm -rf ${RUN_TMP_DIR} /tmp/pw_cache_${process.pid} 2>/dev/null || true`); } catch {}
-    console.log('--- Process finished ---');
     process.exit(0);
   }
 }

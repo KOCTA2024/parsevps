@@ -225,43 +225,6 @@ def safe_int(v, default=0):
     except (ValueError, TypeError):
         return default
 
-_DT_FORMATS = (
-    "%d.%m.%Y %H:%M:%S", "%Y-%m-%dT%H:%M:%S",
-    "%Y-%m-%d %H:%M:%S", "%d.%m.%Y %H:%M",
-    "%d.%m.%Y", "%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y",
-)
-
-def _parse_dt_to_unix(raw_dt) -> Optional[int]:
-    """Parse a date/datetime string to a Unix timestamp (int). Returns None on failure."""
-    if not raw_dt:
-        return None
-    from datetime import datetime, timezone
-    s = str(raw_dt).strip()
-    # Already a plain unix integer/float
-    try:
-        v = float(s)
-        if v > 1_000_000_000:
-            return int(v)
-    except ValueError:
-        pass
-    for fmt in _DT_FORMATS:
-        try:
-            dt = datetime.strptime(s, fmt)
-            # Treat naive datetimes as UTC
-            return int(dt.replace(tzinfo=timezone.utc).timestamp())
-        except ValueError:
-            pass
-    return None
-
-
-def _unix_to_readable(ts: Optional[int]) -> Optional[str]:
-    """Convert Unix timestamp to 'YYYY-MM-DD HH:MM:SS' (UTC). Returns None if ts is None."""
-    if ts is None:
-        return None
-    from datetime import datetime, timezone
-    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-
-
 def rate(hits: int, n: int) -> float:
     return round(hits / n, 3) if n > 0 else 0.0
 
@@ -333,11 +296,8 @@ def parse_records(raw: list) -> dict:
     h2h_hist = []
 
     current_section = None
-    _recent_team_src = ""
 
     for rec in raw:
-        if not isinstance(rec, dict):
-            continue
         # Both "src" (data rows) and "Source" (header rows) must be checked
         src = rec.get("src", "") or rec.get("Source", "") or ""
         src_up = src.upper()
@@ -362,15 +322,6 @@ def parse_records(raw: list) -> dict:
                 elif current_section == "team_a":
                     current_section = "team_b"
             continue
-
-        # Records with "(Recent)" src carry real data — switch section on team name change
-        if re.search(r"\(RECENT\)", src_up):
-            if not _recent_team_src:
-                # First (Recent) record ever — this is team_a
-                current_section = "team_a"
-                _recent_team_src = src_up
-            elif src_up != _recent_team_src and current_section == "team_a":
-                current_section = "team_b"
 
         # H2H section header: {"Source": "--- HEAD TO HEAD ---"} or src contains "HEAD TO HEAD"
         if "HEAD TO HEAD" in src_up or (src_up.strip("-– ") == "HEAD TO HEAD"):
@@ -1355,6 +1306,7 @@ def history_at_least_one_quarter(rows: list) -> dict:
 # STEP 4 — conditional HT scanner
 # ─────────────────────────────────────────────
 def ht_margin_bucket(margin: int) -> str:
+    if margin is None:  return "tie"
     if margin <= -20:   return "trail_20+"
     if margin <= -15:   return "trail_15_19"
     if margin <= -10:   return "trail_10_14"
@@ -2270,12 +2222,10 @@ def build_qpf_qpa_rows(rows: list) -> list:
     result = []
     for r in rows:
         result.append({
-            "q_pf": [safe_float(r.get("q1_team")), safe_float(r.get("q2_team")),
-                     safe_float(r.get("q3_team")), safe_float(r.get("q4_team"))],
-            "q_pa": [safe_float(r.get("q1_opp")),  safe_float(r.get("q2_opp")),
-                     safe_float(r.get("q3_opp")),  safe_float(r.get("q4_opp"))],
-            "pf": safe_float(r.get("team_points")),
-            "pa": safe_float(r.get("opp_points")),
+            "q_pf": [r["q1_team"], r["q2_team"], r["q3_team"], r["q4_team"]],
+            "q_pa": [r["q1_opp"],  r["q2_opp"],  r["q3_opp"],  r["q4_opp"]],
+            "pf": r["team_points"],
+            "pa": r["opp_points"],
         })
     return result
 
@@ -2959,43 +2909,6 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
         if row:
             h2h_rows.append(row)
 
-    # ── Idle period: days between last team match and current live match ──
-    from datetime import datetime, timezone as _tz
-    _live_ts = int(datetime.now(_tz.utc).timestamp())
-
-    def _last_match_ts(raw_rows: list, skip_mid: str) -> Optional[int]:
-        """Return Unix ts of the most recent finished match in raw_rows (excluding current)."""
-        best_ts = None
-        for rec in raw_rows:
-            if rec.get("mid") == skip_mid:
-                continue
-            ts = _parse_dt_to_unix(rec.get("dt"))
-            if ts is not None:
-                if best_ts is None or ts > best_ts:
-                    best_ts = ts
-        return best_ts
-
-    _last_ts_a = _last_match_ts(rows_a_raw, match_id)
-    _last_ts_b = _last_match_ts(rows_b_raw, match_id)
-    import sys as _sys
-    _sys.stderr.write(f"[idle_debug] rows_a_raw={len(rows_a_raw)} last_ts_a={_last_ts_a} rows_b_raw={len(rows_b_raw)} last_ts_b={_last_ts_b}\n")
-    if rows_a_raw:
-        _sys.stderr.write(f"[idle_debug] a[0] mid={rows_a_raw[0].get('mid')!r} dt={rows_a_raw[0].get('dt')!r}\n")
-
-    def _idle_days(live_ts, last_ts) -> Optional[float]:
-        if live_ts is None or last_ts is None:
-            return None
-        diff = live_ts - last_ts
-        return round(diff / 86400, 2)
-
-    _idle_a = _idle_days(_live_ts, _last_ts_a)
-    _idle_b = _idle_days(_live_ts, _last_ts_b)
-
-    _idle_period = {
-        "team_a_idle_days": _idle_a,
-        "team_b_idle_days": _idle_b,
-    }
-
     # Gates
     sample  = check_sample_gate(rows_a, rows_b, h2h_rows)
     basis_n = (
@@ -3275,70 +3188,6 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
         rows_b=rows_b,
     )
 
-    # ── Minute calculations for meta ────────────────────────────────────
-    _tour_for_min = main.get("tour", "")
-    _st_for_min   = main.get("st", "")
-    _q_dur        = quarter_duration_minutes(_tour_for_min)
-    _is_nba       = (_q_dur == 12)
-
-    # Parse current minute from status string (supports OT via quarter_num > 4)
-    def _parse_minutes_played_ot(st: str, q: int) -> float:
-        """Like parse_minutes_played but supports OT quarters (num > 4)."""
-        if not st:
-            return float(2 * q)
-        st_up = st.upper()
-        if "FINISHED" in st_up:
-            return float(4 * q)
-        if "HALFTIME" in st_up or st_up.strip() in ("HT", "HALF TIME", "HALF-TIME"):
-            return float(2 * q)
-        # Ukrainian/Russian with OT support
-        m = re.search(r'(\d+)[-–\s]*[а-яА-Я]*\s*(?:чверть|квартал|четверть|чв|кв)\.?\s*(\d+)[\'′]?', st, re.IGNORECASE)
-        if m:
-            qn = int(m.group(1)); qm = int(m.group(2))
-            return float((qn - 1) * q + qm)
-        m = re.search(r'(?:Q|Quarter|Qtr|Quar)\s*(\d+)\s*(\d+)[\'′]?', st, re.IGNORECASE)
-        if m:
-            qn = int(m.group(1)); qm = int(m.group(2))
-            return float((qn - 1) * q + qm)
-        m = re.search(r'(\d+)[-–\s]*[а-яА-Я]*\s*(?:чверть|квартал|четверть|чв|кв)\.?', st, re.IGNORECASE)
-        if not m:
-            m = re.search(r'(?:Q|Quarter|Qtr|Quar)\s*(\d+)', st, re.IGNORECASE)
-        if m:
-            qn = int(m.group(1))
-            return float((qn - 1) * q)
-        return float(2 * q)
-
-    def _parse_quarter_num(st: str) -> int:
-        """Extract current quarter number from status string (supports OT)."""
-        if not st:
-            return 2
-        st_up = st.upper()
-        if "FINISHED" in st_up:
-            return 4
-        if "HALFTIME" in st_up or st_up.strip() in ("HT", "HALF TIME", "HALF-TIME"):
-            return 2
-        m = re.search(r'(\d+)[-–\s]*[а-яА­Я]*\s*(?:чверть|квартал|четверть|чв|кв)\.?', st, re.IGNORECASE)
-        if not m:
-            m = re.search(r'(?:Q|Quarter|Qtr|Quar)\s*(\d+)', st, re.IGNORECASE)
-        if m:
-            return int(m.group(1))
-        return 2
-
-    _total_min_played = _parse_minutes_played_ot(_st_for_min, _q_dur)
-    _q_num            = _parse_quarter_num(_st_for_min)
-    # n = number of completed quarters (quarters already fully played)
-    # For OT: q_num > 4 means we are in an extra period
-    _n_completed      = max(0, _q_num - 1)
-    # Total regulation time accounts for OT: n*q_dur for n quarters already completed
-    # plus current quarter in progress; but total_min_left uses n_completed * q_dur as base
-    _regulation_total = float(4 * _q_dur)  # standard regulation
-    _total_min_played_f = round(_total_min_played, 1)
-    _total_min_left_f   = round(max(0.0, _regulation_total - _total_min_played), 1)
-
-    # Quarter minute = minutes played within the current quarter
-    _quarter_min_played_f = round(_total_min_played - _n_completed * _q_dur, 1) if _q_num >= 1 else 0.0
-    _quarter_min_left_f   = round(max(0.0, float(_q_dur) - _quarter_min_played_f), 1)
-
     # Build final JSON package
     return {
         "sample_strength": sample_strength,
@@ -3356,21 +3205,7 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
             "current_total": hs + aws,
             "margin_team_a": margin_team_a,
             "url": main.get("url", ""),
-            # ── Minute tracking ──────────────────────────────────────────
-            "quarter_min_played": _quarter_min_played_f,
-            "quarter_min_left":   _quarter_min_left_f,
-            "total_min_played":   _total_min_played_f,
-            "total_min_left":     _total_min_left_f,
-            # ── Idle period (days since last match per team) ──────────────
-            "idle_period": _idle_period,
-            # ── Season boundary ──────────────────────────────────────────
-            "last_season_end_dt": main.get("last_season_end_dt"),
-            "days_since_season_end": (
-                (datetime.now() - datetime.strptime(main["last_season_end_dt"], "%d.%m.%Y")).days
-                if main.get("last_season_end_dt") else None
-            ),
         },
-        "idle_period": _idle_period,
         "sample_gate": sample,
         "sample_strength": sample_strength,
         # live_stat_support (вычисляется из данных текущего матча vs исторических норм)
@@ -3629,6 +3464,7 @@ def quarter_pattern_analysis(rows: list, team_label: str = "team") -> dict:
 # ═══════════════════════════════════════════════════════════════════════
 
 def _margin_bucket_label(margin: int) -> str:
+    if margin is None: return "tie"
     a = abs(margin)
     if a == 0:    return "tie"
     if a <= 4:    return "1-4"
@@ -3638,7 +3474,7 @@ def _margin_bucket_label(margin: int) -> str:
     return "20+"
 
 def _total_bucket_label(total: float, hist_totals: list) -> str:
-    if not hist_totals:
+    if not hist_totals or total is None:
         return "normal"
     p25 = percentile(hist_totals, 25)
     p75 = percentile(hist_totals, 75)
@@ -3659,6 +3495,7 @@ def _quarter_win_state_full(row: dict) -> str:
     return f"{wins}-{losses}"
 
 def _lead_trail_state(margin: int) -> str:
+    if margin is None:  return "close_game"
     if margin >= 10:  return "blowout"
     if margin >= 1:   return "team_leading"
     if margin == 0:   return "close_game"
@@ -6856,29 +6693,6 @@ def build_result_json(match_result: dict, lines_data: dict = None,
             "q2":         meta.get("q2"),
             "h1_total":   meta.get("h1_total"),
             "current_total": meta.get("current_total"),
-            # ── Minute tracking ─────────────────────────────────────────
-            "quarter_min_played": meta.get("quarter_min_played"),
-            "quarter_min_left":   meta.get("quarter_min_left"),
-            "total_min_played":   meta.get("total_min_played"),
-            "total_min_left":     meta.get("total_min_left"),
-            # ── Idle period ──────────────────────────────────────────────
-            "idle_period": meta.get("idle_period") or r.get("idle_period"),
-            # ── Season boundary ──────────────────────────────────────────
-            "last_season_end_dt": meta.get("last_season_end_dt"),
-            "days_since_season_end": meta.get("days_since_season_end"),
-        },
-
-        # ── raw_lines — сырые линии от букмекера (до обогащения) ────────────
-        "raw_lines": {
-            "match_total":    raw_lines.get("match_total", []),
-            "team_it":        raw_lines.get("team_it", []),
-            "quarter_total":  raw_lines.get("quarter_total", []),
-            "half_total":     raw_lines.get("half_total", []),
-            "match_handicap": raw_lines.get("match_handicap", []),
-            "match_1x2":      raw_lines.get("match_1x2", []),
-            "other":          raw_lines.get("other", []),
-            "home_ind_total": raw_lines.get("home_ind_total", []),
-            "away_ind_total": raw_lines.get("away_ind_total", []),
         },
 
         # ── logic — all computed analysis blocks ─────────────────────────
@@ -6972,137 +6786,31 @@ def run(filepath: str, lines_path: str) -> list:
     return results
 
 
-def _discover_files_in_data(data_dir: Path):
-    """
-    Auto-discover h2h_file and line_result_file inside data_dir.
-
-    Rules:
-      - line_result file : JSON whose name starts with 'line_result'
-                           Supports both:
-                             line_result.json          (no id)
-                             line_result_<id>.json     (with id)
-                           The match id is extracted from the h2h filename.
-      - h2h (main) file  : most recently modified JSON in data_dir whose name
-                           does NOT start with 'line_result'.
-
-    Returns (h2h_path: str, line_result_path: str, match_id: str) or raises.
-    """
-    if not data_dir.is_dir():
-        raise FileNotFoundError(f"data directory not found: {data_dir}")
-
-    json_files = list(data_dir.glob("*.json"))
-
-    line_result_path = None
-    h2h_candidates = []
-    match_id = "unknown"
-
-    for f in json_files:
-        name = f.name
-        if name.startswith("line_result"):
-            # Accept both line_result.json and line_result_<id>.json
-            if line_result_path is None:
-                line_result_path = str(f)
-                # Try to extract id from line_result_<id>.json
-                m = re.match(r'line_result_([A-Za-z0-9]+)\.json$', name)
-                if m:
-                    match_id = m.group(1)
-        else:
-            h2h_candidates.append(f)
-
-    # Pick the most recently modified h2h file
-    if h2h_candidates:
-        h2h_candidates.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-        h2h_path = str(h2h_candidates[0])
-    else:
-        h2h_path = None
-
-    if h2h_path is None:
-        raise FileNotFoundError(
-            f"No main (h2h) JSON file found in {data_dir} "
-            "(expected a .json not starting with 'line_result')"
-        )
-    if line_result_path is None:
-        raise FileNotFoundError(
-            f"No line_result*.json file found in {data_dir}"
-        )
-
-    # Extract match_id from h2h filename if not yet found
-    if match_id == "unknown":
-        # Try full stem as id (e.g. Monako_U21_vs_Bur_U21 → use stem directly)
-        stem = Path(h2h_path).stem
-        match_id = stem if stem else "unknown"
-
-    return h2h_path, line_result_path, match_id
-
-
 def main():
-    """
-    Two invocation modes:
+    data_dir = Path(__file__).parent / "data"
+    print(f"[math_script] __file__  : {Path(__file__).resolve()}", file=sys.stderr)
+    print(f"[math_script] data_dir  : {data_dir.resolve()}", file=sys.stderr)
+    if not data_dir.is_dir():
+        print(f"[math_script] ERROR: ./data directory not found", file=sys.stderr)
+        sys.exit(1)
 
-    1. No arguments (auto-discover):
-         python math_script.py
-       Looks in ./data/ for:
-         - h2h file    : first *.json NOT starting with 'line_result_'
-         - lines file  : first line_result_<id>.json
+    # Find h2h file: first .json that does NOT start with "line_result"
+    candidates = [
+        p for p in sorted(data_dir.glob("*.json"))
+        if not p.name.startswith("line_result")
+    ]
+    if not candidates:
+        print(f"[math_script] ERROR: no suitable .json file found in ./data/", file=sys.stderr)
+        sys.exit(1)
 
-    2. Explicit targets:
-         python math_script.py --targets <h2h_file> <line_result_file>
-       Both paths must be provided explicitly.
+    h2h_path = str(candidates[0])
+    line_result_path = str(data_dir / "line_result.json")
 
-    Legacy positional mode (two plain args) is still supported for
-    backwards compatibility with existing callers:
-         python math_script.py <h2h_file> <line_result_file>
-    """
-    args = sys.argv[1:]
+    print(f"[math_script] main file   : {h2h_path}")
+    print(f"[math_script] lines file  : {line_result_path}")
 
-    if args and args[0] == "--targets":
-        # ── Explicit targets mode ────────────────────────────────────────
-        if len(args) < 3:
-            print(
-                "Usage: math_script.py --targets <h2h_file> <line_result_file>",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        h2h_path         = args[1]
-        line_result_path = args[2]
-
-        for fpath in (h2h_path, line_result_path):
-            if not os.path.isfile(fpath):
-                print(f"[math_script] ERROR: file not found: {fpath}", file=sys.stderr)
-                sys.exit(1)
-
-        m = re.search(r'_([A-Za-z0-9]+)\.json$', h2h_path)
-        match_id = m.group(1) if m else "unknown"
-
-    elif len(args) >= 2 and not args[0].startswith("--"):
-        # ── Legacy positional mode ───────────────────────────────────────
-        h2h_path         = args[0]
-        line_result_path = args[1]
-
-        for fpath in (h2h_path, line_result_path):
-            if not os.path.isfile(fpath):
-                print(f"[math_script] ERROR: file not found: {fpath}", file=sys.stderr)
-                sys.exit(1)
-
-        m = re.search(r'_([A-Za-z0-9]+)\.json$', h2h_path)
-        match_id = m.group(1) if m else "unknown"
-
-    else:
-        # ── Auto-discover mode ───────────────────────────────────────────
-        data_dir = Path(__file__).parent / "data"
-        try:
-            h2h_path, line_result_path, match_id = _discover_files_in_data(data_dir)
-        except FileNotFoundError as e:
-            print(f"[math_script] ERROR: {e}", file=sys.stderr)
-            print(
-                "Usage: math_script.py [--targets <h2h_file> <line_result_file>]",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        print(
-            f"[math_script] Auto-discovered: h2h={h2h_path}, lines={line_result_path}",
-            file=sys.stderr,
-        )
+    m = re.search(r'_([A-Za-z0-9]+).json$', h2h_path)
+    match_id = m.group(1) if m else 'unknown'
 
     print(f"[math_script] Processing match {match_id}")
 
@@ -7128,6 +6836,7 @@ def main():
             for mr, p, rb in results
         ]
 
+    # Write result back to the same h2h file (overwrite), like the original version
     output_path = Path(h2h_path)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(merged, f, ensure_ascii=False, indent=2)
