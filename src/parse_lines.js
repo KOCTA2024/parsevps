@@ -114,80 +114,159 @@ function marketsForStatus(_liveStatus = '') {
 function classifyMarket(name) {
   const n = name.toLowerCase().trim();
 
-  // ── Win / 1x2 ──
+  // ── Helpers: quarter / half keyword detection ──────────────────────────────
+  // Centralised so every market type uses the same detection logic.
+  // Covers all known betking label formats:
+  //   "1-а чверть", "1 чверть", "перша чверть", "1-ї чверті", "1'ї чверті",
+  //   "чверть 1", "q1" (Latin fallback), and numeric-prefix variants ("1 чверть:").
+
+  function isQ1(s) {
+    return s.includes('перш') && s.includes('чверт') ||
+           s.includes('1-а чверт') || s.includes('1-ї чверт') ||
+           s.includes("1'ї чверт") || s.includes('1 чверт') ||
+           s.includes('чверт') && /\b1\b/.test(s) ||
+           /\bq1\b/.test(s);
+  }
+  function isQ2(s) {
+    return s.includes('друг') && s.includes('чверт') ||
+           s.includes('2-а чверт') || s.includes('2-ї чверт') ||
+           s.includes("2'ї чверт") || s.includes('2 чверт') ||
+           s.includes('чверт') && /\b2\b/.test(s) ||
+           /\bq2\b/.test(s);
+  }
+  function isQ3(s) {
+    return s.includes('трет') && s.includes('чверт') ||
+           s.includes('3-я чверт') || s.includes('3-ї чверт') ||
+           s.includes("3'ї чверт") || s.includes('3 чверт') ||
+           s.includes('чверт') && /\b3\b/.test(s) ||
+           /\bq3\b/.test(s);
+  }
+  function isQ4(s) {
+    return s.includes('четверт') && s.includes('чверт') ||
+           s.includes('4-а чверт') || s.includes('4-та чверт') ||
+           s.includes('4-ї чверт') || s.includes("4'ї чверт") ||
+           s.includes('4 чверт') ||
+           s.includes('чверт') && /\b4\b/.test(s) ||
+           /\bq4\b/.test(s);
+  }
+
+  // Half detection — covers "1-а половина", "1 половина", "перша половина",
+  // "тотал 1-ї половини", "1'ї половини", etc.
+  function isH1(s) {
+    return s.includes('перш') && s.includes('полов') ||
+           s.includes('1-а полов') || s.includes('1-ї полов') ||
+           s.includes("1'ї полов") || s.includes('1 полов') ||
+           s.includes('полов') && /\b1\b/.test(s);
+  }
+  function isH2(s) {
+    return s.includes('друг') && s.includes('полов') ||
+           s.includes('2-а полов') || s.includes('2-ї полов') ||
+           s.includes("2'ї полов") || s.includes('2 полов') ||
+           s.includes('полов') && /\b2\b/.test(s);
+  }
+
+  const hasTotal   = n.includes('тотал');
+  const hasQuarter = n.includes('чверт') || /\bq[1-4]\b/.test(n);
+  const hasHalf    = n.includes('полов');
+
+  // ── Win / 1x2 ──────────────────────────────────────────────────────────────
   if (n.includes('переможець') || n === 'п1п2' || n === 'п1 п2' || n === 'перемога') return 'match_1x2';
 
-  // ── Quarter 1x2 (e.g. "Третя чверть - 1x2") ──
-  if ((n.includes('перша чверть') || n.includes('1-а чверть') || n.includes('1 чверть')) && n.includes('1x2')) return 'quarter_1x2_q1';
-  if ((n.includes('друга чверть') || n.includes('2-а чверть') || n.includes('2 чверть')) && n.includes('1x2')) return 'quarter_1x2_q2';
-  if ((n.includes('третя чверть') || n.includes('3-я чверть') || n.includes('3 чверть') || n.includes('третя')) && n.includes('1x2')) return 'quarter_1x2_q3';
-  if ((n.includes('четверта чверть') || n.includes('4-а чверть') || n.includes('4 чверть') || n.includes('4-та чверть') || n.includes('четверта')) && n.includes('1x2')) return 'quarter_1x2_q4';
+  // ── Quarter 1x2 — must be before generic quarter checks ───────────────────
+  if (n.includes('1x2') && hasQuarter) {
+    if (isQ1(n)) return 'quarter_1x2_q1';
+    if (isQ2(n)) return 'quarter_1x2_q2';
+    if (isQ3(n)) return 'quarter_1x2_q3';
+    if (isQ4(n)) return 'quarter_1x2_q4';
+  }
 
-  // ── Quarter totals ──
-  if (n.includes('тотал 1-ї чверті') || n.includes("тотал 1'ї чверті") || n.includes('тотал 1 чверті')) return 'quarter_total_q1';
-  if (n.includes('тотал 2-ї чверті') || n.includes("тотал 2'ї чверті") || n.includes('тотал 2 чверті')) return 'quarter_total_q2';
-  if (n.includes('тотал 3-ї чверті') || n.includes("тотал 3'ї чверті") || n.includes('тотал 3 чверті')) return 'quarter_total_q3';
-  if (n.includes('тотал 4-ї чверті') || n.includes("тотал 4'ї чверті") || n.includes('тотал 4 чверті')) return 'quarter_total_q4';
+  // ── Quarter draw-no-bet ────────────────────────────────────────────────────
+  if (n.includes('нічия без ставки') && hasQuarter) {
+    if (isQ1(n)) return 'quarter_dnb_q1';
+    if (isQ2(n)) return 'quarter_dnb_q2';
+    if (isQ3(n)) return 'quarter_dnb_q3';
+    if (isQ4(n)) return 'quarter_dnb_q4';
+  }
 
-  // ── Quarter draw-no-bet ──
-  if ((n.includes('перша чверть') || n.includes('1-а чверть') || n.includes('1 чверть')) && n.includes('нічия без ставки')) return 'quarter_dnb_q1';
-  if ((n.includes('друга чверть') || n.includes('2-а чверть') || n.includes('2 чверть')) && n.includes('нічия без ставки')) return 'quarter_dnb_q2';
-  if ((n.includes('третя чверть') || n.includes('3-я чверть') || n.includes('3 чверть')) && n.includes('нічия без ставки')) return 'quarter_dnb_q3';
-  if ((n.includes('четверта чверть') || n.includes('4-а чверть') || n.includes('4 чверть') || n.includes('4-та чверть')) && n.includes('нічия без ставки')) return 'quarter_dnb_q4';
-
-  // ── Quarter "both teams score N" (e.g. "4 чверть: обидві команди наберуть N очок") ──
+  // ── Quarter "both teams score N" ───────────────────────────────────────────
   if (n.includes('обидві команди наберуть')) {
-    if (n.startsWith('1') || n.includes('перша чверть') || n.includes('1-а чверть')) return 'quarter_btts_q1';
-    if (n.startsWith('2') || n.includes('друга чверть') || n.includes('2-а чверть'))  return 'quarter_btts_q2';
-    if (n.startsWith('3') || n.includes('третя чверть') || n.includes('3-я чверть'))  return 'quarter_btts_q3';
-    if (n.startsWith('4') || n.includes('четверта чверть') || n.includes('4'))         return 'quarter_btts_q4';
+    if (isQ1(n) || n.startsWith('1')) return 'quarter_btts_q1';
+    if (isQ2(n) || n.startsWith('2')) return 'quarter_btts_q2';
+    if (isQ3(n) || n.startsWith('3')) return 'quarter_btts_q3';
+    if (isQ4(n) || n.startsWith('4')) return 'quarter_btts_q4';
     return 'quarter_btts';
   }
 
-  // ── Quarter race-to (e.g. "Четверта чверть - гонка до 15 очок") ──
+  // ── Quarter race-to ────────────────────────────────────────────────────────
   if (n.includes('гонка до')) {
-    if (n.includes('перша чверть') || n.includes('1-а чверть') || n.includes('1 чверть')) return 'quarter_race_q1';
-    if (n.includes('друга чверть') || n.includes('2-а чверть') || n.includes('2 чверть')) return 'quarter_race_q2';
-    if (n.includes('третя чверть') || n.includes('3-я чверть') || n.includes('3 чверть')) return 'quarter_race_q3';
-    if (n.includes('четверта чверть') || n.includes('4-а чверть') || n.includes('4 чверть') || n.includes('четверта')) return 'quarter_race_q4';
+    if (isQ1(n)) return 'quarter_race_q1';
+    if (isQ2(n)) return 'quarter_race_q2';
+    if (isQ3(n)) return 'quarter_race_q3';
+    if (isQ4(n)) return 'quarter_race_q4';
     return 'match_race';
   }
 
-  // ── Win margin (e.g. "Перемога з різницею (вкл. овертайм)") ──
+  // ── Win margin ─────────────────────────────────────────────────────────────
   if (n.includes('перемога з різницею')) return 'win_margin';
 
-  // ── Half totals ──
-  if (n.includes('тотал 1-ї половини') || n.includes('тотал першої половини')) return 'half_total_h1';
-  if (n.includes('тотал 2-ї половини') || n.includes('тотал другої половини')) return 'half_total_h2';
-  // note: bare "1 половина" / "2 половина" now handled under last_digit below first, catch below
-  if (n.includes('1-а половина') && n.includes('тотал')) return 'half_total_h1';
-  if (n.includes('2-а половина') && n.includes('тотал')) return 'half_total_h2';
-
-  // ── Half last-digit / digit markets ──
-  // (e.g. "2-а половина - Сума останніх цифр обох команд",
-  //       "2-а половина - Остання цифра Ферро",
-  //       "Ферро Остання цифра рахунку (вкл. овертайм)")
+  // ── Last digit / digit sum — must be BEFORE half/total catches ─────────────
+  // (e.g. "2-а половина - Остання цифра Ферро" must NOT fall into half_total)
   if (n.includes('остання цифра') || n.includes('сума останніх цифр')) {
-    if (n.includes('1-а половина') || n.includes('1 половина')) return 'half_last_digit_h1';
-    if (n.includes('2-а половина') || n.includes('2 половина')) return 'half_last_digit_h2';
+    if (isH1(n)) return 'half_last_digit_h1';
+    if (isH2(n)) return 'half_last_digit_h2';
     return 'last_digit';
   }
 
-  // ── Individual totals — must come BEFORE generic 'тотал' ──
+  // ── Individual totals — before generic тотал catch ────────────────────────
+  // Covers:
+  //   "Індивідуальний тотал Ферро"     → classic form
+  //   "Ірак Тотал очків (вкл. овертайм)" → team-name prefix + "тотал очків"
+  //   "Тотал очків Ірак"               → "тотал очків" + team-name suffix
+  // NOTE: plain "Тотал очків (вкл. овертайм)" without a team name prefix
+  //       is also captured here; ind_total handler will fail to resolve the team
+  //       and will log a warning — acceptable, since we never want it in match_total.
   if (n.includes('індивідуальний тотал') || n.includes('тотал очків')) return 'ind_total';
 
-  // ── Handicap ──
+  // ── Handicap ───────────────────────────────────────────────────────────────
+  // Quarter/half handicap MUST be checked before the match_handicap catch-all.
+  // betking labels: "Фора 1-ї чверті", "1 чверть - Фора", "Фора. 1 половина", etc.
+  if (n.includes('фора') && hasQuarter) {
+    if (isQ1(n)) return 'quarter_handicap_q1';
+    if (isQ2(n)) return 'quarter_handicap_q2';
+    if (isQ3(n)) return 'quarter_handicap_q3';
+    if (isQ4(n)) return 'quarter_handicap_q4';
+    return null; // фора + чверть, але номер не розпізнано
+  }
+  if (n.includes('фора') && hasHalf) {
+    if (isH1(n)) return 'half_handicap_h1';
+    if (isH2(n)) return 'half_handicap_h2';
+    return null; // фора + половина, але номер не розпізнано
+  }
   if (n.includes('фора')) return 'match_handicap';
 
-  // ── Quarter totals — format "Перша чверть - тотал" (quarter word BEFORE тотал) ──
-  // Must come BEFORE the match_total catch-all.
-  if ((n.includes('перша чверть') || n.includes('1-а чверть') || n.includes('1 чверть')) && n.includes('тотал')) return 'quarter_total_q1';
-  if ((n.includes('друга чверть') || n.includes('2-а чверть') || n.includes('2 чверть')) && n.includes('тотал')) return 'quarter_total_q2';
-  if ((n.includes('третя чверть') || n.includes('3-я чверть') || n.includes('3 чверть') || n.includes('третя')) && n.includes('тотал')) return 'quarter_total_q3';
-  if ((n.includes('четверта чверть') || n.includes('4-а чверть') || n.includes('4 чверть') || n.includes('4-та чверть') || n.includes('четверта')) && n.includes('тотал')) return 'quarter_total_q4';
+  // ── Quarter totals — ANY word order, ALL known label formats ──────────────
+  // Covers: "Тотал 1-ї чверті", "1 чверть - Тотал", "Тотал. 3 чверть", etc.
+  if (hasTotal && hasQuarter) {
+    if (isQ1(n)) return 'quarter_total_q1';
+    if (isQ2(n)) return 'quarter_total_q2';
+    if (isQ3(n)) return 'quarter_total_q3';
+    if (isQ4(n)) return 'quarter_total_q4';
+    // тотал + чверть, але номер не розпізнано — краще не класифікувати
+    // як match_total, а повернути null щоб потрапило в лог
+    return null;
+  }
 
-  // ── Match total (catch-all for anything with 'тотал' remaining) ──
-  if (n.includes('тотал')) return 'match_total';
+  // ── Half totals — ANY word order, ALL known label formats ─────────────────
+  // Covers: "Тотал 1-ї половини", "1-а половина - Тотал", "1 половина Тотал", etc.
+  // Must come BEFORE the match_total catch-all.
+  if (hasTotal && hasHalf) {
+    if (isH1(n)) return 'half_total_h1';
+    if (isH2(n)) return 'half_total_h2';
+    return null;  // тотал + половина, але номер не розпізнано
+  }
+
+  // ── Match total — catch-all (only plain тотал without quarter/half markers) ─
+  if (hasTotal) return 'match_total';
 
   return null;
 }
@@ -745,23 +824,37 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
     const result = {
       match_1x2      : [],
       match_handicap : [],
+      half_handicap  : [],   // handicap per half (H1/H2)
+      quarter_handicap: [],  // handicap per quarter (Q1-Q4)
       match_total    : [],
       half_total     : [],
       quarter_total  : [],
       quarter_dnb    : [],
-      quarter_1x2    : [],   // quarter winner markets (Q1-Q4)
-      quarter_btts   : [],   // both teams score N in quarter
-      quarter_race   : [],   // race-to-N in quarter
-      win_margin     : [],   // win margin buckets
-      last_digit     : [],   // last digit / sum of digits markets
+      quarter_1x2    : [],
+      quarter_btts   : [],
+      quarter_race   : [],
+      win_margin     : [],
+      last_digit     : [],
       home_ind_total : [],
       away_ind_total : [],
     };
 
     for (const { title, bets } of rawMarkets) {
       const cat = classifyMarket(title);
+      // Log every тотал-related market so misclassifications are always visible in logs
+      if (title.toLowerCase().includes('тотал'))
+        console.log(`  [betking] тотал market: "${title}" → cat="${cat ?? 'null'}"`);
+      // Log every фора-related market
+      if (title.toLowerCase().includes('фора'))
+        console.log(`  [betking] фора  market: "${title}" → cat="${cat ?? 'null'}"`);
       if (!cat) {
-        console.log(`  [betking] Unclassified market: "${title}"`);
+        // Окремо логуємо ринки з "тотал"/"чверт"/"полов" — це майже завжди
+        // нові формати назв betking, які треба додати в classifyMarket.
+        const tl = title.toLowerCase();
+        if (tl.includes('тотал') || tl.includes('чверт') || tl.includes('полов'))
+          console.warn(`  [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "${title}"`);
+        else
+          console.log(`  [betking] Unclassified market: "${title}"`);
         continue;
       }
 
@@ -817,6 +910,63 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
           });
         }
 
+      // ── quarter handicap ──
+      } else if (cat.startsWith('quarter_handicap_')) {
+        const scopeMap = { quarter_handicap_q1:'Q1', quarter_handicap_q2:'Q2', quarter_handicap_q3:'Q3', quarter_handicap_q4:'Q4' };
+        const scope = scopeMap[cat];
+        const quarterLabelHcp = { Q1: 'перша чверть', Q2: 'друга чверть', Q3: 'третя чверть', Q4: 'четверта чверть' };
+        const pairsQ = {};
+        for (const bet of bets) {
+          if (!bet.specialValue) continue;
+          const hv = parseFloat(bet.specialValue);
+          if (isNaN(hv)) continue;
+          const key = Math.abs(hv).toFixed(1);
+          if (!pairsQ[key]) pairsQ[key] = { home: null, away: null };
+          const teamName = bet.label.toLowerCase().trim();
+          const isHome = variantsMatch(homeVariants, [teamName]) || teamName.includes(homeNorm) || homeNorm.includes(teamName);
+          const isAway = variantsMatch(awayVariants, [teamName]) || teamName.includes(awayNorm) || awayNorm.includes(teamName);
+          if (isHome) pairsQ[key].home = { handicap: hv, odd: bet.odd };
+          else if (isAway) pairsQ[key].away = { handicap: -hv, odd: bet.odd };
+        }
+        for (const { home, away } of Object.values(pairsQ)) {
+          if (!home && !away) continue;
+          result.quarter_handicap.push({
+            _description: `Азіатський гандикап ТІЛЬКИ за ${scope} (${quarterLabelHcp[scope]}). НЕ ПЛУТАТИ з match_handicap — це фора лише в межах однієї чверті. handicap — фора хазяїв у цій чверті. homeHcpOdd/awayHcpOdd.`,
+            scope,
+            handicap   : home?.handicap ?? (away ? away.handicap : null),
+            homeHcpOdd : home?.odd ?? null,
+            awayHcpOdd : away?.odd ?? null,
+          });
+        }
+
+      // ── half handicap ──
+      } else if (cat === 'half_handicap_h1' || cat === 'half_handicap_h2') {
+        const scope = cat === 'half_handicap_h1' ? 'H1' : 'H2';
+        const halfLabelHcp = { H1: 'перша половина (Q1+Q2)', H2: 'друга половина (Q3+Q4)' };
+        const pairsH = {};
+        for (const bet of bets) {
+          if (!bet.specialValue) continue;
+          const hv = parseFloat(bet.specialValue);
+          if (isNaN(hv)) continue;
+          const key = Math.abs(hv).toFixed(1);
+          if (!pairsH[key]) pairsH[key] = { home: null, away: null };
+          const teamName = bet.label.toLowerCase().trim();
+          const isHome = variantsMatch(homeVariants, [teamName]) || teamName.includes(homeNorm) || homeNorm.includes(teamName);
+          const isAway = variantsMatch(awayVariants, [teamName]) || teamName.includes(awayNorm) || awayNorm.includes(teamName);
+          if (isHome) pairsH[key].home = { handicap: hv, odd: bet.odd };
+          else if (isAway) pairsH[key].away = { handicap: -hv, odd: bet.odd };
+        }
+        for (const { home, away } of Object.values(pairsH)) {
+          if (!home && !away) continue;
+          result.half_handicap.push({
+            _description: `Азіатський гандикап за ${scope} (${halfLabelHcp[scope]}). НЕ ПЛУТАТИ з match_handicap — це фора лише за одну половину матчу. handicap — фора хазяїв у цій половині. homeHcpOdd/awayHcpOdd.`,
+            scope,
+            handicap   : home?.handicap ?? (away ? away.handicap : null),
+            homeHcpOdd : home?.odd ?? null,
+            awayHcpOdd : away?.odd ?? null,
+          });
+        }
+
       // ── match_total ──
       } else if (cat === 'match_total') {
         for (const bet of bets) {
@@ -826,6 +976,13 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
           if (!p || p.line == null) continue;
           const line = p.line ?? lineVal;
           if (!line) continue;
+          // Sanity guard: a full basketball match total is always ≥ 110.
+          // Lines below that are individual/quarter/half totals misclassified here —
+          // reject them so they never corrupt the match_total array.
+          if (line < 110) {
+            console.warn(`  [betking] ⚠ match_total sanity guard: rejected line=${line} from "${title}" (too small for a full-match total — possible misclassification)`);
+            continue;
+          }
           let e = result.match_total.find(x => x.line === line);
           if (!e) { e = { _description: `Тотал ВСЬОГО МАТЧУ (сума очок обох команд за 4 чверті). line — межа тоталу (наприклад 133.5). overOdd — ставка "більше ${line}", underOdd — ставка "менше ${line}". НЕ плутати з quarter_total — це весь матч.`, scope: 'Match', line, overOdd: null, underOdd: null }; result.match_total.push(e); }
           if (p.side === 'over')  e.overOdd  = bet.odd;
@@ -972,11 +1129,15 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
     for (const key of ['match_total', 'half_total', 'quarter_total', 'quarter_dnb', 'home_ind_total', 'away_ind_total'])
       result[key].sort((a, b) => (a.line ?? 0) - (b.line ?? 0));
 
+    // Sort handicaps by handicap value
+    for (const key of ['match_handicap', 'half_handicap', 'quarter_handicap'])
+      result[key].sort((a, b) => (a.handicap ?? 0) - (b.handicap ?? 0));
+
     // Drop entries where ALL odds are null (both sides missing = no market)
     for (const key of ['match_total', 'half_total', 'quarter_total', 'home_ind_total', 'away_ind_total'])
       result[key] = result[key].filter(x => x.overOdd !== null || x.underOdd !== null);
 
-    for (const key of ['match_handicap'])
+    for (const key of ['match_handicap', 'half_handicap', 'quarter_handicap'])
       result[key] = result[key].filter(x => x.homeHcpOdd !== null || x.awayHcpOdd !== null);
 
     for (const key of ['match_1x2', 'quarter_1x2', 'quarter_dnb'])
@@ -990,9 +1151,11 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
     // Explains every key so the model can never confuse scope or market type.
     result._schema = {
       _readme: 'Кожен масив описує окремий тип ставки. scope вказує на який ігровий відрізок поширюється ставка: "Match"=весь матч, "H1"=перша половина(Q1+Q2), "H2"=друга половина(Q3+Q4), "Q1"/"Q2"/"Q3"/"Q4"=конкретна чверть. НІКОЛИ не використовуй дані з quarter_* для аналізу матчу в цілому і навпаки. Всі поля *Odd (homeOdd, awayOdd, overOdd, underOdd, homeHcpOdd, awayHcpOdd, yesOdd, noOdd) — це десяткові коефіцієнти букмекера: число на яке множиться сума ставки у разі виграшу (наприклад 1.83 означає прибуток 83% від суми ставки).',
-      match_1x2:      'Переможець ВСЬОГО матчу. scope завжди "Match". homeOdd/awayOdd.',
-      match_handicap: 'Азіатський гандикап на ВЕСЬ матч. scope="Match". handicap<0 = фора хазяїв (вони фаворити). homeHcpOdd/awayHcpOdd.',
-      match_total:    'Тотал ВСЬОГО матчу (сума очок обох команд за всі чверті). scope="Match". line=межа, overOdd/underOdd.',
+      match_1x2:       'Переможець ВСЬОГО матчу. scope завжди "Match". homeOdd/awayOdd.',
+      match_handicap:  'Азіатський гандикап на ВЕСЬ матч. scope="Match". handicap<0 = фора хазяїв (вони фаворити). homeHcpOdd/awayHcpOdd.',
+      half_handicap:   'Азіатський гандикап за ПОЛОВИНУ матчу. scope="H1" або "H2". НЕ ПЛУТАТИ з match_handicap — фора лише за 2 чверті. homeHcpOdd/awayHcpOdd.',
+      quarter_handicap:'Азіатський гандикап ТІЛЬКИ за одну чверть. scope="Q1"/"Q2"/"Q3"/"Q4". НЕ ПЛУТАТИ з match_handicap — фора лише за 10 хв гри. homeHcpOdd/awayHcpOdd.',
+      match_total:     'Тотал ВСЬОГО матчу (сума очок обох команд за всі чверті). scope="Match". line=межа, overOdd/underOdd.',
       half_total:     'Тотал за ПОЛОВИНУ матчу (2 чверті). scope="H1" або "H2". line=межа, overOdd/underOdd.',
       quarter_total:  'Тотал ТІЛЬКИ за одну чверть. scope="Q1"/"Q2"/"Q3"/"Q4". НЕ ПЛУТАТИ з match_total — це набагато менше очок (30-40, не 130+). line=межа, overOdd/underOdd.',
       quarter_dnb:    '"Нічия без ставки" за одну чверть. scope=Q1-Q4. При нічиї в чверті — ставка повертається. homeOdd/awayOdd.',
@@ -1071,7 +1234,7 @@ export async function fetchAndSaveLines(
   fs.writeFileSync(outPath, JSON.stringify(parsed, null, 2), 'utf-8');
   console.log(`✅ Лінії збережено: ${outPath}`);
 
-  const KEYS = ['match_1x2','match_handicap','match_total','half_total','quarter_total','quarter_dnb','quarter_1x2','quarter_btts','quarter_race','win_margin','last_digit','home_ind_total','away_ind_total'];
+  const KEYS = ['match_1x2','match_handicap','half_handicap','quarter_handicap','match_total','half_total','quarter_total','quarter_dnb','quarter_1x2','quarter_btts','quarter_race','win_margin','last_digit','home_ind_total','away_ind_total'];
   for (const k of KEYS) if (parsed[k]) console.log(`  ${k}: ${parsed[k].length} рядків`);
 
   return parsed;

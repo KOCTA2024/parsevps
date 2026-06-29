@@ -90,11 +90,14 @@ def load_lines(path: str) -> dict:
             "match_handicap": data.get("match_handicap", []),
             "match_1x2":      data.get("match_1x2", []),
             "other":          data.get("other", []),
+            "home_ind_total": data.get("home_ind_total", []),
+            "away_ind_total": data.get("away_ind_total", []),
         }
     except (FileNotFoundError, json.JSONDecodeError, Exception):
         return {
             "match_total": [], "half_total": [], "quarter_total": [],
             "match_handicap": [], "match_1x2": [], "other": [],
+            "home_ind_total": [], "away_ind_total": [],
         }
 
 
@@ -2382,9 +2385,11 @@ def quarter_duration_minutes(tour: str) -> int:
 def parse_minutes_played(st: str, tour: str) -> float:
     """
     Parse minutes played from status string.
-    'Live (4-а чверть 4\')'  → 3 full quarters * q_dur + 4
-    'Halftime' / 'HT'       → 2 * q_dur
-    'Finished'              → 4 * q_dur
+    'Live (4-а чверть 4\')'       → 3 full quarters * q_dur + 4
+    'Halftime' / 'HT'             → 2 * q_dur
+    'Перерва (після Q2)'          → 2 * q_dur  (inter-quarter break after Q2)
+    'Перерва (після Q1/Q3)'       → 1 * q_dur / 3 * q_dur
+    'Finished'                    → 4 * q_dur
     Returns float minutes played (may be fractional from OT, ignored here).
     """
     q = quarter_duration_minutes(tour)
@@ -2398,6 +2403,18 @@ def parse_minutes_played(st: str, tour: str) -> float:
 
     if "HALFTIME" in st_up or st_up.strip() in ("HT", "HALF TIME", "HALF-TIME"):
         return float(2 * q)
+
+    # 0. Inter-quarter break: "Перерва (після Q2)", "Break (after Q3)", "Перерыв после Q1", etc.
+    # Must come BEFORE generic quarter patterns to avoid mis-parsing the quarter number
+    # as a live-quarter position (which would subtract 1 and return wrong minutes).
+    m = re.search(
+        r'(?:перерв[аи]|break|pause|перерыв)\s*[^Q\d]*(?:після|after|после|Q)\s*(?:Q\s*)?(\d+)',
+        st, re.IGNORECASE
+    )
+    if m:
+        quarter_num = int(m.group(1))
+        # After Qn break means exactly n full quarters have been played
+        return float(quarter_num * q)
 
     # 1. Ukrainian/Russian: "4-а чверть 5'", "1-й квартал 3'", "3-я чверть 2'", "4 четверть 5'"
     # Handle various suffixes (-а, -я, -й, -та, -ша, -га, -тя) and optional spaces/dots
@@ -2865,6 +2882,8 @@ def _derive_stage(st: str) -> str:
     """
     Derive match stage label from the live status string.
     Examples: "Halftime" → "HT", "Live (4-а чверть 4')" → "Q4_live",
+              "Перерва (після Q2)" → "HT", "Перерва (після Q1)" → "Q1_break",
+              "Перерва (після Q3)" → "Q3_break",
               "Finished" → "FT", "" → "unknown"
     """
     import re as _re
@@ -2875,6 +2894,14 @@ def _derive_stage(st: str) -> str:
         return "FT"
     if "HALFTIME" in su or su.strip() in ("HT", "HALF TIME", "HALF-TIME"):
         return "HT"
+    # Inter-quarter break: "Перерва (після Q2)" etc.
+    m = _re.search(
+        r'(?:перерв[аи]|break|pause|перерыв)\s*[^Q\d]*(?:після|after|після|Q)\s*(?:Q\s*)?(\d+)',
+        st, _re.IGNORECASE
+    )
+    if m:
+        qn = int(m.group(1))
+        return "HT" if qn == 2 else f"Q{qn}_break"
     # Live quarter detection: handles Ukrainian "4-а чверть", "3-й квартал", Russian "4 четверть" and English "Q4"
     m = _re.search(r'(\d+)[-–\s]*[а-яА-Я]*\s*(?:чверть|квартал|четверть|чв|кв)\.?|[Qq](\d+)', st, _re.IGNORECASE)
     if m:
@@ -3291,6 +3318,13 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
             return float(4 * q)
         if "HALFTIME" in st_up or st_up.strip() in ("HT", "HALF TIME", "HALF-TIME"):
             return float(2 * q)
+        # Inter-quarter break: "Перерва (після Q2)", "Break after Q3", etc.
+        m = re.search(
+            r'(?:перерв[аи]|break|pause|перерыв)\s*[^Q\d]*(?:після|after|після|Q)\s*(?:Q\s*)?(\d+)',
+            st, re.IGNORECASE
+        )
+        if m:
+            return float(int(m.group(1)) * q)
         # Ukrainian/Russian with OT support
         m = re.search(r'(\d+)[-–\s]*[а-яА-Я]*\s*(?:чверть|квартал|четверть|чв|кв)\.?\s*(\d+)[\'′]?', st, re.IGNORECASE)
         if m:
@@ -3309,7 +3343,9 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
         return float(2 * q)
 
     def _parse_quarter_num(st: str) -> int:
-        """Extract current quarter number from status string (supports OT)."""
+        """Extract current quarter number from status string (supports OT).
+        For inter-quarter breaks ('Перерва після Q2') returns the completed quarter
+        number so _n_completed = quarter_num (all those quarters are fully done)."""
         if not st:
             return 2
         st_up = st.upper()
@@ -3317,6 +3353,13 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
             return 4
         if "HALFTIME" in st_up or st_up.strip() in ("HT", "HALF TIME", "HALF-TIME"):
             return 2
+        # Inter-quarter break: return completed quarter number directly
+        m = re.search(
+            r'(?:перерв[аи]|break|pause|перерыв)\s*[^Q\d]*(?:після|after|після|Q)\s*(?:Q\s*)?(\d+)',
+            st, re.IGNORECASE
+        )
+        if m:
+            return int(m.group(1))  # e.g. "після Q2" → 2
         m = re.search(r'(\d+)[-–\s]*[а-яА­Я]*\s*(?:чверть|квартал|четверть|чв|кв)\.?', st, re.IGNORECASE)
         if not m:
             m = re.search(r'(?:Q|Quarter|Qtr|Quar)\s*(\d+)', st, re.IGNORECASE)
@@ -3327,8 +3370,17 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
     _total_min_played = _parse_minutes_played_ot(_st_for_min, _q_dur)
     _q_num            = _parse_quarter_num(_st_for_min)
     # n = number of completed quarters (quarters already fully played)
-    # For OT: q_num > 4 means we are in an extra period
-    _n_completed      = max(0, _q_num - 1)
+    # For inter-quarter breaks _parse_quarter_num returns the completed quarter,
+    # so _n_completed == _q_num (all those quarters are done, none in progress).
+    # For OT: q_num > 4 means we are in an extra period.
+    _st_for_min_up = _st_for_min.upper()
+    _is_break = (
+        re.search(r'(?:перерв[аи]|break|pause|перерыв)\s*[^Q\d]*(?:після|after|після|Q)\s*(?:Q\s*)?\d+',
+                  _st_for_min, re.IGNORECASE) is not None
+        or "HALFTIME" in _st_for_min_up
+        or _st_for_min_up.strip() in ("HT", "HALF TIME", "HALF-TIME")
+    )
+    _n_completed      = _q_num if _is_break else max(0, _q_num - 1)
     # Total regulation time accounts for OT: n*q_dur for n quarters already completed
     # plus current quarter in progress; but total_min_left uses n_completed * q_dur as base
     _regulation_total = float(4 * _q_dur)  # standard regulation
@@ -3365,9 +3417,14 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
             "idle_period": _idle_period,
             # ── Season boundary ──────────────────────────────────────────
             "last_season_end_dt": main.get("last_season_end_dt"),
-            "days_since_season_end": (
+            "days_since_previous_season_end": (
                 (datetime.now() - datetime.strptime(main["last_season_end_dt"], "%d.%m.%Y")).days
                 if main.get("last_season_end_dt") else None
+            ),
+            "current_season_start_dt": main.get("current_season_start_dt"),
+            "days_since_season_start": (
+                (datetime.now() - datetime.strptime(main["current_season_start_dt"], "%d.%m.%Y")).days
+                if main.get("current_season_start_dt") else None
             ),
         },
         "idle_period": _idle_period,
@@ -6256,8 +6313,16 @@ def compute_line_profiles(
         # line_projection_edge
         lpe = _build_line_projection_edge(line_val, pre_proj, live_proj, main)
 
+        _LINE_TYPE = {
+            "match_total":  "MATCH_TOTAL | both teams | full match | line ~130-230",
+            "team_it_a":    "INDIVIDUAL_TOTAL | home team only | full match | line ~55-115",
+            "team_it_b":    "INDIVIDUAL_TOTAL | away team only | full match | line ~55-115",
+            "quarter_total": f"QUARTER_TOTAL | both teams | {scope} only | line ~30-60",
+            "half_total":    f"HALF_TOTAL | both teams | {scope} only | line ~60-115",
+        }
         profile_obj = {
             "market":    market,
+            "_type":     _LINE_TYPE.get(market, f"{market} | scope={scope}"),
             "scope":     scope,
             "bookmaker": bk,
             "line":      line_val,
@@ -6283,6 +6348,68 @@ def compute_line_profiles(
 # ─────────────────────────────────────────────
 # RESULT MERGER — map process_match output → result.json skeleton
 # ─────────────────────────────────────────────
+def enrich_raw_game(rec: dict) -> dict:
+    """
+    Принимает одну сырую запись из team_a_hist / team_b_hist / h2h_hist
+    и возвращает её же с добавленными читаемыми ключами вида <key>__label.
+    Оригинальные ключи не переименовываются — только добавляются новые.
+    """
+
+    # ── Словари составляющих ключа ──────────────────────────────────────
+    SIDE = {"h": "Хозяева", "a": "Гости"}
+
+    STAT = {
+        "fga":  "броски с игры (попытки)",
+        "fgm":  "броски с игры (попадания)",
+        "2pa":  "2-очковые (попытки)",
+        "2pm":  "2-очковые (попадания)",
+        "3pa":  "3-очковые (попытки)",
+        "3pm":  "3-очковые (попадания)",
+        "fta":  "штрафные (попытки)",
+        "ftm":  "штрафные (попадания)",
+        "rb":   "подборы (всего)",
+        "orb":  "подборы (атакующие)",
+        "drb":  "подборы (защитные)",
+        "ast":  "передачи",
+        "stl":  "перехваты",
+        "blk":  "блоки",
+        "tov":  "потери",
+        "fls":  "фолы",
+    }
+
+    PERIOD = {
+        "m":  "матч",
+        "1":  "Q1",
+        "2":  "Q2",
+        "3":  "Q3",
+        "4":  "Q4",
+    }
+
+    # ── Паттерн: (h|a)(stat)(m|1|2|3|4)
+    # Поддерживаемые статы отсортированы по убыванию длины, чтобы
+    # «orb» не «съедал» префикс «rb» и т.д.
+    STAT_KEYS_SORTED = sorted(STAT.keys(), key=len, reverse=True)
+    import re as _re
+    STAT_PATTERN = "|".join(_re.escape(s) for s in STAT_KEYS_SORTED)
+    _RX = _re.compile(
+        r'^(?P<side>[ha])(?P<stat>' + STAT_PATTERN + r')(?P<period>[m1234])$',
+        _re.IGNORECASE,
+    )
+
+    result = dict(rec)  # копия, чтобы не мутировать оригинал
+
+    for key in list(rec.keys()):
+        m = _RX.match(key)
+        if not m:
+            continue
+        side_ru   = SIDE.get(m.group("side").lower(), m.group("side"))
+        stat_ru   = STAT.get(m.group("stat").lower(), m.group("stat"))
+        period_ru = PERIOD.get(m.group("period").lower(), m.group("period"))
+        result[key + "__label"] = f"{side_ru}: {stat_ru} — {period_ru}"
+
+    return result
+
+
 def build_result_json(match_result: dict, lines_data: dict = None,
                       parsed: dict = None, raw_block: list = None) -> dict:
     """
@@ -6373,6 +6500,7 @@ def build_result_json(match_result: dict, lines_data: dict = None,
             result.append({
                 "id": f"mt_{str(line_val).replace('.', '_')}_{i}",
                 "market": "match_total",
+                "_type": "MATCH_TOTAL | both teams | full match | line ~130-230",
                 "scope": e.get("scope", "Match"),
                 "line": line_val,
                 "over_odd": e.get("overOdd") or e.get("over_odd"),
@@ -6391,6 +6519,7 @@ def build_result_json(match_result: dict, lines_data: dict = None,
             result.append({
                 "id": f"{team}_it_{str(line_val).replace('.', '_')}_{i}",
                 "market": "team_it",
+                "_type": "INDIVIDUAL_TOTAL | one team only | full match | line ~55-115",
                 "team": team,
                 "team_name": e.get("team_name") or e.get("teamName", ""),
                 "line": line_val,
@@ -6410,6 +6539,7 @@ def build_result_json(match_result: dict, lines_data: dict = None,
             result.append({
                 "id": f"{scope.lower()}_total_{str(line_val).replace('.', '_')}_{i}",
                 "market": "quarter_total",
+                "_type": f"QUARTER_TOTAL | both teams | {scope} only | line ~30-60",
                 "scope": scope,
                 "line": line_val,
                 "over_odd": e.get("overOdd") or e.get("over_odd"),
@@ -6421,6 +6551,28 @@ def build_result_json(match_result: dict, lines_data: dict = None,
         return result
 
     bookmaker_lines = {
+        "_schema": {
+            "_readme": "Кожен масив описує окремий тип ставки. scope вказує на який ігровий відрізок поширюється ставка: \"Match\"=весь матч, \"H1\"=перша половина(Q1+Q2), \"H2\"=друга половина(Q3+Q4), \"Q1\"/\"Q2\"/\"Q3\"/\"Q4\"=конкретна чверть. НІКОЛИ не використовуй дані з quarter_* для аналізу матчу в цілому і навпаки. Всі поля *Odd (homeOdd, awayOdd, overOdd, underOdd, homeHcpOdd, awayHcpOdd, yesOdd, noOdd) — це десяткові коефіцієнти букмекера: число на яке множиться сума ставки у разі виграшу (наприклад 1.83 означає прибуток 83% від суми ставки).",
+            "match_1x2": "Переможець ВСЬОГО матчу. scope завжди \"Match\". homeOdd/awayOdd.",
+            "match_handicap": "Азіатський гандикап на ВЕСЬ матч. scope=\"Match\". handicap<0 = фора хазяїв (вони фаворити). homeHcpOdd/awayHcpOdd.",
+            "match_total": "Тотал ВСЬОГО матчу (сума очок обох команд за всі чверті). scope=\"Match\". line=межа (типово 130–230), overOdd/underOdd. НЕ ПЛУТАТИ з home_ind_total/away_ind_total — тут СУМА обох команд, не окрема.",
+            "half_total": "Тотал за ПОЛОВИНУ матчу (2 чверті). scope=\"H1\" або \"H2\". line=межа, overOdd/underOdd.",
+            "quarter_total": "Тотал ТІЛЬКИ за одну чверть. scope=\"Q1\"/\"Q2\"/\"Q3\"/\"Q4\". НЕ ПЛУТАТИ з match_total — це набагато менше очок (30-60, не 130+). line=межа, overOdd/underOdd.",
+            "quarter_dnb": "\"Нічия без ставки\" за одну чверть. scope=Q1-Q4. При нічиї в чверті — ставка повертається. homeOdd/awayOdd.",
+            "quarter_1x2": "Переможець ОДНІЄЇ чверті. scope=Q1-Q4. homeOdd/drawOdd/awayOdd. drawOdd може бути null.",
+            "quarter_btts": "Чи наберуть ОБИДВІ команди мінімум threshold очок у чверті. scope=Q1-Q4. yesOdd/noOdd.",
+            "quarter_race": "\"Гонка до N очок\" — хто ПЕРШИМ набере target очок у конкретному ігровому відрізку. scope=Q1-Q4 або Match. target=кількість очок. homeOdd/awayOdd. Це НЕ тотал і НЕ переможець.",
+            "home_ind_total": "Індивідуальний тотал ТІЛЬКИ команди-хазяїна за ВЕСЬ матч. scope=\"Match\". line=межа (типово 55–115), overOdd/underOdd. КРИТИЧНО: це очки ОДНІЄЇ команди, НЕ сума двох. home_ind_total + away_ind_total ≈ match_total. Якщо бачиш line~65-100 — це ind_total, а НЕ match_total.",
+            "away_ind_total": "Індивідуальний тотал ТІЛЬКИ команди-гостей за ВЕСЬ матч. scope=\"Match\". line=межа (типово 55–115), overOdd/underOdd. КРИТИЧНО: це очки ОДНІЄЇ команди, НЕ сума двох. home_ind_total + away_ind_total ≈ match_total. Якщо бачиш line~65-100 — це ind_total, а НЕ match_total.",
+            "team_it": "Індивідуальний тотал команди (уніфікований масив для home+away). Поле team вказує яка команда: \"home\" або \"away\". line=межа, overOdd/underOdd. Аналогічні правила що й home_ind_total/away_ind_total.",
+            "win_margin": "Різниця очок переможця матчу (bucket-ставка). label=діапазон типу \"1-5\" або \"6-10\". odd=коефіцієнт.",
+            "last_digit": "Остання цифра рахунку або сума останніх цифр обох команд. scope=Match/H1/H2. Екзотичний ринок.",
+            "_disambiguation": {
+                "match_total_vs_ind_total": "match_total.line зазвичай 130–230 (сума двох команд). home_ind_total.line та away_ind_total.line зазвичай 55–115 (очки ОДНІЄЇ команди). Якщо line < 120 і scope=Match — швидше за все ind_total, а не match_total. Ніколи не порівнюй line з match_total і line з ind_total як одне й те саме число.",
+                "quarter_total_vs_match_total": "quarter_total.line зазвичай 30–60. match_total.line зазвичай 130–230. Різниця ~4x. scope у quarter_total завжди Q1/Q2/Q3/Q4, у match_total завжди Match.",
+                "team_it_vs_match_total": "team_it / home_ind_total / away_ind_total описують очки ОДНІЄЇ команди. match_total описує суму очок ОБОХ команд. Не підсумовуй ind_total як match_total і не ділити match_total на 2 як ind_total — команди набирають різну кількість очок."
+            }
+        },
         "real_lines_only": True,
         # новые категоризированные ключи
         "match_total":   _enrich_match_total(raw_lines.get("match_total", [])),
@@ -6433,8 +6585,14 @@ def build_result_json(match_result: dict, lines_data: dict = None,
         "other":          raw_lines.get("other", []),
         # 3PT-маркети: потрібні для extract_bk_3pt_total_lines / extract_bk_3pt_handicap_lines
         # Парсер шукає саме ці ключі — без них 3PT total/handicap = null (bug)
-        "home_ind_total": raw_lines.get("home_ind_total", []),
-        "away_ind_total": raw_lines.get("away_ind_total", []),
+        "home_ind_total": [
+            {**e, "_type": "INDIVIDUAL_TOTAL | home team only | full match | line ~55-115"}
+            for e in raw_lines.get("home_ind_total", [])
+        ],
+        "away_ind_total": [
+            {**e, "_type": "INDIVIDUAL_TOTAL | away team only | full match | line ~55-115"}
+            for e in raw_lines.get("away_ind_total", [])
+        ],
     }
 
     # ── новый блок: match ─────────────────────────────────────────────────
@@ -6799,9 +6957,9 @@ def build_result_json(match_result: dict, lines_data: dict = None,
     raw_data = {}
     if parsed:
         raw_data["main_match"]  = parsed.get("main_match")
-        raw_data["team_a_hist"] = parsed.get("team_a_hist", [])
-        raw_data["team_b_hist"] = parsed.get("team_b_hist", [])
-        raw_data["h2h_hist"]    = parsed.get("h2h_hist", [])
+        raw_data["team_a_hist"] = [enrich_raw_game(r) for r in parsed.get("team_a_hist", [])]
+        raw_data["team_b_hist"] = [enrich_raw_game(r) for r in parsed.get("team_b_hist", [])]
+        raw_data["h2h_hist"]    = [enrich_raw_game(r) for r in parsed.get("h2h_hist", [])]
     if raw_block:
         raw_data["raw_block"]   = raw_block
 
@@ -6866,6 +7024,8 @@ def build_result_json(match_result: dict, lines_data: dict = None,
             # ── Season boundary ──────────────────────────────────────────
             "last_season_end_dt": meta.get("last_season_end_dt"),
             "days_since_season_end": meta.get("days_since_season_end"),
+            "current_season_start_dt": meta.get("current_season_start_dt"),
+            "days_since_season_start": meta.get("days_since_season_start"),
         },
 
         # ── raw_lines — сырые линии от букмекера (до обогащения) ────────────

@@ -624,9 +624,20 @@ function buildMatchRow(match, sourceLabel, quarterData, statsData, status, perio
  
     url: match.url || '',
 
-    current_season    : (seasonInfo && seasonInfo.current_season) ? seasonInfo.current_season : '',
-    last_season       : (seasonInfo && seasonInfo.last_season)    ? seasonInfo.last_season    : '',
-    last_season_end_dt: (seasonInfo && seasonInfo.last_season_end_date) ? seasonInfo.last_season_end_date : '',
+    current_season         : (seasonInfo && seasonInfo.current_season)        ? seasonInfo.current_season        : '',
+    last_season            : (seasonInfo && seasonInfo.last_season)           ? seasonInfo.last_season           : '',
+    current_season_start_dt: (() => {
+      const raw = (seasonInfo && seasonInfo.current_season_start_date) ? seasonInfo.current_season_start_date.trim() : '';
+      if (!raw) return '';
+      // "21.05.2025 15:30" або "21.05.2025" → 21052025
+      const full = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+      if (full) return `${full[1]}.${full[2]}.${full[3]}`;
+      // "21.05. 15:30" — без року, дописуємо поточний рік
+      const short = raw.match(/^(\d{2})\.(\d{2})\./);
+      if (short) return `${short[1]}.${short[2]}.${new Date().getFullYear()}`;
+      return raw;
+    })(),
+    last_season_end_dt     : (seasonInfo && seasonInfo.last_season_end_date)  ? seasonInfo.last_season_end_date  : '',
   };
 }
  
@@ -864,6 +875,47 @@ async function extractFsign(context, matchId, sportId = '1') {
             } finally {
               await lastSeasonPage.close();
             }
+          }
+        }
+
+        // ── Дата першого матчу поточного турніру ─────────────────────────────
+        // Відкриваємо сторінку результатів поточного сезону і шукаємо
+        // найстаріший запис — він знаходиться в останньому .event__match--last
+        // (flashscore виводить матчі від новіших до старіших, тому last = найстаріший).
+        if (seasons.length > 0) {
+          const currentSeasonResultsUrl = seasons[0].url.replace(/\/?$/, '') + '/results/';
+          const currentSeasonPage = await context.newPage();
+          try {
+            await currentSeasonPage.goto(currentSeasonResultsUrl, { waitUntil: 'domcontentloaded', timeout: 40000 });
+            await currentSeasonPage.waitForSelector('.event__match--last .event__time', { timeout: 20000 }).catch(() => {});
+            await currentSeasonPage.waitForTimeout(1000);
+
+            // .event__match--last — останній (найстаріший) матч у списку результатів.
+            // Беремо тільки перший textNode елемента .event__time, ігноруємо вкладені div.
+            const currentSeasonStartDate = await currentSeasonPage.evaluate(() => {
+              const lastMatch = document.querySelector('.event__match--last');
+              if (!lastMatch) return '';
+              const timeEl = lastMatch.querySelector('.event__time');
+              if (!timeEl) return '';
+              for (const node of timeEl.childNodes) {
+                if (node.nodeType === Node.TEXT_NODE) {
+                  const t = node.textContent.trim();
+                  if (t) return t;
+                }
+              }
+              return timeEl.textContent.trim();
+            }).catch(() => '');
+
+            if (currentSeasonStartDate) {
+              archiveSeasons.current_season_start_date = currentSeasonStartDate;
+              console.log('✔ current_season_start_date:', currentSeasonStartDate);
+            } else {
+              console.warn('⚠ current_season_start_date: .event__match--last .event__time not found on', currentSeasonResultsUrl);
+            }
+          } catch (e) {
+            console.warn('⚠ current_season_start_date fetch error:', e.message);
+          } finally {
+            await currentSeasonPage.close();
           }
         }
       }
