@@ -7,14 +7,21 @@
  * Public API:
  *   analyseMatch(jobData, dataFilePath, lineFilePath) → Promise<AnalysisResult>
  *
+ * Промпт больше не жёстко привязан к одному .docx файлу — вместо этого скрипт
+ * сканирует директорию PROMPTS_DIR и склеивает все поддерживаемые файлы
+ * (.docx, .pdf, .json, .txt, .md) в один системный промпт, в алфавитном
+ * порядке имён файлов (для стабильности между перезапусками).
+ *
  * Env vars:
  *   OPENAI_API_KEY        — required
- *   OPENAI_MODEL          — default: gpt-4.5-preview
- *   OPENAI_MAX_TOKENS     — default: 4000
- *   OPENAI_TIMEOUT_MS     — default: 120000 (2 min)
+ *   OPENAI_MODEL          — default: gpt-5.4
+ *   OPENAI_MAX_TOKENS     — default: 32000
+ *   OPENAI_REASONING_EFFORT — default: low (none|low|medium|high|xhigh)
+ *   OPENAI_TIMEOUT_MS     — default: 180000 (3 min)
  *   ANALYSIS_OUTPUT_DIR   — default: <APP_ROOT>/data
- *   PROMPT_FILE           — path to .docx prompt file
- *                           default: <APP_ROOT>/src/prompts/basketball_master_unified_prompt_v3_1_uk_fixed.docx
+ *   PROMPTS_DIR           — default: <APP_ROOT>/src/prompts
+ *                           Папка сканируется целиком; поддерживаются:
+ *                           .docx, .pdf, .json, .txt, .md
  */
 
 import fs    from 'fs';
@@ -23,9 +30,10 @@ import https from 'https';
 import { fileURLToPath }    from 'url';
 import { createRequire }    from 'module';
 
-// mammoth is a CommonJS package — import via createRequire
-const require  = createRequire(import.meta.url);
-const mammoth  = require('mammoth');
+// mammoth и pdf-parse — CommonJS пакеты, импортируем через createRequire
+const require   = createRequire(import.meta.url);
+const mammoth   = require('mammoth');
+const pdfParse  = require('pdf-parse');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT  = path.resolve(__dirname, '..');
@@ -41,17 +49,14 @@ const OUTPUT_DIR        = process.env.ANALYSIS_OUTPUT_DIR
   ? path.resolve(process.env.ANALYSIS_OUTPUT_DIR)
   : path.join(APP_ROOT, 'data');
 
-const PROMPT_FILE = process.env.PROMPT_FILE
-  ? path.resolve(process.env.PROMPT_FILE)
-  : path.join(
-      APP_ROOT,
-      'src', 'prompts',
-      'basketball_master_unified_prompt_v3_1_uk_fixed.docx'
-    );
+const PROMPTS_DIR = process.env.PROMPTS_DIR
+  ? path.resolve(process.env.PROMPTS_DIR)
+  : path.join(APP_ROOT, 'src', 'prompts');
+
+const SUPPORTED_EXT = ['.docx', '.pdf', '.json', '.txt', '.md'];
 
 // ─── JSON output instruction appended to the prompt ──────────────────────────
-// Kept separate so the .docx stays clean and you can update it without
-// touching this instruction block.
+// Кладём отдельно, чтобы можно было менять формат ответа, не трогая файлы промпта.
 
 const JSON_OUTPUT_INSTRUCTION = `
 
@@ -99,45 +104,121 @@ const JSON_OUTPUT_INSTRUCTION = `
   "summary": "Короткий текст для читання людиною (1–5 речень)"
 }`;
 
-// ─── Load system prompt from .docx at startup ─────────────────────────────────
+// ─── Извлечение текста из файла по расширению ────────────────────────────────
 
-async function loadSystemPrompt() {
-  if (!fs.existsSync(PROMPT_FILE)) {
-    throw new Error(
-      `[openai_analyst] Prompt file not found: ${PROMPT_FILE}\n` +
-      `Put the .docx file there or set PROMPT_FILE env var.`
-    );
+async function extractTextFromFile(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+
+  if (ext === '.docx') {
+    const { value: text, messages } = await mammoth.extractRawText({ path: filePath });
+    if (messages && messages.length > 0) {
+      for (const m of messages) {
+        if (m.type === 'error') {
+          console.warn(`[openai_analyst] mammoth warning (${path.basename(filePath)}): ${m.message}`);
+        }
+      }
+    }
+    return text;
   }
 
-  const { value: text, messages } = await mammoth.extractRawText({ path: PROMPT_FILE });
+  if (ext === '.pdf') {
+    const buffer = fs.readFileSync(filePath);
+    const { text } = await pdfParse(buffer);
+    return text;
+  }
 
-  if (messages && messages.length > 0) {
-    for (const m of messages) {
-      if (m.type === 'error') {
-        console.warn(`[openai_analyst] mammoth warning: ${m.message}`);
-      }
+  if (ext === '.json') {
+    // Не конкатенируем JSON как plain text — парсим и красиво форматируем,
+    // чтобы модель видела чистую структуру, а не сырую "простыню".
+    const raw = fs.readFileSync(filePath, 'utf8');
+    try {
+      const parsed = JSON.parse(raw);
+      return JSON.stringify(parsed, null, 2);
+    } catch (e) {
+      console.warn(`[openai_analyst] Invalid JSON in ${path.basename(filePath)}: ${e.message}. Using raw content.`);
+      return raw;
     }
   }
 
-  if (!text || text.trim().length < 100) {
-    throw new Error(`[openai_analyst] Extracted prompt is suspiciously short. Check the .docx file.`);
+  if (ext === '.txt' || ext === '.md') {
+    return fs.readFileSync(filePath, 'utf8');
   }
 
-  return text.trim() + JSON_OUTPUT_INSTRUCTION;
+  return null; // неподдерживаемое расширение — вызывающий код это отфильтрует заранее
 }
 
-// Cached at module level — loaded once on first analyseMatch() call
+// ─── Сканирование директории промптов ────────────────────────────────────────
+
+function listPromptFiles(dir) {
+  if (!fs.existsSync(dir)) {
+    throw new Error(`[openai_analyst] Prompts directory not found: ${dir}`);
+  }
+
+  return fs.readdirSync(dir)
+    .filter(name => SUPPORTED_EXT.includes(path.extname(name).toLowerCase()))
+    .sort() // стабильный порядок между перезапусками — важно для консистентности промпта
+    .map(name => path.join(dir, name));
+}
+
+// ─── Сборка системного промпта из всех файлов ────────────────────────────────
+
+async function loadSystemPrompt() {
+  const files = listPromptFiles(PROMPTS_DIR);
+
+  if (files.length === 0) {
+    throw new Error(`[openai_analyst] No supported prompt files found in ${PROMPTS_DIR} (expected: ${SUPPORTED_EXT.join(', ')})`);
+  }
+
+  const parts = [];
+
+  for (const filePath of files) {
+    const fileName = path.basename(filePath);
+    try {
+      const text = await extractTextFromFile(filePath);
+      if (!text || text.trim().length === 0) {
+        console.warn(`[openai_analyst] Empty content from ${fileName}, skipping.`);
+        continue;
+      }
+      parts.push(`### Джерело: ${fileName}\n\n${text.trim()}`);
+      console.log(`[openai_analyst] Loaded prompt part: ${fileName} (${text.length} chars)`);
+    } catch (e) {
+      console.error(`[openai_analyst] Failed to read ${fileName}: ${e.message}`);
+    }
+  }
+
+  if (parts.length === 0) {
+    throw new Error(`[openai_analyst] All prompt files in ${PROMPTS_DIR} failed to load or were empty.`);
+  }
+
+  const combined = parts.join('\n\n---\n\n');
+
+  if (combined.length < 100) {
+    throw new Error(`[openai_analyst] Combined prompt is suspiciously short (${combined.length} chars). Check files in ${PROMPTS_DIR}.`);
+  }
+
+  return combined + JSON_OUTPUT_INSTRUCTION;
+}
+
+// Кэш на уровне модуля — грузится один раз при первом вызове analyseMatch()
 let _systemPromptCache = null;
 
 async function getSystemPrompt() {
   if (!_systemPromptCache) {
     _systemPromptCache = await loadSystemPrompt();
     console.log(
-      `[openai_analyst] Prompt loaded from ${PROMPT_FILE} ` +
-      `(${_systemPromptCache.length} chars)`
+      `[openai_analyst] System prompt assembled from ${PROMPTS_DIR} ` +
+      `(${_systemPromptCache.length} chars total)`
     );
   }
   return _systemPromptCache;
+}
+
+/**
+ * Сбросить кэш промпта (полезно, если обновили файлы в PROMPTS_DIR без рестарта).
+ */
+export function reloadPrompt() {
+  _systemPromptCache = null;
+  console.log('[openai_analyst] Prompt cache cleared — will reload on next call.');
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -211,14 +292,6 @@ export function setNotifier(fn) {
   _notifier = fn;
 }
 
-/**
- * Reload prompt cache (useful if you updated the .docx without restarting).
- */
-export function reloadPrompt() {
-  _systemPromptCache = null;
-  console.log('[openai_analyst] Prompt cache cleared — will reload on next call.');
-}
-
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 /**
@@ -237,7 +310,7 @@ export async function analyseMatch(jobData, dataFilePath, lineFilePath, options 
 
   if (!OPENAI_API_KEY) throw new Error('[openai_analyst] OPENAI_API_KEY is not set.');
 
-  // ── Load prompt ───────────────────────────────────────────────────────────
+  // ── Load prompt (docx + pdf + json + txt/md из PROMPTS_DIR) ───────────────
   const systemPrompt = await getSystemPrompt();
 
   // ── Assemble match context ────────────────────────────────────────────────

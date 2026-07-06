@@ -16,6 +16,7 @@
     "jsonexport": "^3.2.0",
     "mammoth": "^1.12.0",
     "p-limit": "^7.2.0",
+    "pdf-parse": "^2.4.5",
     "playwright": "^1.56.1",
     "xlsx": "^0.18.5"
   },
