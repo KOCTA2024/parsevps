@@ -214,6 +214,243 @@ def extract_bk_3pt_handicap_lines(lines_data: dict) -> list:
     return sorted(result)
 
 # ─────────────────────────────────────────────
+# TEAM RELATIVE STAT ZONES — filtering 02_team_relative_stat_zones_COMPACT.json
+# down to the two teams of the current match, for prompt injection.
+# ─────────────────────────────────────────────
+STAT_ZONES_FILENAME = "02_team_relative_stat_zones_COMPACT.json"
+
+# Top-level keys copied through untouched (not team-specific / service fields).
+_STAT_ZONES_PASSTHROUGH_KEYS = (
+    "schema_version", "generated_at", "method_summary",
+    "sources", "universal_rules", "zone_hit_matrix",
+)
+
+
+def _normalize_team_name(name) -> str:
+    """
+    Normalize a team name for comparison:
+    lowercase, strip leading/trailing whitespace, collapse internal
+    whitespace runs to a single space. Used for exact-match comparison
+    only (no fuzzy matching).
+    """
+    if not name:
+        return ""
+    return re.sub(r"\s+", " ", str(name).strip().lower())
+
+
+def load_team_relative_stat_zones(path: str) -> Optional[dict]:
+    """
+    Load 02_team_relative_stat_zones_COMPACT.json.
+
+    Returns the parsed dict, or None if the file is missing / invalid.
+    This is intentionally non-fatal: a missing stat-zones file should not
+    crash the whole pipeline — callers should just skip that part of the
+    prompt.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"[stat_zones] WARNING: file not found: {path}", file=sys.stderr)
+        return None
+    except json.JSONDecodeError as e:
+        print(f"[stat_zones] WARNING: invalid JSON in {path}: {e}", file=sys.stderr)
+        return None
+    except OSError as e:
+        print(f"[stat_zones] WARNING: could not read {path}: {e}", file=sys.stderr)
+        return None
+
+
+def _single_word_fallback_match(all_items: list, team_field: str,
+                                 target_norm: str, target_label: str,
+                                 already_matched_norms: set, section_label: str) -> list:
+    """
+    Fallback for requirement #7: if exact normalized-name matching found
+    nothing for `target_label` in this section, retry by single-word
+    overlap (e.g. "Real Madrid" ~ "Real Madrid B", "Lakers" ~ "LA Lakers").
+    Only used when the exact pass came up empty for that specific team.
+    Logs a warning either way (fallback used / nothing found at all).
+    """
+    if not target_norm or target_norm in already_matched_norms:
+        return []
+    target_words = set(target_norm.split())
+    if not target_words:
+        return []
+
+    found = []
+    for it in all_items:
+        cand_norm = _normalize_team_name(it.get(team_field, ""))
+        if not cand_norm:
+            continue
+        if target_words & set(cand_norm.split()):
+            found.append(it)
+
+    if found:
+        print(
+            f"[stat_zones] WARNING: no exact name match for team '{target_label}' "
+            f"in {section_label}; used single-word fallback matching "
+            f"({len(found)} row(s)).",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"[stat_zones] WARNING: no data found for team '{target_label}' "
+            f"in {section_label} (exact match and single-word fallback both empty).",
+            file=sys.stderr,
+        )
+    return found
+
+
+def filter_team_relative_stat_zones(data: dict, team_a: str, team_b: str) -> dict:
+    """
+    Filter the contents of 02_team_relative_stat_zones_COMPACT.json down to
+    the two teams playing in the current match.
+
+    team_a / team_b must be the same strings used in the main match file's
+    "ht" / "at" fields (home / away team names).
+
+    Rules:
+      - schema_version, generated_at, method_summary, sources,
+        universal_rules, zone_hit_matrix -> passed through unchanged
+        (not team-specific).
+      - team_scope_coverage -> keep items where item["team"] matches
+        team_a or team_b.
+      - team_relative_zone_thresholds -> keep items where item["team"]
+        matches team_a or team_b.
+      - audit_cases -> keep items where item["team_a"] or item["team_b"]
+        matches team_a or team_b.
+
+    Matching is exact-string comparison after normalization (lowercase,
+    trimmed, whitespace-collapsed) — no fuzzy/similarity matching by
+    default. If exact matching finds ZERO rows for one of the two teams in
+    a given section, a single-word-overlap fallback is attempted for that
+    team in that section before giving up on it (requirement #7). A
+    warning is always logged when a team has no exact match, and this
+    never raises — the function simply continues with whatever was found
+    (possibly nothing for one team).
+
+    Object shapes inside the lists are left untouched; only which objects
+    are included is filtered.
+    """
+    if not isinstance(data, dict):
+        print("[stat_zones] WARNING: input to filter_team_relative_stat_zones "
+              "is not a dict; returning an empty-but-valid structure.", file=sys.stderr)
+        data = {}
+
+    team_a_norm = _normalize_team_name(team_a)
+    team_b_norm = _normalize_team_name(team_b)
+
+    if not team_a_norm:
+        print("[stat_zones] WARNING: team_a is empty/blank after normalization.", file=sys.stderr)
+    if not team_b_norm:
+        print("[stat_zones] WARNING: team_b is empty/blank after normalization.", file=sys.stderr)
+
+    targets_norm = {t for t in (team_a_norm, team_b_norm) if t}
+
+    def _exact_match(name) -> bool:
+        return _normalize_team_name(name) in targets_norm
+
+    result = {key: data.get(key) for key in _STAT_ZONES_PASSTHROUGH_KEYS}
+
+    # ---- team_scope_coverage ----------------------------------------------
+    coverage_all = data.get("team_scope_coverage", []) or []
+    coverage_filtered = [it for it in coverage_all if _exact_match(it.get("team", ""))]
+    matched_norms = {_normalize_team_name(it.get("team", "")) for it in coverage_filtered}
+    for t_norm, t_label in ((team_a_norm, team_a), (team_b_norm, team_b)):
+        extra = _single_word_fallback_match(
+            coverage_all, "team", t_norm, t_label, matched_norms, "team_scope_coverage"
+        )
+        for it in extra:
+            if it not in coverage_filtered:
+                coverage_filtered.append(it)
+    result["team_scope_coverage"] = coverage_filtered
+
+    # ---- team_relative_zone_thresholds -------------------------------------
+    thresholds_all = data.get("team_relative_zone_thresholds", []) or []
+    thresholds_filtered = [it for it in thresholds_all if _exact_match(it.get("team", ""))]
+    matched_norms = {_normalize_team_name(it.get("team", "")) for it in thresholds_filtered}
+    for t_norm, t_label in ((team_a_norm, team_a), (team_b_norm, team_b)):
+        extra = _single_word_fallback_match(
+            thresholds_all, "team", t_norm, t_label, matched_norms, "team_relative_zone_thresholds"
+        )
+        for it in extra:
+            if it not in thresholds_filtered:
+                thresholds_filtered.append(it)
+    result["team_relative_zone_thresholds"] = thresholds_filtered
+
+    # ---- audit_cases --------------------------------------------------------
+    audit_all = data.get("audit_cases", []) or []
+    audit_filtered = [
+        it for it in audit_all
+        if _exact_match(it.get("team_a", "")) or _exact_match(it.get("team_b", ""))
+    ]
+    matched_norms = set()
+    for it in audit_filtered:
+        matched_norms.add(_normalize_team_name(it.get("team_a", "")))
+        matched_norms.add(_normalize_team_name(it.get("team_b", "")))
+    for t_norm, t_label in ((team_a_norm, team_a), (team_b_norm, team_b)):
+        if not t_norm or t_norm in matched_norms:
+            continue
+        target_words = set(t_norm.split())
+        extra = []
+        for it in audit_all:
+            cand_norms = (_normalize_team_name(it.get("team_a", "")),
+                          _normalize_team_name(it.get("team_b", "")))
+            if any(target_words & set(cn.split()) for cn in cand_norms if cn):
+                extra.append(it)
+        if extra:
+            print(
+                f"[stat_zones] WARNING: no exact name match for team '{t_label}' "
+                f"in audit_cases; used single-word fallback matching "
+                f"({len(extra)} row(s)).",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"[stat_zones] WARNING: no data found for team '{t_label}' "
+                f"in audit_cases (exact match and single-word fallback both empty).",
+                file=sys.stderr,
+            )
+        for it in extra:
+            if it not in audit_filtered:
+                audit_filtered.append(it)
+    result["audit_cases"] = audit_filtered
+
+    return result
+
+
+def build_filtered_stat_zones_for_prompt(stat_zones_path: str, team_a: str, team_b: str,
+                                          save_to: Optional[str] = None) -> Optional[dict]:
+    """
+    High-level entry point:
+      1. Load 02_team_relative_stat_zones_COMPACT.json from `stat_zones_path`.
+      2. Filter it down to team_a / team_b (same strings as "ht"/"at").
+      3. Optionally persist the filtered result to `save_to`.
+      4. Return the filtered dict, ready to be embedded directly into the
+         analysis prompt in place of the full file.
+
+    Returns None if the source file could not be loaded at all (missing /
+    invalid JSON) — the caller should then simply omit stat-zones data
+    from the prompt rather than fail the whole run.
+    """
+    data = load_team_relative_stat_zones(stat_zones_path)
+    if data is None:
+        return None
+
+    filtered = filter_team_relative_stat_zones(data, team_a, team_b)
+
+    if save_to:
+        try:
+            with open(save_to, "w", encoding="utf-8") as f:
+                json.dump(filtered, f, ensure_ascii=False, indent=2)
+            print(f"[stat_zones] Filtered stat zones written to {save_to}", file=sys.stderr)
+        except OSError as e:
+            print(f"[stat_zones] WARNING: could not write filtered file to {save_to}: {e}",
+                  file=sys.stderr)
+
+    return filtered
+
+# ─────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────
 def safe_float(v, default=0.0):
@@ -7278,13 +7515,38 @@ def main():
     # Load lines for build_result_json (already validated above)
     lines_data = load_lines(line_result_path)
 
+    # ── team_relative_stat_zones (02_team_relative_stat_zones_COMPACT.json) ──
+    # Looked up in ./src (same directory as this script). Filtered per-match
+    # down to the two teams playing ("ht"/"at" on the main match record)
+    # before being attached to the result that feeds the analysis prompt.
+    stat_zones_path = Path(__file__).parent / STAT_ZONES_FILENAME
+
+    def _attach_stat_zones(built: dict, parsed: dict) -> dict:
+        main = (parsed or {}).get("main_match") or {}
+        team_a = main.get("ht", "")
+        team_b = main.get("at", "")
+        if stat_zones_path.is_file():
+            filtered = build_filtered_stat_zones_for_prompt(
+                str(stat_zones_path), team_a, team_b
+            )
+        else:
+            print(f"[stat_zones] WARNING: file not found: {stat_zones_path}", file=sys.stderr)
+            filtered = None
+        if filtered is not None:
+            built["team_relative_stat_zones"] = filtered
+        return built
+
     if len(results) == 1:
         match_result, parsed, raw_block = results[0]
         merged = build_result_json(match_result, lines_data=lines_data,
                                    parsed=parsed, raw_block=raw_block)
+        merged = _attach_stat_zones(merged, parsed)
     else:
         merged = [
-            build_result_json(mr, lines_data=lines_data, parsed=p, raw_block=rb)
+            _attach_stat_zones(
+                build_result_json(mr, lines_data=lines_data, parsed=p, raw_block=rb),
+                p,
+            )
             for mr, p, rb in results
         ]
 

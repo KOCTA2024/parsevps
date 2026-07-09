@@ -1,0 +1,38 @@
+TEAM IT GATES v4
+
+Team IT Over formula:
+P_hist_IT_OVER =
+0.50 * Own_scored_exact
++ 0.35 * Opponent_allowed_exact
++ 0.15 * H2H_IT_exact
+
+Team IT Under formula:
+P_hist_IT_UNDER =
+0.50 * Own_scored_under
++ 0.35 * Opponent_allowed_under
++ 0.15 * H2H_IT_under
+
+MANDATORY COLUMNS:
+- Own scored
+- Opponent allowed
+- H2H IT
+- Required live
+- P_hist_IT
+- P_scenario
+- P_live
+- P_raw
+- blockers
+- P_final
+- Verdict
+
+WEAKEST GATE:
+<70% = hard PASS / cap55.
+70–74% = cap74, RISK/trigger only in ACTION MODE.
+75–79% = cap79, max LOW PLAY.
+80%+ own and allowed = can proceed.
+
+BLOCK:
+No Opponent allowed = no Team IT PLAY.
+Opponent allowed <70 = hard PASS/cap55.
+Required live unrealistic = PASS.
+Stat-gate against = PASS/cap.

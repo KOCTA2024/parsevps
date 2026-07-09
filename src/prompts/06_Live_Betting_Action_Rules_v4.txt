@@ -1,0 +1,51 @@
+LIVE BETTING ACTION RULES v4
+
+CORE:
+History = база.
+Live = напрямок.
+Stat-gate = підтвердження або блок.
+P_final = verdict після caps/blockers/gates.
+
+DO NOT USE SIMPLE PACE ONLY:
+Projection_used requires:
+1) Simple pace as info only.
+2) Segment pace.
+3) History baseline.
+4) Scenario baseline.
+5) Stat-adjusted projection if FGA/FTA/ORB/TO/Poss/eFG exist.
+6) Conservative Projection_used.
+
+HISTORY-SIDE BLOCK:
+If history 90–100 Over but LiveProjection strongly below line:
+- Over PASS / history-side blocked.
+- Calculate Under live-side if real line exists.
+If history 90–100 Under but LiveProjection strongly above line:
+- Under PASS / history-side blocked.
+- Calculate Over live-side if real line exists.
+
+LIVE-SIDE EDGE MINIMUM:
+Match Total: 10+ pts.
+H1/H2 Total: 6–8+ pts.
+Quarter Total: 5+ pts.
+Team IT Match: 6–8+ pts.
+Team IT Half/Quarter: 4–5+ pts.
+
+STAT-GATE:
+Over confirm needs 3/5:
+FGA/Poss HIGH, FTA/FTr HIGH, ORB active, TO not HIGH, eFG not LOW / defense allows.
+Under confirm needs 3/5:
+FGA/Poss LOW, FTA/FTr LOW, ORB LOW, TO HIGH/empty, eFG LOW without high volume.
+
+FAKE OVER BLOCK:
+score/eFG HIGH but volume/FTA LOW.
+
+FAKE UNDER BLOCK:
+score/eFG LOW but FGA/Poss HIGH and ORB or FTA HIGH.
+
+STAKE:
+RISK ENTRY 68–72: 10–15% of live-limit.
+LOW PLAY 73–74: 15%.
+PLAY 75–79: 20–25%.
+MAIN PLAY 80–84: 30–35%.
+STRONG 85+: 40–50% only clean.
+Stake is from daily/session live-limit, not full deposit.

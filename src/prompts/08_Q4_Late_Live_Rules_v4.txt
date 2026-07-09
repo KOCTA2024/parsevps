@@ -1,0 +1,42 @@
+Q4 / AFTER3Q / LATE LIVE RULES v4
+
+Use Q4 filter only for:
+- Q4 total.
+- Q4 Team IT.
+- Match Total after3Q / Q4 live.
+
+Required inputs:
+- exact Q4 time or Q4 start status.
+- score and current total.
+- after3Q total and margin.
+- Q4 current total if live.
+- LiveProjection_used.
+- line and odds.
+- FoulTailScore, DryScore, KillChaseScore, VolumeScore if possible.
+
+Q4 Under allowed only if:
+- DryScore HIGH.
+- FoulTail LOW.
+- KillChase LOW.
+- LiveProjection below line.
+- no bonus/chase/ORB/leader FT path.
+- HarmonicGate passes.
+
+Q4 Under block/cap <=68 if:
+- FoulTailScore >=0.70.
+- KillChaseScore >=0.65.
+- chase margin 6–10.
+- bonus/foul path ON.
+- 3PA chase ON.
+- leader FT path ON.
+- ORB active.
+- no exact Q4 time.
+
+Q4 Over allowed only if:
+- FoulTail/KillChase/Volume support.
+- LiveProjection >= line.
+- LineEdge_OVER positive.
+- TO not HIGH.
+- eFG not LOW.
+
+Q4 Over cannot be PLAY only because of fouls.

@@ -1,0 +1,32 @@
+NEW MATCH UPLOAD TEMPLATE v4
+
+Працюй по SUPER_BASKET FINAL WORKING PROMPT ACTION v4 CLEAN.
+Використай усі файли з архіву + файл нового матчу.
+Chat priority для рахунку/часу/ліній/стати.
+ACTION MODE: 68%+ без hard conflict не ховати.
+Якщо history проти live — блокуй history-side і рахуй live-side, якщо edge достатній.
+Дай PLAY / RISK ENTRY / PASS.
+
+Матч:
+Stage:
+Рахунок:
+Час:
+Current total:
+
+Лінії БК:
+Match Total:
+Over ___ @___ / Under ___ @___
+
+H1/H2 Total:
+Over ___ @___ / Under ___ @___
+
+Team IT:
+Team A Over ___ @___ / Under ___ @___
+Team B Over ___ @___ / Under ___ @___
+
+Current Quarter Total:
+Q__ Over ___ @___ / Under ___ @___
+
+Live stats якщо є:
+Team A: FGA/FGM, 3PA/3PM, FTA/FTM, ORB, TO, fouls
+Team B: FGA/FGM, 3PA/3PM, FTA/FTM, ORB, TO, fouls

@@ -1,0 +1,32 @@
+PRODUCTION ROUTER ACTION MODE v4
+
+Purpose:
+Не створює ставку самостійно. Це допуск ринку до фінального P_final.
+
+SNAPSHOT PRIORITY:
+1) after3Q / Q4 start: найсильніший для Match Total / FT Total.
+2) HT: сильний для Match Total і 2H Total.
+3) after Q1: робочий для H1 Total.
+4) Q4 live: небезпечний, тільки з точним часом і Q4 gate.
+
+ALLOW:
+- Match Total after HT / after3Q.
+- H1 Total after Q1.
+- 2H Total after HT.
+- Team IT тільки якщо Own scored + Opponent allowed + Required live.
+- Current Quarter Total тільки якщо quarter already live + real line + exact time.
+- Current Quarter IT тільки якщо quarter already live + own/allowed gates.
+
+BLOCK / DOWNGRADE:
+- Q2 Total standalone = no clean PLAY.
+- Q3 Total standalone = no clean PLAY.
+- Q4 Total standalone без FoulTail/Dry/KillChase = PASS.
+- Future quarter before start = OFF.
+- History 90–100 проти live projection = block history-side, check live-side.
+- Live edge без stat confirmation = no STRONG.
+- 90%+ only if sample N>=20 and actual backtest hit-rate >=90% for this trigger.
+
+ACTION MODE:
+68–72 = RISK ENTRY only if no hard conflict.
+73–74 = LOW PLAY only if live edge and gates not against.
+75+ = PLAY if no hard conflict.
