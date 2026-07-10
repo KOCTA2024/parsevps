@@ -7552,6 +7552,8 @@ def main():
 
     output_path = Path(h2h_path)
     with open(output_path, "w", encoding="utf-8") as f:
+        from compress_result import compress
+        merged = compress(merged)
         json.dump(merged, f, ensure_ascii=False, separators=(",", ":"))
 
     print(f"[math_script] ✓ Result written to {output_path}")
