@@ -442,7 +442,7 @@ def build_filtered_stat_zones_for_prompt(stat_zones_path: str, team_a: str, team
     if save_to:
         try:
             with open(save_to, "w", encoding="utf-8") as f:
-                json.dump(filtered, f, ensure_ascii=False, indent=2)
+                json.dump(filtered, f, ensure_ascii=False, separators=(",", ":"))
             print(f"[stat_zones] Filtered stat zones written to {save_to}", file=sys.stderr)
         except OSError as e:
             print(f"[stat_zones] WARNING: could not write filtered file to {save_to}: {e}",
@@ -7552,7 +7552,7 @@ def main():
 
     output_path = Path(h2h_path)
     with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(merged, f, ensure_ascii=False, indent=2)
+        json.dump(merged, f, ensure_ascii=False, separators=(",", ":"))
 
     print(f"[math_script] ✓ Result written to {output_path}")
     # Signal the caller which file was written
