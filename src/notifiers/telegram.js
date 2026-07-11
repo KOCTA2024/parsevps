@@ -105,6 +105,7 @@ function emoji(verdict) {
   if (!verdict) return '❓';
   const v = verdict.toUpperCase();
   if (v.includes('STRONG')) return '🔥';
+  if (v.includes('RISK'))   return '🎲';
   if (v.includes('PLAY'))   return '✅';
   if (v.includes('PASS'))   return '⏸';
   if (v.includes('CONFLICT')) return '⚠️';

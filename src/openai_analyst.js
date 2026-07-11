@@ -63,7 +63,7 @@ const JSON_OUTPUT_INSTRUCTION = `
 ---
 ВАЖЛИВО: відповідь має бути ТІЛЬКИ у форматі JSON (без markdown-обгортки, без \`\`\`):
 {
-  "verdict": "PLAY|STRONG PLAY|PASS|CONFLICT",
+  "verdict": "PLAY|STRONG PLAY|PASS|CONFLICT|RISK ENTRY",
   "recommendations": [
     {
       "market": "...",
@@ -235,6 +235,23 @@ function readFileSafe(filePath) {
   return null;
 }
 
+/**
+ * Достаёт ссылку на матч (meta.url) из data-файла, который пишет match_h2h_export.js /
+ * math_script.py, например:
+ *   { "meta": { "match_id": "...", "url": "https://www.flashscore.com/match/xxx/" } }
+ * Возвращает null, если файла нет, он не JSON, или поля url там нет.
+ */
+function extractMatchUrl(dataRaw) {
+  if (!dataRaw) return null;
+  try {
+    const parsed = JSON.parse(dataRaw);
+    const url = parsed?.meta?.url;
+    return typeof url === 'string' && url.trim().length > 0 ? url.trim() : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 function openaiRequest(payload, timeoutMs) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify(payload);
@@ -326,6 +343,8 @@ export async function analyseMatch(jobData, dataFilePath, lineFilePath, options 
     throw new Error(`[openai_analyst] Both data files missing for match ${matchId}.`);
   }
 
+  const matchUrl = extractMatchUrl(dataRaw);
+
   const userMessage = [
     `Матч: ${home} vs ${away}`,
     `Ліга: ${league || 'невідома'}`,
@@ -382,6 +401,7 @@ export async function analyseMatch(jobData, dataFilePath, lineFilePath, options 
     analysedAt: new Date().toISOString(),
     model:      OPENAI_MODEL,
     ...parsed,
+    matchUrl,   // всегда берём из data-файла — модель это поле не заполняет
   };
 
   const outPath = path.join(OUTPUT_DIR, `analysis_${matchId}.json`);

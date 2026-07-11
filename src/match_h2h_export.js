@@ -28,15 +28,6 @@ const RUN_TMP_DIR = `/tmp/pw_run_${process.pid}_${Date.now()}`;
 import { OUTPUT_PATH } from './constants/index.js';
 import { context } from 'esbuild';
 
-// ─── Clean output folder before parsing ──────────────────────────────────────
-const DATA_DIR_EARLY = path.join(__dirname, 'data');
-if (fs.existsSync(DATA_DIR_EARLY)) {
-  for (const file of fs.readdirSync(DATA_DIR_EARLY)) {
-    try { fs.rmSync(path.join(DATA_DIR_EARLY, file), { recursive: true, force: true }); } catch {}
-  }
-
-}
- 
 const DEFAULT_LIMIT     = 35;
 const DEFAULT_H2H_LIMIT = 5;
  
