@@ -12,6 +12,7 @@ log.txt
 node.exe
 npm
 ./src/log.txt
+./src/data
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json

@@ -17,9 +17,10 @@ import { fileURLToPath } from 'url';
 // ─── Step 3: OpenAI analyst ───────────────────────────────────────────────────
 import { analyseMatch, setNotifier } from './openai_analyst.js';
 
-// Щоб підключити Telegram — розкоментуй і реалізуй notifiers/telegram.js:
-// import { sendTelegram } from './notifiers/telegram.js';
-// setNotifier(sendTelegram);
+// Telegram-нотифікації: TELEGRAM_TOKEN / TELEGRAM_KEY в .env,
+// CHAT_ID не потрібен — розсилка йде всім, хто писав боту.
+import { sendTelegram } from './notifiers/telegram.js';
+setNotifier(sendTelegram);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
