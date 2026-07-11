@@ -339,7 +339,6 @@ export async function analyseMatch(jobData, dataFilePath, lineFilePath, options 
   const payload = {
     model:       OPENAI_MODEL,
     max_tokens:       OPENAI_MAX_TOKENS,
-    reasoning: { effort: OPENAI_REASONING_EFFORT },
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user',   content: userMessage  },
