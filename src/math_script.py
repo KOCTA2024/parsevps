@@ -72,6 +72,12 @@ Q4_TEAM_POINTS_LINES = [5.5,7.5,8.5,10.5,12.5,14.5,15.5,16.5,
 
 MIN_VALID_MATCHES = 30
 
+# Максимум игр, попадающих в блоки истории (team_a_hist / team_b_hist) итогового
+# JSON-файла. Расчёты (process_match и т.д.) по-прежнему используют ВСЮ историю
+# из parsed["team_a_hist"] / parsed["team_b_hist"] — лимит применяется только
+# на этапе сборки raw_data для вывода.
+HIST_OUTPUT_LIMIT = 20
+
 
 def load_lines(path: str) -> dict:
     """
@@ -7194,8 +7200,8 @@ def build_result_json(match_result: dict, lines_data: dict = None,
     raw_data = {}
     if parsed:
         raw_data["main_match"]  = parsed.get("main_match")
-        raw_data["team_a_hist"] = [enrich_raw_game(r) for r in parsed.get("team_a_hist", [])]
-        raw_data["team_b_hist"] = [enrich_raw_game(r) for r in parsed.get("team_b_hist", [])]
+        raw_data["team_a_hist"] = [enrich_raw_game(r) for r in parsed.get("team_a_hist", [])[:HIST_OUTPUT_LIMIT]]
+        raw_data["team_b_hist"] = [enrich_raw_game(r) for r in parsed.get("team_b_hist", [])[:HIST_OUTPUT_LIMIT]]
         raw_data["h2h_hist"]    = [enrich_raw_game(r) for r in parsed.get("h2h_hist", [])]
     if raw_block:
         raw_data["raw_block"]   = raw_block
