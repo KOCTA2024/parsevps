@@ -33,7 +33,7 @@ import { createRequire }    from 'module';
 // mammoth и pdf-parse — CommonJS пакеты, импортируем через createRequire
 const require   = createRequire(import.meta.url);
 const mammoth   = require('mammoth');
-const pdfParse  = require('pdf-parse');
+const { PDFParse } = require('pdf-parse'); // pdf-parse v2.x — class-based API, no default function export
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT  = path.resolve(__dirname, '..');
@@ -123,8 +123,13 @@ async function extractTextFromFile(filePath) {
 
   if (ext === '.pdf') {
     const buffer = fs.readFileSync(filePath);
-    const { text } = await pdfParse(buffer);
-    return text;
+    const parser = new PDFParse({ data: buffer });
+    try {
+      const { text } = await parser.getText();
+      return text;
+    } finally {
+      await parser.destroy();
+    }
   }
 
   if (ext === '.json') {
@@ -338,7 +343,7 @@ export async function analyseMatch(jobData, dataFilePath, lineFilePath, options 
   // ── Call OpenAI ───────────────────────────────────────────────────────────
   const payload = {
     model:       OPENAI_MODEL,
-    max_tokens:       OPENAI_MAX_TOKENS,
+    max_completion_tokens:       OPENAI_MAX_TOKENS,
     reasoning_effort: OPENAI_REASONING_EFFORT,
     messages: [
       { role: 'system', content: systemPrompt },
