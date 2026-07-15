@@ -37,6 +37,66 @@ const APP_ROOT    = path.resolve(__dirname, '..');
 const NODE_BIN    = process.execPath;
 const PYTHON_BIN  = process.env.PYTHON_BIN || 'python3';
 
+// ─── Data-sufficiency thresholds (перед дорогим вызовом OpenAI) ─────────────
+// Настраиваются через env, чтобы не трогать код при подборе значений.
+const MIN_TEAM_VALID_GAMES   = Number(process.env.MIN_TEAM_VALID_GAMES)   || 5;
+const MIN_POOLED_VALID_GAMES = Number(process.env.MIN_POOLED_VALID_GAMES) || 10;
+
+// Рынки, без которых анализ считается бессмысленным (см. line_result_*.json).
+// _schema и meta — служебные ключи, в проверку не входят.
+const REQUIRED_LINE_MARKETS = ['match_total', 'match_handicap'];
+
+/**
+ * Проверяет, достаточно ли данных (линий + статистики), чтобы отправлять
+ * матч в OpenAI. Возвращает строку с причиной пропуска, либо null если
+ * всё ок и можно идти в Step 3.
+ */
+function checkDataSufficiency(dataFilePath, lineFilePath) {
+  // ── Линии ──────────────────────────────────────────────────────────────
+  let lineData;
+  try {
+    lineData = JSON.parse(fs.readFileSync(lineFilePath, 'utf8'));
+  } catch (e) {
+    return `line file missing or invalid JSON (${e.message})`;
+  }
+
+  for (const market of REQUIRED_LINE_MARKETS) {
+    const arr = lineData[market];
+    if (!Array.isArray(arr) || arr.length === 0) {
+      return `no lines for required market "${market}"`;
+    }
+  }
+
+  // ── Детальная статистика ──────────────────────────────────────────────
+  let data;
+  try {
+    data = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+  } catch (e) {
+    return `data file missing or invalid JSON (${e.message})`;
+  }
+
+  const dq = data?.logic?.data_quality;
+  if (!dq) {
+    return 'data_quality block missing from data file';
+  }
+
+  if (dq.lines_stale_warning) {
+    return `lines are stale: ${dq.lines_stale_warning}`;
+  }
+
+  if ((dq.team_a_valid_games ?? 0) < MIN_TEAM_VALID_GAMES) {
+    return `team A sample too small (${dq.team_a_valid_games ?? 0} < ${MIN_TEAM_VALID_GAMES})`;
+  }
+  if ((dq.team_b_valid_games ?? 0) < MIN_TEAM_VALID_GAMES) {
+    return `team B sample too small (${dq.team_b_valid_games ?? 0} < ${MIN_TEAM_VALID_GAMES})`;
+  }
+  if ((dq.pooled_valid_games ?? 0) < MIN_POOLED_VALID_GAMES) {
+    return `pooled sample too small (${dq.pooled_valid_games ?? 0} < ${MIN_POOLED_VALID_GAMES})`;
+  }
+
+  return null; // всё ок — можно отправлять в OpenAI
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function run(bin, args, opts = {}) {
@@ -94,6 +154,33 @@ async function processJob(job) {
     throw new Error(`Calculator failed (exit ${calcResult.code}): ${calcResult.stderr || '(none)'}`);
   }
   await job.updateProgress(70);
+
+  // ── Step 2.5: проверка достаточности данных перед дорогим вызовом OpenAI ──
+  const skipReason = checkDataSufficiency(dataFilePath, lineFilePath);
+  if (skipReason) {
+    log(jid, 'info', `Step 3 skipped — insufficient data: ${skipReason}`);
+
+    for (const filePath of [dataFilePath, lineFilePath]) {
+      try {
+        fs.unlinkSync(filePath);
+        log(jid, 'info', `Cleaned up ${filePath}`);
+      } catch (e) {
+        log(jid, 'info', `Could not delete ${filePath}: ${e.message}`);
+      }
+    }
+
+    await job.updateProgress(100);
+    log(jid, 'info', `✓ Chain stopped before AI for match ${matchId}`);
+
+    return {
+      matchId,
+      parserExitCode: parserResult.code,
+      calcExitCode:   calcResult.code,
+      aiVerdict:      'NO_DATA',
+      skipReason,
+      completedAt: new Date().toISOString(),
+    };
+  }
 
   // ── Step 3: OpenAI analysis ───────────────────────────────────────────────
   log(jid, 'info', `Step 3 → OpenAI analysis (model: ${process.env.OPENAI_MODEL || 'gpt-4o'})`);
