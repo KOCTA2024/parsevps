@@ -46,6 +46,55 @@ const MIN_POOLED_VALID_GAMES = Number(process.env.MIN_POOLED_VALID_GAMES) || 10;
 // _schema и meta — служебные ключи, в проверку не входят.
 const REQUIRED_LINE_MARKETS = ['match_total', 'match_handicap'];
 
+// Поля детальной статистики по игре (raw_data.team_a_hist / team_b_hist), без
+// которых Basketball Master v3.1 не может нормально анализировать матч —
+// фолы, подборы, передачи, перехваты, блоки, потери (суммарно за игру, "*m"-поля).
+// Если у большинства игр в истории эти поля пустые — присылать такое в OpenAI
+// бессмысленно, даже если формально valid_games прошёл порог по количеству.
+const REQUIRED_STAT_FIELDS = [
+  'hflsm', 'aflsm', // фоли (fouls)
+  'hrbm',  'arbm',  // підбори (rebounds)
+  'hastm', 'aastm', // передачі (assists)
+  'hstlm', 'astlm', // перехоплення (steals)
+  'hblkm', 'ablkm', // блокшоти (blocks)
+  'htovm', 'atovm', // втрати (turnovers)
+];
+
+// Доля игр в истории команды, у которых ДОЛЖНЫ быть заполнены все поля выше.
+const MIN_STAT_COVERAGE_RATIO = Number(process.env.MIN_STAT_COVERAGE_RATIO) || 0.7;
+
+/**
+ * Проверяет, что в объекте игры (team_a_hist[i] / team_b_hist[i]) заполнены
+ * все обязательные поля детальной статистики (не undefined/null/пустая строка).
+ */
+function hasDetailedStats(game) {
+  return REQUIRED_STAT_FIELDS.every((field) => {
+    const v = game?.[field];
+    return v !== undefined && v !== null && String(v).trim() !== '';
+  });
+}
+
+/**
+ * Проверяет покрытие детальной статистикой для массива игр одной команды.
+ * Возвращает строку с причиной пропуска, либо null если всё ок.
+ */
+function checkStatsCoverage(games, label) {
+  if (!Array.isArray(games) || games.length === 0) {
+    return `${label}: no history games found for detailed-stats check`;
+  }
+  const withStats = games.filter(hasDetailedStats).length;
+  const ratio = withStats / games.length;
+  if (ratio < MIN_STAT_COVERAGE_RATIO) {
+    return (
+      `${label}: only ${withStats}/${games.length} games ` +
+      `(${(ratio * 100).toFixed(0)}%) have full detailed stats ` +
+      `(fouls/rebounds/assists/steals/blocks/turnovers), ` +
+      `need ≥${(MIN_STAT_COVERAGE_RATIO * 100).toFixed(0)}%`
+    );
+  }
+  return null;
+}
+
 /**
  * Проверяет, достаточно ли данных (линий + статистики), чтобы отправлять
  * матч в OpenAI. Возвращает строку с причиной пропуска, либо null если
@@ -93,6 +142,21 @@ function checkDataSufficiency(dataFilePath, lineFilePath) {
   if ((dq.pooled_valid_games ?? 0) < MIN_POOLED_VALID_GAMES) {
     return `pooled sample too small (${dq.pooled_valid_games ?? 0} < ${MIN_POOLED_VALID_GAMES})`;
   }
+
+  // ── Детальная стата по каждой игре (фолы, подборы и т.д.) ────────────────
+  // Мало иметь нужное КОЛИЧЕСТВО игр — в них должны быть заполнены поля,
+  // на которые опирается AI-анализ (Basketball Master v3.1 разбирает fouls,
+  // rebounds, assists, steals, blocks, turnovers по каждой команде).
+  const rawData = data?.raw_data;
+  if (!rawData) {
+    return 'raw_data block missing from data file (no per-game history to check)';
+  }
+
+  const teamAStatsIssue = checkStatsCoverage(rawData.team_a_hist, 'team A history');
+  if (teamAStatsIssue) return teamAStatsIssue;
+
+  const teamBStatsIssue = checkStatsCoverage(rawData.team_b_hist, 'team B history');
+  if (teamBStatsIssue) return teamBStatsIssue;
 
   return null; // всё ок — можно отправлять в OpenAI
 }
