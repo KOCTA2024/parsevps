@@ -26,12 +26,12 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-  # ── Monitor + Orchestrator (cron, раз в 24 ч) ────────────────────────────
-  scheduler:
+  # ── Monitor (cron, раз в 24 ч) — только обновляет matches.json ───────────
+  monitor:
     build:
       context: .
       dockerfile: Dockerfile
-    command: sh -c "while true; do HOUR=$$(date -u +%H); MIN=$$(date -u +%M); if [ \"$$HOUR\" = '01' ] && [ \"$$MIN\" = '00' ]; then node src/monitor.js && node src/orchestrator.js >> /app/state/scheduler.log 2>&1; sleep 61; fi; sleep 30; done"
+    command: sh -c "while true; do HOUR=$$(date -u +%H); MIN=$$(date -u +%M); if [ \"$$HOUR\" = '01' ] && [ \"$$MIN\" = '00' ]; then node src/monitor.js >> /app/state/monitor.log 2>&1; sleep 61; fi; sleep 30; done"
     restart: unless-stopped
     env_file:
       - .env
@@ -47,7 +47,30 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+
+  # ── Stage-monitor (всегда живёт, следит за стадией матчей и ставит job'ы
+  #    в очередь при обнаружении перерыва — заменяет orchestrator.js) ───────
+  stage-monitor:
+    build: .
+    command: node src/stage_monitor.js
+    restart: unless-stopped
+    shm_size: '1gb'  # Playwright/Chromium под нагрузкой стабильнее с нормальной /dev/shm
+    env_file:
+      - .env
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MATCHES_FILE: /app/state/matches.json
+    volumes:
+      - ./src:/app/src
+      - ./src/data:/app/data
+      - state:/app/state
+    depends_on:
+      redis:
+        condition: service_healthy
       worker:
+        condition: service_started
+      monitor:
         condition: service_started
 volumes:
   state:   # изолированный volume для matches.json
