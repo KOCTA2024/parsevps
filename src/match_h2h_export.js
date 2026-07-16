@@ -836,16 +836,28 @@ async function extractFsign(context, matchId, sportId = '1') {
             try {
               await lastSeasonPage.goto(lastSeasonPageUrl, { waitUntil: 'domcontentloaded', timeout: 40000 });
               // На слабкому ВПС DOM може рендеритись після domcontentloaded — чекаємо довше
-              await lastSeasonPage.waitForSelector('.event__time', { timeout: 20000 }).catch(() => {});
+              // Новий Flashscore рендерить дату в [data-testid="wcl-stageTime"], лишаємо старий
+              // .event__time як fallback на випадок старої верстки.
+              await lastSeasonPage.waitForSelector('[data-testid="wcl-stageTime"], .event__time', { timeout: 20000 }).catch(() => {});
               // Додаткова пауза для стабілізації DOM на слабкому залізі
               await lastSeasonPage.waitForTimeout(1000);
 
-              // Дата є прямо на сторінці сезону в .event__time (перший текстовий вузол,
-              // без дочірнього div.event__stage). Перший рядок = останній матч за часом.
+              // Нова верстка: <span data-testid="wcl-stageTime">
+              //                  <span data-testid="wcl-scores-simple-text-01">20.07.2025</span>
+              //                </span>
+              // Перший рядок = останній матч за часом (сторінка сортує від новіших до старіших).
               const lastSeasonEndDate = await lastSeasonPage.evaluate(() => {
+                // 1) Новий селектор
+                const stageTimeEls = [...document.querySelectorAll('[data-testid="wcl-stageTime"]')];
+                for (const el of stageTimeEls) {
+                  const dateEl = el.querySelector('[data-testid="wcl-scores-simple-text-01"]');
+                  const t = (dateEl ? dateEl.textContent : el.textContent).trim();
+                  if (/\d{2}\.\d{2}\.\d{4}/.test(t)) return t;
+                }
+                // 2) Fallback: стара верстка .event__time (перший текстовий вузол,
+                //    без дочірнього div.event__stage)
                 const timeEls = [...document.querySelectorAll('.event__time')];
                 for (const el of timeEls) {
-                  // Беремо тільки перший textNode, ігноруємо вкладені div (event__stage)
                   for (const node of el.childNodes) {
                     if (node.nodeType === Node.TEXT_NODE) {
                       const t = node.textContent.trim();
@@ -859,7 +871,7 @@ async function extractFsign(context, matchId, sportId = '1') {
               if (lastSeasonEndDate) {
                 archiveSeasons.last_season_end_date = lastSeasonEndDate;
               } else {
-                console.warn('⚠ last_season_end_date: .event__time not found on', lastSeasonPageUrl);
+                console.warn('⚠ last_season_end_date: date selector not found on', lastSeasonPageUrl);
               }
             } catch (e) {
               console.warn('⚠ last_season_end_date fetch error:', e.message);
@@ -878,14 +890,32 @@ async function extractFsign(context, matchId, sportId = '1') {
           const currentSeasonPage = await context.newPage();
           try {
             await currentSeasonPage.goto(currentSeasonResultsUrl, { waitUntil: 'domcontentloaded', timeout: 40000 });
-            await currentSeasonPage.waitForSelector('.event__match--last .event__time', { timeout: 20000 }).catch(() => {});
+            // Новий Flashscore рендерить дату в [data-testid="wcl-stageTime"], лишаємо старий
+            // .event__match--last .event__time як fallback на випадок старої верстки.
+            await currentSeasonPage.waitForSelector(
+              '.event__match--last [data-testid="wcl-stageTime"], .event__match--last .event__time',
+              { timeout: 20000 }
+            ).catch(() => {});
             await currentSeasonPage.waitForTimeout(1000);
 
             // .event__match--last — останній (найстаріший) матч у списку результатів.
-            // Беремо тільки перший textNode елемента .event__time, ігноруємо вкладені div.
+            // Нова верстка: <span data-testid="wcl-stageTime">
+            //                  <span data-testid="wcl-scores-simple-text-01">20.07.2025</span>
+            //                </span>
             const currentSeasonStartDate = await currentSeasonPage.evaluate(() => {
               const lastMatch = document.querySelector('.event__match--last');
               if (!lastMatch) return '';
+
+              // 1) Новий селектор
+              const stageTimeEl = lastMatch.querySelector('[data-testid="wcl-stageTime"]');
+              if (stageTimeEl) {
+                const dateEl = stageTimeEl.querySelector('[data-testid="wcl-scores-simple-text-01"]');
+                const t = (dateEl ? dateEl.textContent : stageTimeEl.textContent).trim();
+                if (t) return t;
+              }
+
+              // 2) Fallback: стара верстка .event__time (перший текстовий вузол,
+              //    ігноруємо вкладені div)
               const timeEl = lastMatch.querySelector('.event__time');
               if (!timeEl) return '';
               for (const node of timeEl.childNodes) {
@@ -901,7 +931,7 @@ async function extractFsign(context, matchId, sportId = '1') {
               archiveSeasons.current_season_start_date = currentSeasonStartDate;
               console.log('✔ current_season_start_date:', currentSeasonStartDate);
             } else {
-              console.warn('⚠ current_season_start_date: .event__match--last .event__time not found on', currentSeasonResultsUrl);
+              console.warn('⚠ current_season_start_date: date selector not found on', currentSeasonResultsUrl);
             }
           } catch (e) {
             console.warn('⚠ current_season_start_date fetch error:', e.message);
