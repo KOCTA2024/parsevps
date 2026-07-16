@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import { chromium } from 'playwright';
 import XLSX from 'xlsx';
-import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import https from 'https';
 import zlib from 'zlib';
@@ -11,15 +10,6 @@ import { slugify } from './utils/slugify.js';
  
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
- 
-// ─── Kill leftover browser processes + clean tmp ──────────────────────────────
-try { execSync('pkill -f chromium || true'); } catch {}
-try { execSync('pkill -f headless_shell || true'); } catch {}
-try { execSync('pkill -f chrome || true'); } catch {}
-// Чекаємо справжньої смерті процесів, не просто 1 секунду
-try { execSync('sleep 2 && pkill -9 -f chromium 2>/dev/null || true'); } catch {}
-// Чистимо залишки від попередніх запусків (включно з їх HTTP-кешем)
-try { execSync('rm -rf /tmp/.org.chromium.* /tmp/playwright* /tmp/pw_run_* /tmp/pw_cache_* 2>/dev/null || true'); } catch {}
  
 // Унікальна temp-директорія для цього запуску — щоб паралельні запуски (ти + клієнт)
 // не шарили профіль Chromium і не читали DOM один одного
@@ -1204,8 +1194,6 @@ async function main() {
  
   } finally {
     await mainContext.close();
-    // FIX: clean up temp dirs after context is fully closed
-    try { execSync(`rm -rf ${RUN_TMP_DIR} /tmp/pw_cache_${process.pid} 2>/dev/null || true`); } catch {}
     process.exit(0);
   }
 }

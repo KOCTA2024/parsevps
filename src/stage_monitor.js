@@ -29,8 +29,13 @@
  * Щойно бачимо статус "break" — одразу ставимо задачу в чергу BullMQ
  * (delay: 0), і worker.js виконує звичний Step 1→2→3 ланцюжок.
  *
- * Якщо перерва так і не настала за CHECK_WINDOW_MS від старту вікна —
- * здаємось по цій контрольній точці (лог warning) і чекаємо наступну.
+ * Виняток — Checkpoint #1 (після Q1): фід не репортить "break" між Q1 і Q2,
+ * тож там замість цього чекаємо скидання лічильника liveMinute (ознака
+ * старту нової чверті) на тому ж поллінгу раз на хвилину.
+ *
+ * Якщо перерва (або, для Checkpoint #1, старт Q2) так і не настала за
+ * CHECK_WINDOW_MS від старту вікна — здаємось по цій контрольній точці
+ * (лог warning) і чекаємо наступну.
  *
  * Usage:  node src/stage_monitor.js
  */
@@ -58,7 +63,10 @@ const MATCHES_FILE = process.env.MATCHES_FILE
   : path.resolve(__dirname, 'matches.json');
 
 // Ліги з 12-хвилинними чвертями (NBA-подібні) → зсуви більші.
-const NBA_PATTERN = /NBA|12[\s-]?min/i;
+// ВАЖЛИВО: у фіді назви ліг кириличні ("США: Літня ліга НБА в Лас-Вегасі"),
+// тож окрім латинської "NBA" обов'язково матчимо кириличну "НБА" — інакше
+// летня ліга NBA непомітно потрапляє під дефолтні (менші) офсети.
+const NBA_PATTERN = /\bNBA\b|НБА|12[\s-]?min/i;
 
 const POLL_INTERVAL_MS   = Number(process.env.STAGE_POLL_INTERVAL_MS) || 60_000;      // 1 хв
 const CHECK_WINDOW_MS    = Number(process.env.STAGE_CHECK_WINDOW_MS)  || 15 * 60_000; // скільки чекати перерву в межах чекпоінта
@@ -207,13 +215,15 @@ async function enqueueAnalysis(match, checkpointIndex) {
   // сприйме 2-гу й 3-тю перерву того ж matchId як дублікат 1-ї (за jobId).
   const jobId = `${id}_break${checkpointIndex + 1}`;
 
+  const triggerLabel = checkpointIndex === 0 ? 'Q2 start' : `Break #${checkpointIndex + 1}`;
+
   try {
     const job = await queue.add('analyse', jobPayload, { jobId, delay: 0 });
-    log(id, `✓ Break #${checkpointIndex + 1} detected → queued analysis (jobId=${jobId})`);
+    log(id, `✓ ${triggerLabel} detected → queued analysis (jobId=${jobId})`);
     return job;
   } catch (err) {
     if (/Job already exists/.test(err.message)) {
-      log(id, `↷ Break #${checkpointIndex + 1} already queued (jobId=${jobId}). Skipped (idempotent).`);
+      log(id, `↷ ${triggerLabel} already queued (jobId=${jobId}). Skipped (idempotent).`);
       try {
         return await queue.getJob(jobId);
       } catch (e2) {
@@ -232,17 +242,32 @@ async function enqueueAnalysis(match, checkpointIndex) {
 /**
  * Викликається рівно в момент відкриття вікна (kickoff + offset).
  * Раз на POLL_INTERVAL_MS питає стадію матчу, поки:
- *   - не побачить "break"     → ставить job і зупиняється;
+ *   - не побачить "break"     → ставить job і зупиняється;               (Checkpoint #2, #3)
+ *   - не побачить скидання liveMinute (нова чверть)  → ставить job;      (Checkpoint #1, див. нижче)
  *   - не побачить "finished"  → матч уже завершився, чекпоінт більше не актуальний;
  *   - не вичерпає CHECK_WINDOW_MS → здається, лишає лог warning.
+ *
+ * Checkpoint #1 (після Q1) — особливий випадок: за спостереженнями фід
+ * ВЗАГАЛІ не репортить status="break" між Q1 і Q2 (бачимо суцільний "live"
+ * аж до кінця вікна), тож класичне очікування break тут ніколи не спрацює.
+ * Єдина ознака, яку фід реально віддає, — це liveMinute, що рахує хвилини
+ * В МЕЖАХ поточної чверті і СКИДАЄТЬСЯ на початку нової (напр. 10' → 1').
+ * Тому для Checkpoint #1 замість "status === 'break'" перевіряємо, що
+ * liveMinute на черговому тіку (раз на хвилину, як і раніше) став МЕНШИМ
+ * за попередній — це і є ознака старту Q2.
  */
 function watchCheckpoint(match, checkpointIndex, sportId) {
   const { id } = match;
   const windowOpenedAt = Date.now();
   let stopped = false;
 
+  const isQ1Checkpoint = checkpointIndex === 0;
+  let prevLiveMinute = null; // тільки для Checkpoint #1
+
   log(id, `▶ Checkpoint #${checkpointIndex + 1} window opened — polling every ${POLL_INTERVAL_MS / 1000}s ` +
-          `(giving up after ${CHECK_WINDOW_MS / 60_000} min if no break seen)`);
+          (isQ1Checkpoint
+            ? `(giving up after ${CHECK_WINDOW_MS / 60_000} min if Q2 start not detected)`
+            : `(giving up after ${CHECK_WINDOW_MS / 60_000} min if no break seen)`));
 
   const timer = setInterval(async () => {
     if (stopped) return;
@@ -250,7 +275,9 @@ function watchCheckpoint(match, checkpointIndex, sportId) {
     if (Date.now() - windowOpenedAt > CHECK_WINDOW_MS) {
       stopped = true;
       clearInterval(timer);
-      log(id, `⏱ Checkpoint #${checkpointIndex + 1} window expired — no break detected. Giving up on this checkpoint.`);
+      log(id, isQ1Checkpoint
+        ? `⏱ Checkpoint #1 window expired — Q2 start not detected. Giving up on this checkpoint.`
+        : `⏱ Checkpoint #${checkpointIndex + 1} window expired — no break detected. Giving up on this checkpoint.`);
       if (checkpointIndex === 1) settleCheckpoint2(id, null);
       return;
     }
@@ -271,6 +298,27 @@ function watchCheckpoint(match, checkpointIndex, sportId) {
       clearInterval(timer);
       log(id, `Match already finished — checkpoint #${checkpointIndex + 1} skipped.`);
       if (checkpointIndex === 1) settleCheckpoint2(id, null);
+      return;
+    }
+
+    if (isQ1Checkpoint) {
+      // Немає break після Q1 — тригеримось на скидання лічильника хвилин.
+      const prev = prevLiveMinute;
+      if (stage.liveMinute !== null) prevLiveMinute = stage.liveMinute;
+
+      const q2Started =
+        stage.status === 'live' &&
+        stage.liveMinute !== null &&
+        prev !== null &&
+        stage.liveMinute < prev;
+
+      if (q2Started) {
+        stopped = true;
+        clearInterval(timer);
+        log(id, `✓ Q2 start detected (liveMinute ${prev}' → ${stage.liveMinute}') — queueing checkpoint #1 analysis.`);
+        await enqueueAnalysis(match, checkpointIndex);
+      }
+      // інакше — 'live' з мінутою, що й далі зростає, або 'not_started'/'unknown' → чекаємо наступного тіку
       return;
     }
 
@@ -344,18 +392,32 @@ function scheduleMatch(match) {
     const checkpointStart    = kickoffMs + minutes * 60_000;
     const checkpointDeadline = checkpointStart + CHECK_WINDOW_MS;
 
+    const startCheckpoint = idx === 2
+      ? () => scheduleCheckpoint3(match, idx, sportId) // #3 — спершу чекає вердикт #2, може пропустити вікно повністю
+      : () => watchCheckpoint(match, idx, sportId);    // #1, #2 — без змін
+
     if (now > checkpointDeadline) {
-      // Вікно вже давно минуло (наприклад, stage_monitor піднявся із запізненням) —
-      // сенсу планувати немає, помічаємо як "оброблено", щоб не перевіряти знову.
+      // Вікно вже минуло за розкладом (kickoff у фіді був неточний / stage_monitor
+      // піднявся або перечитав matches.json із запізненням / matches.json довго не
+      // оновлювався). Раніше тут просто мовчки помічали чекпоінт "оброблено" — і
+      // матч, що насправді ще триває, лишався взагалі без жодної перевірки і без
+      // жодного логу. Тепер: якщо матч ще НЕ "finished" — все одно відкриваємо
+      // вікно зараз (наздоганяючий старт), лишень з явним логом про причину.
       doneSet.add(idx);
+      if (match.status && match.status !== 'finished') {
+        log(id, `⏰ Checkpoint #${idx + 1} (+${minutes} min) scheduled window already passed ` +
+                `(deadline was ${new Date(checkpointDeadline).toISOString()}), but match status is ` +
+                `"${match.status}" → opening catch-up window now instead of skipping silently.`);
+        startCheckpoint();
+      } else {
+        log(id, `Checkpoint #${idx + 1} (+${minutes} min) window long expired and match status is ` +
+                `"${match.status || 'unknown'}" → skipping.`);
+      }
       return;
     }
 
     doneSet.add(idx);
     const delay = Math.max(0, checkpointStart - now);
-    const startCheckpoint = idx === 2
-      ? () => scheduleCheckpoint3(match, idx, sportId) // #3 — спершу чекає вердикт #2, може пропустити вікно повністю
-      : () => watchCheckpoint(match, idx, sportId);    // #1, #2 — без змін
     setTimeout(startCheckpoint, delay);
     log(id, `Scheduled checkpoint #${idx + 1} (+${minutes} min${NBA_PATTERN.test(league || '') ? ', NBA' : ''}) ` +
             `→ opens in ${(delay / 60_000).toFixed(1)} min`);
