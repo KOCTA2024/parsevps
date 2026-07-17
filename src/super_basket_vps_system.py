@@ -548,7 +548,7 @@ def _current_quarter_issue(market_type: str, segment: str, canonical: dict[str, 
     return None
 
 def parse_markets(source: dict[str, Any], canonical: dict[str, Any], config: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    containers = source.get('bookmaker_lines') or source.get('bookmaker_markets') or source.get('markets') or {}
+    containers = source.get('lines') or source.get('bookmaker_lines') or source.get('bookmaker_markets') or source.get('markets') or {}
     aliases = config.get('aliases', {})
     odds_min = float(config.get('odds_min', 1.44))
     evaluations: list[dict[str, Any]] = []
