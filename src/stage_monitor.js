@@ -9,9 +9,12 @@
  * Telegram, все виконує сам worker.js — цей модуль лише кладе job у чергу).
  *
  * Три контрольні точки на матч:
- *   Checkpoint #1 (після 1-ї чверті) — старт вікна: kickoff + 10 хв (NBA: +12 хв)
- *   Checkpoint #2 (half-time)        — старт вікна: kickoff + 20 хв (NBA: +24 хв)
- *   Checkpoint #3 (після 3-ї чверті) — старт вікна: kickoff + 30 хв (NBA: +36 хв)
+ *   Checkpoint #1 (після 1-ї чверті) — старт вікна: kickoff + Q (NBA: +12 хв, default: +10 хв)
+ *   Checkpoint #2 (half-time)        — старт вікна: kickoff + 2Q + коротка пауза
+ *   Checkpoint #3 (після 3-ї чверті) — старт вікна: kickoff + 3Q + коротка пауза + half-time пауза
+ * (точні хвилини рахуються кумулятивно в buildCheckpointOffsets(), з довжини
+ * чверті й тривалості перерв — не "плоскими" 2×Q/3×Q, бо ті ігнорують самі
+ * перерви між чвертями)
  *
  * Checkpoint #3 має додаткову умову: перш ніж відкривати вікно, чекаємо
  * вердикт Checkpoint #2 (aiVerdict з результату відповідного job'а —
@@ -69,8 +72,19 @@ const MATCHES_FILE = process.env.MATCHES_FILE
 const NBA_PATTERN = /\bNBA\b|НБА|12[\s-]?min/i;
 
 const POLL_INTERVAL_MS   = Number(process.env.STAGE_POLL_INTERVAL_MS) || 60_000;      // 1 хв
-const CHECK_WINDOW_MS    = Number(process.env.STAGE_CHECK_WINDOW_MS)  || 15 * 60_000; // скільки чекати перерву в межах чекпоінта
+// Було 15 хв — зарано здавались, якщо матч стартував із запізненням щодо
+// kickoff у фіді (реальний Q1/пауза розтягувались довше вікна). Підняли дефолт.
+const CHECK_WINDOW_MS    = Number(process.env.STAGE_CHECK_WINDOW_MS)  || 25 * 60_000; // скільки чекати перерву в межах чекпоінта
 const RESCAN_INTERVAL_MS = Number(process.env.MATCHES_RESCAN_MS)      || 5 * 60_000;   // раз стільки перечитуємо matches.json
+
+// Скільки максимум чекати ЗАВЕРШЕННЯ Checkpoint #1 (у будь-якому вигляді —
+// job поставлено, матч фінішував, чи вікно просто сплило), перш ніж
+// відкривати вікно Checkpoint #2. Без цього при catch-up-старті (коли
+// kickoff у фіді відстає від реального старту матчу) обидва чекпоінти
+// відкривались ОДНОЧАСНО і поллили стадію паралельно — плутанина в логах і
+// зайве навантаження. Дефолт трохи більший за CHECK_WINDOW_MS, щоб
+// Checkpoint #1 встиг природно завершитись сам, а не по цьому таймауту.
+const CHECKPOINT1_WAIT_MS = Number(process.env.CHECKPOINT1_WAIT_MS) || (CHECK_WINDOW_MS + 5 * 60_000);
 
 // Скільки чекати РЕЗУЛЬТАТ Checkpoint #2 (half-time), перш ніж вирішувати долю
 // Checkpoint #3. Job у черзі проходить парсер → math_script → OpenAI (до
@@ -84,9 +98,37 @@ const CHECKPOINT2_VERDICT_WAIT_MS = Number(process.env.CHECKPOINT2_VERDICT_WAIT_
 // при яких Checkpoint #3 повністю пропускається.
 const SKIP_CHECKPOINT3_VERDICTS = new Set(['PLAY', 'STRONG PLAY']);
 
+// Зсуви контрольних точок рахуємо КУМУЛЯТИВНО від реальної структури матчу
+// (довжина чверті + перерви між чвертями), а не "плоскими" 2×Q / 3×Q як
+// раніше. Флет-варіант ([10,20,30] / [12,24,36]) ігнорував самі перерви,
+// через що вікно Checkpoint #2 (half-time) і особливо Checkpoint #3 (після
+// Q3) відкривалось зарано — half-time break сам по собі ~15 хв, тобто до
+// Checkpoint #3 реально минає набагато більше, ніж 3×Q.
+//
+// Значення нижче — орієнтовні дефолти, підлаштуй під те, що реально бачиш
+// у логах (короткі паузи між чвертями зазвичай ~2 хв, half-time — ~15 хв,
+// але в різних лігах/фідах може відрізнятись).
+const QUARTER_MIN_DEFAULT = Number(process.env.QUARTER_MIN_DEFAULT) || 10; // довжина чверті, хв (не-NBA ліги)
+const QUARTER_MIN_NBA     = Number(process.env.QUARTER_MIN_NBA)     || 12; // довжина чверті, хв (NBA)
+const SHORT_BREAK_MIN     = Number(process.env.SHORT_BREAK_MIN)     || 2;  // пауза після Q1 і після Q3
+const HALFTIME_BREAK_MIN  = Number(process.env.HALFTIME_BREAK_MIN)  || 15; // пауза після Q2 (half-time)
+
+/**
+ * [кінець Q1, кінець Q2/half-time, кінець Q3] у хвилинах від kickoff.
+ *   кінець Q1  = Q
+ *   half-time  = Q + SHORT_BREAK + Q                    (Q1 + пауза + Q2)
+ *   кінець Q3  = half-time + HALFTIME_BREAK + Q          (+ half-time-пауза + Q3)
+ */
+function buildCheckpointOffsets(quarterMin) {
+  const q1End    = quarterMin;
+  const halftime = quarterMin + SHORT_BREAK_MIN + quarterMin;
+  const q3End    = halftime + HALFTIME_BREAK_MIN + quarterMin;
+  return [q1End, halftime, q3End];
+}
+
 // Зсуви контрольних точок у хвилинах від kickoff: [Q1-break, half-time, Q3-break]
-const CHECKPOINTS_DEFAULT = [10, 20, 30];
-const CHECKPOINTS_NBA     = [12, 24, 36];
+const CHECKPOINTS_DEFAULT = buildCheckpointOffsets(QUARTER_MIN_DEFAULT);
+const CHECKPOINTS_NBA     = buildCheckpointOffsets(QUARTER_MIN_NBA);
 
 function offsetsFor(league) {
   return NBA_PATTERN.test(league || '') ? CHECKPOINTS_NBA : CHECKPOINTS_DEFAULT;
@@ -129,6 +171,12 @@ function log(matchId, ...args) {
 // щоб повторне сканування matches.json не плодило дублікати таймерів.
 const scheduledCheckpoints = new Map();
 
+// matchId(String) -> { promise, resolve, settled } — сигнал ЗАВЕРШЕННЯ
+// Checkpoint #1 (незалежно від результату: job поставлено / матч фінішував /
+// вікно сплило). Потрібен, щоб Checkpoint #2 не стартував паралельно з
+// Checkpoint #1 — раніше при catch-up-старті обидва відкривались одночасно.
+const checkpoint1Waiters = new Map();
+
 // matchId(String) -> { promise, resolve, settled } — очікування вердикту
 // Checkpoint #2 (half-time), від якого залежить, чи запускати Checkpoint #3.
 // Створюється лінькво (при першому зверненні) і живе, поки живий процес —
@@ -137,6 +185,31 @@ const checkpoint2Waiters = new Map();
 
 let queue;
 let queueEvents;
+
+// ─── Очікування завершення Checkpoint #1 (щоб не стартувати #2 паралельно) ───
+
+function getCheckpoint1Waiter(matchId) {
+  const key = String(matchId);
+  let w = checkpoint1Waiters.get(key);
+  if (!w) {
+    let resolveFn;
+    const promise = new Promise((resolve) => { resolveFn = resolve; });
+    w = { promise, resolve: resolveFn, settled: false };
+    checkpoint1Waiters.set(key, w);
+  }
+  return w;
+}
+
+/**
+ * Фіксує, що Checkpoint #1 для матчу закінчився (в будь-якому вигляді).
+ * Викликається рівно один раз на матч — повторні виклики ігноруються.
+ */
+function settleCheckpoint1(matchId) {
+  const w = getCheckpoint1Waiter(matchId);
+  if (w.settled) return;
+  w.settled = true;
+  w.resolve();
+}
 
 // ─── Очікування вердикту Checkpoint #2 (для рішення по Checkpoint #3) ────────
 
@@ -278,6 +351,7 @@ function watchCheckpoint(match, checkpointIndex, sportId) {
       log(id, isQ1Checkpoint
         ? `⏱ Checkpoint #1 window expired — Q2 start not detected. Giving up on this checkpoint.`
         : `⏱ Checkpoint #${checkpointIndex + 1} window expired — no break detected. Giving up on this checkpoint.`);
+      if (checkpointIndex === 0) settleCheckpoint1(id);
       if (checkpointIndex === 1) settleCheckpoint2(id, null);
       return;
     }
@@ -297,6 +371,7 @@ function watchCheckpoint(match, checkpointIndex, sportId) {
       stopped = true;
       clearInterval(timer);
       log(id, `Match already finished — checkpoint #${checkpointIndex + 1} skipped.`);
+      if (checkpointIndex === 0) settleCheckpoint1(id);
       if (checkpointIndex === 1) settleCheckpoint2(id, null);
       return;
     }
@@ -317,6 +392,7 @@ function watchCheckpoint(match, checkpointIndex, sportId) {
         clearInterval(timer);
         log(id, `✓ Q2 start detected (liveMinute ${prev}' → ${stage.liveMinute}') — queueing checkpoint #1 analysis.`);
         await enqueueAnalysis(match, checkpointIndex);
+        settleCheckpoint1(id);
       }
       // інакше — 'live' з мінутою, що й далі зростає, або 'not_started'/'unknown' → чекаємо наступного тіку
       return;
@@ -334,6 +410,40 @@ function watchCheckpoint(match, checkpointIndex, sportId) {
     }
     // 'live' / 'not_started' / 'unknown' → просто чекаємо наступного тіку
   }, POLL_INTERVAL_MS);
+}
+
+// ─── Checkpoint #2: чекаємо завершення Checkpoint #1, перш ніж стартувати ────
+
+/**
+ * Викликається в момент, коли Checkpoint #2 мав би відкрити вікно за старим
+ * розкладом (kickoff + offset). Перш ніж відкривати вікно, чекаємо, поки
+ * Checkpoint #1 повністю не завершиться (job поставлено / матч фінішував /
+ * вікно #1 сплило) — інакше обидва чекпоінти поллять стадію ПАРАЛЕЛЬНО, що й
+ * трапляється при catch-up-старті (коли kickoff у фіді відстає від
+ * реального старту матчу і всі три вікна відкриваються майже одночасно).
+ * Обмежено CHECKPOINT1_WAIT_MS — якщо Checkpoint #1 з якоїсь причини не
+ * завершився і за цей час, все одно відкриваємо Checkpoint #2 (не блокуємось
+ * назавжди).
+ */
+function scheduleCheckpoint2(match, checkpointIndex, sportId) {
+  const { id } = match;
+  log(id, `⏳ Checkpoint #${checkpointIndex + 1} reached scheduled time — waiting for Checkpoint #1 to finish (avoids polling both in parallel)…`);
+
+  const waiter = getCheckpoint1Waiter(id);
+  let timeoutHandle;
+  const timeoutPromise = new Promise((resolve) => {
+    timeoutHandle = setTimeout(() => resolve('timeout'), CHECKPOINT1_WAIT_MS);
+  });
+
+  Promise.race([waiter.promise.then(() => 'done'), timeoutPromise]).then((result) => {
+    clearTimeout(timeoutHandle);
+    if (result === 'timeout') {
+      log(id, `⚠ Checkpoint #1 still not finished after ${CHECKPOINT1_WAIT_MS / 60_000} min — proceeding with Checkpoint #2 anyway.`);
+    } else {
+      log(id, `▶ Checkpoint #1 finished — proceeding with Checkpoint #2.`);
+    }
+    watchCheckpoint(match, checkpointIndex, sportId);
+  });
 }
 
 // ─── Checkpoint #3: чекаємо вердикт Checkpoint #2, перш ніж стартувати ───────
@@ -394,7 +504,9 @@ function scheduleMatch(match) {
 
     const startCheckpoint = idx === 2
       ? () => scheduleCheckpoint3(match, idx, sportId) // #3 — спершу чекає вердикт #2, може пропустити вікно повністю
-      : () => watchCheckpoint(match, idx, sportId);    // #1, #2 — без змін
+      : idx === 1
+        ? () => scheduleCheckpoint2(match, idx, sportId) // #2 — спершу чекає завершення #1, щоб не поллити паралельно
+        : () => watchCheckpoint(match, idx, sportId);    // #1 — без змін
 
     if (now > checkpointDeadline) {
       // Вікно вже минуло за розкладом (kickoff у фіді був неточний / stage_monitor
@@ -412,6 +524,10 @@ function scheduleMatch(match) {
       } else {
         log(id, `Checkpoint #${idx + 1} (+${minutes} min) window long expired and match status is ` +
                 `"${match.status || 'unknown'}" → skipping.`);
+        // Чекпоінт узагалі не запускається — фіксуємо "завершення" одразу,
+        // щоб наступний чекпоінт (якщо раптом чекає на цей) не завис назавжди.
+        if (idx === 0) settleCheckpoint1(id);
+        if (idx === 1) settleCheckpoint2(id, null);
       }
       return;
     }
@@ -476,6 +592,7 @@ async function main() {
     `[stage-monitor] Started. Watching "${MATCHES_FILE}" | ` +
     `poll every ${POLL_INTERVAL_MS / 1000}s | check window ${CHECK_WINDOW_MS / 60_000} min | ` +
     `rescanning matches.json every ${RESCAN_INTERVAL_MS / 60_000} min | ` +
+    `Checkpoint #2 waits up to ${CHECKPOINT1_WAIT_MS / 60_000} min for Checkpoint #1 to finish | ` +
     `Checkpoint #3 skipped when Checkpoint #2 verdict ∈ {${[...SKIP_CHECKPOINT3_VERDICTS].join(', ')}} ` +
     `(waiting up to ${CHECKPOINT2_VERDICT_WAIT_MS / 60_000} min for that verdict)`
   );
