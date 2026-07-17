@@ -423,3 +423,4 @@ SA÷3¬~KA÷Загалом¬IS÷¬~KB÷Останні матчі: Манреса
 [16.07.2026, 23:36:43] /home/void/backup_app/app/src/data/Turechchyna_U20_vs_Sloveniya_U20_jNsnrgof.json
 [16.07.2026, 23:43:19] /home/void/backup_app/app/src/data/Turechchyna_U20_vs_Sloveniya_U20_jNsnrgof.json
 [16.07.2026, 23:47:20] /home/void/backup_app/app/src/data/Turechchyna_U20_vs_Sloveniya_U20_jNsnrgof.json
+[17.07.2026, 06:00:42] /home/void/backup_app/app/src/data/Nyu-Jork_vs_Golden_Stejt_ShvBPCtT.json

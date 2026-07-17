@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
 """
 compress_result.py — сжимает выходной JSON math_script.py, убирая
-подтверждённую избыточность, без потери информации:
+подтверждённую избыточность, без потери информации.
 
-1. logic.zone_summary — удаляется целиком. Это производный набор из
-   logic.history_zones / conditional_history_zones, разложенный по 6
-   пересекающимся порогам (100/95/90/85/80/78%), где каждый следующий
-   порог — надмножество предыдущего. Вся эта информация уже есть в
-   history_zones (там же лежит и сам *_zone label на каждую запись).
+Шаги 1-3 — как раньше:
+1. logic.zone_summary — удаляется целиком (дублирует history_zones).
+2. UNDER-записи в thresholds/zones — выводятся из OVER, убираются.
+3. Пустые поля в raw_data.*_hist — sparse JSON, отсутствие поля == "".
 
-2. thresholds / zones внутри history_zones и conditional_history_zones —
-   для каждой линии есть пара OVER/UNDER. UNDER полностью выводится из
-   OVER: n_under == n_over, hits_under == n - hits_over,
-   rate_under == 1 - rate_over. Оставляем только OVER.
-
-3. raw_data.team_a_hist / team_b_hist / h2h_hist / raw_block — сырые
-   строки матчей с ~390 полями статистики, большинство из которых
-   пустые строки "" (нет детальной статистики по броскам/подборам для
-   этой лиги). Пустые/None поля убираются из каждой записи — это valid
-   sparse JSON, отсутствующее поле == "нет данных" так же, как и "".
+Шаг 4 (НОВОЕ) — избыточность внутри самих OVER-записей thresholds:
+4a. entry["market"] — дублирует market родительского блока. Убираем.
+4b. entry["*_smoothed"] — детерминированная функция от hits/n
+    (smoothed = (hits+1)/(n+2)). Убираем, оставляем комментарий с формулой.
+4c. entry["*_zone"] — детерминированная bucket-функция от rate
+    (100/95/90/85/80/78/75/70%). Та же логика, что уже применена к
+    zone_summary в шаге 1 — убираем по тем же основаниям.
+4d. entry["*_n"] — размер выборки НЕ зависит от line/threshold, одно и то
+    же значение повторяется в каждой записи thresholds одного блока.
+    Выносим один раз в блок как "sample_sizes", убираем из entries.
 
 Использование:
     python3 compress_result.py <input.json> [output.json]
@@ -55,6 +54,61 @@ def strip_empty_fields(record: dict) -> dict:
     return {k: v for k, v in record.items() if v not in ("", None)}
 
 
+_N_SUFFIXES = ("team_a_n", "team_b_n", "pooled_n", "h2h_n")
+_SMOOTHED_SUFFIXES = (
+    "team_a_smoothed", "team_b_smoothed", "pooled_smoothed", "h2h_smoothed",
+)
+_ZONE_SUFFIXES = ("team_a_zone", "team_b_zone", "pooled_zone", "h2h_zone")
+
+
+def strip_redundant_threshold_fields(obj):
+    """
+    Рекурсивно находит любой словарь с ключом "thresholds" (список entries
+    из _hist_zone_threshold) и убирает из каждой записи:
+      - "market"      (дублирует market родительского блока)
+      - "*_smoothed"  (= round((hits+1)/(n+2), 3), выводится из hits+n)
+      - "*_zone"      (= bucket(rate), выводится из rate)
+      - "*_n"         (не зависит от line — одинаков у всех entries блока;
+                        выносится один раз в "sample_sizes" на уровень блока)
+    """
+    if isinstance(obj, dict):
+        if "thresholds" in obj and isinstance(obj["thresholds"], list) and obj["thresholds"]:
+            thresholds = obj["thresholds"]
+
+            # Проверяем, что n-поля действительно константны в пределах
+            # блока (так и должно быть — n не зависит от line). Если вдруг
+            # нет — не трогаем, на всякий случай (защита от неизвестных
+            # будущих форматов).
+            sample_sizes = {}
+            n_is_constant = True
+            for suffix in _N_SUFFIXES:
+                values = {e.get(suffix) for e in thresholds if suffix in e}
+                if len(values) > 1:
+                    n_is_constant = False
+                    break
+                if values:
+                    sample_sizes[suffix] = next(iter(values))
+
+            for entry in thresholds:
+                entry.pop("market", None)
+                for suffix in _SMOOTHED_SUFFIXES:
+                    entry.pop(suffix, None)
+                for suffix in _ZONE_SUFFIXES:
+                    entry.pop(suffix, None)
+                if n_is_constant:
+                    for suffix in _N_SUFFIXES:
+                        entry.pop(suffix, None)
+
+            if n_is_constant and sample_sizes:
+                obj["sample_sizes"] = sample_sizes
+
+        for v in obj.values():
+            strip_redundant_threshold_fields(v)
+    elif isinstance(obj, list):
+        for item in obj:
+            strip_redundant_threshold_fields(item)
+
+
 def compress(data: dict) -> dict:
     d = copy.deepcopy(data)
 
@@ -78,6 +132,12 @@ def compress(data: dict) -> dict:
                 strip_empty_fields(r) if isinstance(r, dict) else r
                 for r in raw_data[key]
             ]
+
+    # 4. Избыточные поля внутри threshold-записей (market/smoothed/zone/n)
+    if "history_zones" in logic:
+        strip_redundant_threshold_fields(logic["history_zones"])
+    if "conditional_history_zones" in logic:
+        strip_redundant_threshold_fields(logic["conditional_history_zones"])
 
     return d
 

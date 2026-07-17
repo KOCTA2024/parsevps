@@ -32,9 +32,16 @@
  * Щойно бачимо статус "break" — одразу ставимо задачу в чергу BullMQ
  * (delay: 0), і worker.js виконує звичний Step 1→2→3 ланцюжок.
  *
- * Виняток — Checkpoint #1 (після Q1): фід не репортить "break" між Q1 і Q2,
- * тож там замість цього чекаємо скидання лічильника liveMinute (ознака
- * старту нової чверті) на тому ж поллінгу раз на хвилину.
+ * Виняток — Checkpoint #1 (після Q1) і Checkpoint #3 (після Q3): "break"
+ * лишається ОСНОВНОЮ ознакою і тут (перевіряємо його першим на кожному
+ * тіку), але фід ЧАСТО його не дає на цих межах (на відміну від half-time,
+ * де break приходить стабільно) — лічильник liveMinute просто "зависає"
+ * близько до довжини чверті (напр. лишається 10' і не оновлюється), або
+ * стрибає одразу на менше значення, коли наступна чверть уже почалась і
+ * перерву пропустили повністю. Якщо break за один тік не прийшов — в дію
+ * вступає ФОЛБЕК: (a) скидання liveMinute на менше значення, або (b) те, що
+ * liveMinute не змінюється STAGE_STALL_CONFIRM_MS поспіль (дефолт 2 хв,
+ * як і сама коротка пауза після Q1/Q3) поблизу довжини чверті.
  *
  * Якщо перерва (або, для Checkpoint #1, старт Q2) так і не настала за
  * CHECK_WINDOW_MS від старту вікна — здаємось по цій контрольній точці
@@ -93,6 +100,19 @@ const CHECKPOINT1_WAIT_MS = Number(process.env.CHECKPOINT1_WAIT_MS) || (CHECK_WI
 // суттєво більший за сам поллінг стадії. Якщо не встигли — вважаємо вердикт
 // невідомим, і Checkpoint #3 стартує як завжди (тобто НЕ пропускається).
 const CHECKPOINT2_VERDICT_WAIT_MS = Number(process.env.CHECKPOINT2_VERDICT_WAIT_MS) || 10 * 60_000; // 10 хв
+
+// Checkpoint #1 (після Q1) і Checkpoint #3 (після Q3) страждають від одного й
+// того самого: фід ЧАСТО не репортить status="break" на цих межах — замість
+// цього liveMinute просто "зависає" (напр. на 10' при 10-хвилинній чверті) і
+// більше не оновлюється, поки не почнеться наступна чверть. Раніше цей фікс
+// був лише для Checkpoint #1 (через скидання liveMinute на старті Q2), а
+// Checkpoint #3 чекав ЛИШЕ "break" — і при зависанні лічильника просто
+// вичерпував CHECK_WINDOW_MS і здавався, жодного job'а так і не ставлячи.
+// break перевіряється як ОСНОВНА ознака на кожному тіку (як і завжди); якщо
+// фід break не дав — liveMinute-фолбек (скидання/stall) підхоплює. Коротка
+// пауза після Q1/Q3 ~2 хв (SHORT_BREAK_MIN), тому STAGE_STALL_CONFIRM_MS за
+// замовчуванням теж 2 хв.
+const STALL_CONFIRM_MS = Number(process.env.STAGE_STALL_CONFIRM_MS) || 2 * 60_000; // 2 хв
 
 // Вердикти Checkpoint #2 (job.aiVerdict, див. worker.js / openai_analyst.js),
 // при яких Checkpoint #3 повністю пропускається.
@@ -329,17 +349,30 @@ async function enqueueAnalysis(match, checkpointIndex) {
  * liveMinute на черговому тіку (раз на хвилину, як і раніше) став МЕНШИМ
  * за попередній — це і є ознака старту Q2.
  */
-function watchCheckpoint(match, checkpointIndex, sportId) {
+function watchCheckpoint(match, checkpointIndex, sportId, quarterMin) {
   const { id } = match;
   const windowOpenedAt = Date.now();
   let stopped = false;
 
-  const isQ1Checkpoint = checkpointIndex === 0;
-  let prevLiveMinute = null; // тільки для Checkpoint #1
+  // Checkpoint #1 (після Q1) і Checkpoint #3 (після Q3) — фід ЧАСТО не
+  // репортить status="break" на цих межах (на відміну від half-time, де
+  // break приходить стабільно). Замість "break" тут потрібно розпізнавати
+  // дві альтернативні ознаки:
+  //   (a) liveMinute СКИНУВСЯ на менше значення — нова чверть уже почалась,
+  //       перерву пропустили повністю (наздоганяючий тригер);
+  //   (b) liveMinute "завис" (не змінюється) кілька тіків поспіль близько
+  //       до довжини чверті — перерва, ймовірно, вже йде просто зараз, фід
+  //       лише не позначив це статусом.
+  // status === 'break' теж перевіряємо паралельно — фід іноді все ж таки
+  // його присилає, і тоді реагуємо одразу, не чекаючи стабілізації stall'у.
+  const isFreezeProneCheckpoint = checkpointIndex === 0 || checkpointIndex === 2;
+  let prevLiveMinute = null;
+  let stallSinceMs = null; // коли вперше побачили поточне (незмінне) значення liveMinute
 
   log(id, `▶ Checkpoint #${checkpointIndex + 1} window opened — polling every ${POLL_INTERVAL_MS / 1000}s ` +
-          (isQ1Checkpoint
-            ? `(giving up after ${CHECK_WINDOW_MS / 60_000} min if Q2 start not detected)`
+          (isFreezeProneCheckpoint
+            ? `(break — основна ознака; якщо фід її не дасть, фолбек — скидання/зависання liveMinute; ` +
+              `giving up after ${CHECK_WINDOW_MS / 60_000} min)`
             : `(giving up after ${CHECK_WINDOW_MS / 60_000} min if no break seen)`));
 
   const timer = setInterval(async () => {
@@ -348,9 +381,7 @@ function watchCheckpoint(match, checkpointIndex, sportId) {
     if (Date.now() - windowOpenedAt > CHECK_WINDOW_MS) {
       stopped = true;
       clearInterval(timer);
-      log(id, isQ1Checkpoint
-        ? `⏱ Checkpoint #1 window expired — Q2 start not detected. Giving up on this checkpoint.`
-        : `⏱ Checkpoint #${checkpointIndex + 1} window expired — no break detected. Giving up on this checkpoint.`);
+      log(id, `⏱ Checkpoint #${checkpointIndex + 1} window expired — no trigger detected. Giving up on this checkpoint.`);
       if (checkpointIndex === 0) settleCheckpoint1(id);
       if (checkpointIndex === 1) settleCheckpoint2(id, null);
       return;
@@ -376,25 +407,52 @@ function watchCheckpoint(match, checkpointIndex, sportId) {
       return;
     }
 
-    if (isQ1Checkpoint) {
-      // Немає break після Q1 — тригеримось на скидання лічильника хвилин.
-      const prev = prevLiveMinute;
-      if (stage.liveMinute !== null) prevLiveMinute = stage.liveMinute;
+    if (isFreezeProneCheckpoint) {
+      // 1) ОСНОВНА ознака — той самий явний "break", що й для Checkpoint #2.
+      //    Перевіряємо його першим на кожному тіку: якщо фід його дав —
+      //    реагуємо негайно, без огляду на стан liveMinute.
+      if (stage.status === 'break') {
+        stopped = true;
+        clearInterval(timer);
+        log(id, `✓ Checkpoint #${checkpointIndex + 1} тригер: явний break-статус — queueing analysis.`);
+        await enqueueAnalysis(match, checkpointIndex);
+        if (checkpointIndex === 0) settleCheckpoint1(id);
+        return;
+      }
 
-      const q2Started =
+      // 2) ФОЛБЕК — застосовується лише коли break не прийшов: скидання
+      //    liveMinute (нова чверть уже почалась) або "зависання" лічильника
+      //    близько до довжини чверті (перерва йде, фід просто не позначив).
+      const prev = prevLiveMinute;
+
+      const minuteReset =
         stage.status === 'live' &&
         stage.liveMinute !== null &&
         prev !== null &&
         stage.liveMinute < prev;
 
-      if (q2Started) {
+      if (stage.liveMinute !== null && stage.liveMinute === prev) {
+        if (stallSinceMs === null) stallSinceMs = Date.now();
+      } else {
+        stallSinceMs = null;
+      }
+      const stalledLongEnough = stallSinceMs !== null && (Date.now() - stallSinceMs) >= STALL_CONFIRM_MS;
+      const nearQuarterEnd = stage.liveMinute !== null && quarterMin != null && stage.liveMinute >= quarterMin - 1;
+      const minuteStalled = stage.status === 'live' && stalledLongEnough && nearQuarterEnd;
+
+      if (stage.liveMinute !== null) prevLiveMinute = stage.liveMinute;
+
+      if (minuteReset || minuteStalled) {
         stopped = true;
         clearInterval(timer);
-        log(id, `✓ Q2 start detected (liveMinute ${prev}' → ${stage.liveMinute}') — queueing checkpoint #1 analysis.`);
+        const reason = minuteReset
+          ? `скидання liveMinute (${prev}' → ${stage.liveMinute}')`
+          : `liveMinute завис на ${stage.liveMinute}' ≥${STALL_CONFIRM_MS / 60_000} хв`;
+        log(id, `✓ Checkpoint #${checkpointIndex + 1} тригер (фолбек): ${reason} — queueing analysis.`);
         await enqueueAnalysis(match, checkpointIndex);
-        settleCheckpoint1(id);
+        if (checkpointIndex === 0) settleCheckpoint1(id);
       }
-      // інакше — 'live' з мінутою, що й далі зростає, або 'not_started'/'unknown' → чекаємо наступного тіку
+      // інакше — break не було, лічильник ще росте / ще не близько до кінця чверті → чекаємо наступного тіку
       return;
     }
 
@@ -425,7 +483,7 @@ function watchCheckpoint(match, checkpointIndex, sportId) {
  * завершився і за цей час, все одно відкриваємо Checkpoint #2 (не блокуємось
  * назавжди).
  */
-function scheduleCheckpoint2(match, checkpointIndex, sportId) {
+function scheduleCheckpoint2(match, checkpointIndex, sportId, quarterMin) {
   const { id } = match;
   log(id, `⏳ Checkpoint #${checkpointIndex + 1} reached scheduled time — waiting for Checkpoint #1 to finish (avoids polling both in parallel)…`);
 
@@ -442,7 +500,7 @@ function scheduleCheckpoint2(match, checkpointIndex, sportId) {
     } else {
       log(id, `▶ Checkpoint #1 finished — proceeding with Checkpoint #2.`);
     }
-    watchCheckpoint(match, checkpointIndex, sportId);
+    watchCheckpoint(match, checkpointIndex, sportId, quarterMin);
   });
 }
 
@@ -459,7 +517,7 @@ function scheduleCheckpoint2(match, checkpointIndex, sportId) {
  * стартує як завжди (watchCheckpoint), просто можливо трохи пізніше за
  * початково заплановані kickoff+offset хвилин.
  */
-function scheduleCheckpoint3(match, checkpointIndex, sportId) {
+function scheduleCheckpoint3(match, checkpointIndex, sportId, quarterMin) {
   const { id } = match;
   log(id, `⏳ Checkpoint #${checkpointIndex + 1} reached scheduled time — waiting for Checkpoint #2 verdict before deciding…`);
 
@@ -470,7 +528,7 @@ function scheduleCheckpoint3(match, checkpointIndex, sportId) {
       return;
     }
     log(id, `▶ Checkpoint #2 verdict was "${verdict ?? '(none/unresolved)'}" → proceeding with Checkpoint #3.`);
-    watchCheckpoint(match, checkpointIndex, sportId);
+    watchCheckpoint(match, checkpointIndex, sportId, quarterMin);
   });
 }
 
@@ -493,6 +551,7 @@ function scheduleMatch(match) {
   }
 
   const offsets = offsetsFor(league);
+  const quarterMin = NBA_PATTERN.test(league || '') ? QUARTER_MIN_NBA : QUARTER_MIN_DEFAULT;
   const sportId = sportIdFor(match);
   const now = Date.now();
 
@@ -503,10 +562,10 @@ function scheduleMatch(match) {
     const checkpointDeadline = checkpointStart + CHECK_WINDOW_MS;
 
     const startCheckpoint = idx === 2
-      ? () => scheduleCheckpoint3(match, idx, sportId) // #3 — спершу чекає вердикт #2, може пропустити вікно повністю
+      ? () => scheduleCheckpoint3(match, idx, sportId, quarterMin) // #3 — спершу чекає вердикт #2, може пропустити вікно повністю
       : idx === 1
-        ? () => scheduleCheckpoint2(match, idx, sportId) // #2 — спершу чекає завершення #1, щоб не поллити паралельно
-        : () => watchCheckpoint(match, idx, sportId);    // #1 — без змін
+        ? () => scheduleCheckpoint2(match, idx, sportId, quarterMin) // #2 — спершу чекає завершення #1, щоб не поллити паралельно
+        : () => watchCheckpoint(match, idx, sportId, quarterMin);    // #1 — без змін
 
     if (now > checkpointDeadline) {
       // Вікно вже минуло за розкладом (kickoff у фіді був неточний / stage_monitor
@@ -591,6 +650,7 @@ async function main() {
   console.log(
     `[stage-monitor] Started. Watching "${MATCHES_FILE}" | ` +
     `poll every ${POLL_INTERVAL_MS / 1000}s | check window ${CHECK_WINDOW_MS / 60_000} min | ` +
+    `stall-confirm (Checkpoints #1/#3 fallback) ${STALL_CONFIRM_MS / 60_000} min | ` +
     `rescanning matches.json every ${RESCAN_INTERVAL_MS / 60_000} min | ` +
     `Checkpoint #2 waits up to ${CHECKPOINT1_WAIT_MS / 60_000} min for Checkpoint #1 to finish | ` +
     `Checkpoint #3 skipped when Checkpoint #2 verdict ∈ {${[...SKIP_CHECKPOINT3_VERDICTS].join(', ')}} ` +
