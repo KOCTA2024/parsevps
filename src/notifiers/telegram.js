@@ -25,8 +25,8 @@
  *      "Pooled70 over = 58/70, live projection 218.3, P_live 79%..."
  *   🔗 Матч (якщо в result є поле matchUrl)
  *
- * Надсилається все, КРІМ вердикту ERROR (тобто PLAY / STRONG PLAY / PASS /
- * CONFLICT — все летить у Telegram).
+ * Надсилаються ТІЛЬКИ вердикти PLAY і STRONG PLAY. Все інше (PASS,
+ * CONFLICT, ERROR, RISK ENTRY, PARSE_ERROR, NO_DATA тощо) — не надсилається.
  *
  * Для складніших повідомлень (таблиці, кнопки) — розшир formatMessage().
  */
@@ -202,9 +202,10 @@ export async function sendTelegram(result) {
     return;
   }
 
-  const verdict = (result.verdict ?? '').toUpperCase();
-  if (!verdict || verdict.includes('ERROR')) {
-    console.log(`[telegram] Verdict is "${verdict || 'empty'}" — no notification sent.`);
+  const verdict = (result.verdict ?? '').toUpperCase().trim();
+  const ALLOWED_VERDICTS = ['PLAY', 'STRONG PLAY'];
+  if (!ALLOWED_VERDICTS.includes(verdict)) {
+    console.log(`[telegram] Verdict is "${verdict || 'empty'}" — not PLAY/STRONG PLAY, no notification sent.`);
     return;
   }
 
