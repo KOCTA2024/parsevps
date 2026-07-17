@@ -45,6 +45,18 @@ const OPENAI_MODEL      = process.env.OPENAI_MODEL      || 'gpt-5.4';
 const OPENAI_MAX_TOKENS       = Number(process.env.OPENAI_MAX_TOKENS)       || 32_000;
 const OPENAI_REASONING_EFFORT = process.env.OPENAI_REASONING_EFFORT || 'low'; // none | low | medium | high | xhigh
 const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS) || 180_000;
+
+// ─── Prompt caching config ────────────────────────────────────────────────
+// prompt_cache_key ДОЛЖЕН быть стабильным (одинаковым между вызовами), а не
+// привязанным к matchId — именно стабильность ключа помогает OpenAI роутить
+// повторные запросы на ту же машину с уже прогретым кэшем префикса.
+// Если гоняешь несколько независимых воркеров/пайплайнов с разными системными
+// промптами — задай им РАЗНЫЕ ключи через env, чтобы они не мешали друг другу.
+const OPENAI_PROMPT_CACHE_KEY = process.env.OPENAI_PROMPT_CACHE_KEY || 'sports-analyst-system-prompt-v1';
+// 24h retention работает только на моделях, которые её поддерживают (gpt-5.5+).
+// Для остальных — просто игнорируется/не отправляется.
+const OPENAI_PROMPT_CACHE_RETENTION = process.env.OPENAI_PROMPT_CACHE_RETENTION || null; // 'in_memory' | '24h' | null
+
 const OUTPUT_DIR        = process.env.ANALYSIS_OUTPUT_DIR
   ? path.resolve(process.env.ANALYSIS_OUTPUT_DIR)
   : path.join(APP_ROOT, 'data');
@@ -364,16 +376,39 @@ export async function analyseMatch(jobData, dataFilePath, lineFilePath, options 
     model:       OPENAI_MODEL,
     max_completion_tokens:       OPENAI_MAX_TOKENS,
     reasoning_effort: OPENAI_REASONING_EFFORT,
+    // Стабильный ключ — не meняется от матча к матчу, отправляется на
+    // КАЖДОМ запросе. Именно он даёт OpenAI сигнал "это тот же самый воркер,
+    // роутите на ту же машину, где уже лежит закэшированный system prompt".
+    prompt_cache_key: OPENAI_PROMPT_CACHE_KEY,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user',   content: userMessage  },
     ],
   };
 
+  if (OPENAI_PROMPT_CACHE_RETENTION) {
+    payload.prompt_cache_retention = OPENAI_PROMPT_CACHE_RETENTION;
+  }
+
   let rawReply;
+  let usage = null;
   try {
     const response = await openaiRequest(payload, OPENAI_TIMEOUT_MS);
     rawReply = response.choices?.[0]?.message?.content ?? '';
+    usage    = response.usage ?? null;
+
+    // ── Cache visibility ──────────────────────────────────────────────────
+    // Без этого лога невозможно понять, реально ли попадаем в кэш, или платим
+    // full price каждый раз и просто надеемся.
+    if (usage) {
+      const cached = usage.prompt_tokens_details?.cached_tokens ?? 0;
+      const total  = usage.prompt_tokens ?? 0;
+      const hitRate = total > 0 ? ((cached / total) * 100).toFixed(1) : '0.0';
+      console.log(
+        `[openai_analyst] match ${matchId}: prompt_tokens=${total}, ` +
+        `cached_tokens=${cached} (${hitRate}% hit), completion_tokens=${usage.completion_tokens ?? 0}`
+      );
+    }
   } catch (err) {
     throw new Error(`[openai_analyst] OpenAI call failed for match ${matchId}: ${err.message}`);
   }
@@ -402,6 +437,13 @@ export async function analyseMatch(jobData, dataFilePath, lineFilePath, options 
     model:      OPENAI_MODEL,
     ...parsed,
     matchUrl,   // всегда берём из data-файла — модель это поле не заполняет
+    _usage: usage
+      ? {
+          promptTokens:     usage.prompt_tokens ?? null,
+          cachedTokens:     usage.prompt_tokens_details?.cached_tokens ?? 0,
+          completionTokens: usage.completion_tokens ?? null,
+        }
+      : null,
   };
 
   const outPath = path.join(OUTPUT_DIR, `analysis_${matchId}.json`);

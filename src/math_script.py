@@ -2625,6 +2625,41 @@ def quarter_duration_minutes(tour: str) -> int:
     return 10  # FIBA default (Euroleague, Eurocup, national leagues, etc.)
 
 
+def resolve_minutes_in_quarter(tour: str) -> int:
+    """
+    Determine quarter length in minutes for the metadata.minutes_in_quarter field.
+
+    Rules:
+      - WNBA (https://www.flashscore.ua/basketball/usa/wnba/)                -> 10
+      - NBA Summer League Las Vegas
+        (https://www.flashscore.ua/basketball/usa/nba-las-vegas-summer-league/) -> 10
+      - NBA Preseason                                                        -> 10
+      - NBA (regular season / playoffs)                                      -> 12
+      - Everything else (not NBA — FIBA, Euroleague, national leagues, etc.) -> 10
+    """
+    if not tour:
+        return 10
+    t = tour.upper()
+
+    # WNBA must be checked before the generic "NBA" substring check,
+    # since "WNBA" (and its Cyrillic equivalent "ВНБА"/"ЖНБА") contains
+    # "NBA"/"НБА" as a substring.
+    if any(k in t for k in ("WNBA", "ВНБА", "ЖІНОЧА ЛІГА НБА", "ЖІНОЧОЇ ЛІГИ НБА")):
+        return 10
+
+    if any(k in t for k in ("SUMMER LEAGUE", "ЛІТНЯ ЛІГА", "ЛІТНЬОЇ ЛІГИ")):
+        return 10
+
+    if any(k in t for k in ("PRESEASON", "PRE-SEASON", "PRE SEASON",
+                             "ПЕРЕДСЕЗОН", "ПЕРЕД СЕЗОН")):
+        return 10
+
+    if any(k in t for k in ("NBA", "НБА")):
+        return 12
+
+    return 10
+
+
 def parse_minutes_played(st: str, tour: str) -> float:
     """
     Parse minutes played from status string.
@@ -5550,6 +5585,9 @@ def compute_pre_calculated_patterns(
         _meta_trust_multiplier = _sdc_resolved.get("history_trust_multiplier", 1.0)
         _meta_trust_note_ua    = _sdc_resolved.get("history_trust_note_ua", "")
 
+    _tour_for_minutes = (main or {}).get("tour", "")
+    _minutes_in_quarter = resolve_minutes_in_quarter(_tour_for_minutes)
+
     meta_block = {
         "team_a_n":  len(rows_a),
         "team_b_n":  len(rows_b),
@@ -5562,6 +5600,7 @@ def compute_pre_calculated_patterns(
         "history_trust_multiplier": _meta_trust_multiplier,
         "history_trust_note_ua":    _meta_trust_note_ua,
         "season_date_context_status": _sdc_status,
+        "minutes_in_quarter": _minutes_in_quarter,
     }
 
     return {
