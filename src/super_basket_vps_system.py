@@ -2468,7 +2468,7 @@ def gpt_review_decision(decision: dict[str, Any], calculation: dict[str, Any], *
     try:
         client = OpenAI(api_key=api_key, timeout=30.0, max_retries=2)
         response = client.responses.parse(
-            model=model or os.getenv('OPENAI_MODEL', 'gpt-5.6'),
+            model=model or os.getenv('OPENAI_MODEL', 'gpt-5.6-luna'),
             input=[
                 {'role': 'system', 'content': instructions},
                 {'role': 'user', 'content': json.dumps(compact, ensure_ascii=False, separators=(',', ':'))},
@@ -2516,11 +2516,47 @@ def build_telegram_message(decision: dict[str, Any], calculation: dict[str, Any]
     ]
     return '\n'.join(lines)
 
-def send_telegram_message(text_message: str, *, token: Optional[str]=None, chat_id: Optional[str]=None, retries: int=3) -> dict[str, Any]:
-    token = token or os.getenv('TELEGRAM_BOT_TOKEN')
-    chat_id = chat_id or os.getenv('TELEGRAM_CHAT_ID')
-    if not token or not chat_id:
-        return {'status': 'SKIPPED_MISSING_TELEGRAM_CONFIG', 'sent': False, 'message_id': None}
+def _extract_chat_ids(raw: Any) -> list[str]:
+    """Достаёт список chat_id из произвольной формы telegram_chats.json:
+    ["123","456"] / [{"chat_id":123}] / {"chat_ids":[...]} / {"123":{...},"456":{...}}."""
+    ids: list[str] = []
+    def add(value: Any) -> None:
+        if value is None:
+            return
+        text = str(value).strip()
+        if text and text not in ids:
+            ids.append(text)
+    if isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict):
+                add(item.get('chat_id') or item.get('id'))
+            else:
+                add(item)
+    elif isinstance(raw, dict):
+        for key in ('chat_ids', 'chats', 'ids'):
+            if key in raw:
+                ids.extend(_extract_chat_ids(raw[key]))
+                return ids
+        # иначе ключи словаря сами являются chat_id — типичный реестр
+        # {"123456789": {"username": "...", "last_seen": "..."}}
+        for key in raw.keys():
+            add(key)
+    return ids
+
+def load_telegram_chat_ids(chats_path: str | Path | None = None) -> list[str]:
+    """Читает список chat_id всех, кто писал боту, из state/telegram_chats.json.
+    Путь настраивается через TELEGRAM_CHATS_FILE (по умолчанию state/telegram_chats.json
+    относительно текущей рабочей директории — это /app в контейнере worker)."""
+    path = Path(chats_path or os.getenv('TELEGRAM_CHATS_FILE', 'state/telegram_chats.json'))
+    if not path.is_file():
+        return []
+    try:
+        raw = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return _extract_chat_ids(raw)
+
+def _send_telegram_single(text_message: str, *, token: str, chat_id: str, retries: int = 3) -> dict[str, Any]:
     url = f'https://api.telegram.org/bot{token}/sendMessage'
     payload = json.dumps({'chat_id': chat_id, 'text': text_message[:4096], 'parse_mode': 'HTML', 'protect_content': True}).encode('utf-8')
     last_error = ''
@@ -2537,6 +2573,30 @@ def send_telegram_message(text_message: str, *, token: Optional[str]=None, chat_
         if attempt < retries:
             time.sleep(min(4, 2 ** (attempt - 1)))
     return {'status': 'ERROR_TELEGRAM_SEND_FAILED', 'sent': False, 'message_id': None, 'attempts': retries, 'error': last_error}
+
+def send_telegram_message(text_message: str, *, token: Optional[str] = None, chat_id: Optional[str] = None, chat_ids: Optional[list[str]] = None, retries: int = 3) -> dict[str, Any]:
+    """Рассылает сообщение всем chat_id из state/telegram_chats.json (как и старый
+    notifiers/telegram.js — розсилка йде всім, хто писав боту). Явный chat_id/chat_ids
+    в вызове имеет приоритет; TELEGRAM_CHAT_ID остаётся как fallback для одиночного чата."""
+    token = token or os.getenv('TELEGRAM_BOT_TOKEN')
+    targets = list(chat_ids) if chat_ids else ([str(chat_id)] if chat_id else None)
+    if targets is None:
+        targets = load_telegram_chat_ids()
+        if not targets and os.getenv('TELEGRAM_CHAT_ID'):
+            targets = [os.getenv('TELEGRAM_CHAT_ID')]
+    if not token or not targets:
+        return {'status': 'SKIPPED_MISSING_TELEGRAM_CONFIG', 'sent': False, 'message_id': None, 'per_chat': []}
+
+    per_chat = [
+        {'chat_id': target, **_send_telegram_single(text_message, token=token, chat_id=target, retries=retries)}
+        for target in targets
+    ]
+    sent_ids = [item['message_id'] for item in per_chat if item.get('sent')]
+    if not sent_ids:
+        return {'status': 'ERROR_TELEGRAM_SEND_FAILED', 'sent': False, 'message_id': None, 'per_chat': per_chat}
+    if len(sent_ids) < len(per_chat):
+        return {'status': 'PARTIALLY_SENT', 'sent': True, 'message_id': sent_ids[0], 'per_chat': per_chat}
+    return {'status': 'SENT', 'sent': True, 'message_id': sent_ids[0], 'per_chat': per_chat}
 
 def format_gate(calculation: dict[str, Any]) -> dict[str, Any]:
     snapshot_format = calculation['canonical_snapshot'].get('format', {})
@@ -2923,9 +2983,11 @@ def _single_file_cli(argv: list[str] | None = None) -> int:
                 'python': sys.version.split()[0],
                 'database_ready': True,
                 'openai_api_key_set': bool(os.getenv('OPENAI_API_KEY')),
-                'openai_model': os.getenv('OPENAI_MODEL', 'gpt-5.6'),
+                'openai_model': os.getenv('OPENAI_MODEL', 'gpt-5.6-luna'),
                 'telegram_bot_token_set': bool(os.getenv('TELEGRAM_BOT_TOKEN')),
-                'telegram_chat_id_set': bool(os.getenv('TELEGRAM_CHAT_ID')),
+                'telegram_chats_file': os.getenv('TELEGRAM_CHATS_FILE', 'state/telegram_chats.json'),
+                'telegram_chats_loaded': len(load_telegram_chat_ids()),
+                'telegram_chat_id_fallback_set': bool(os.getenv('TELEGRAM_CHAT_ID')),
                 'require_gpt': env_bool('SUPER_BASKET_REQUIRE_GPT', True),
             }, ensure_ascii=False, indent=2))
     except KeyboardInterrupt:

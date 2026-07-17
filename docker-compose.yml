@@ -19,6 +19,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       WORKER_CONCURRENCY: 2
+      SUPER_BASKET_DB: /app/state/super_basket.sqlite3
+      TELEGRAM_CHATS_FILE: /app/state/telegram_chats.json
     volumes:
       - ./src:/app/src
       - ./src/data:/app/data
