@@ -13,6 +13,7 @@ import re
 import statistics
 from pathlib import Path
 from typing import Optional
+from datetime import datetime, timezone
 
 
 
@@ -69,6 +70,12 @@ Q4_TOTAL_LINES       = [20.5,22.5,24.5,25.5,27.5,30.5,32.5,35.5,
 Q4_TEAM_POINTS_LINES = [5.5,7.5,8.5,10.5,12.5,14.5,15.5,16.5,
                         18.5,20.5,21.5,22.5,24.5,25.5,27.5,30.5,
                         32.5,35.5,37.5,40.5]
+
+# ── Букмекер: единственный источник линий (ТЗ v5.0) ─────────────────────
+# Раньше bookmaker бралось из парсера построчно (GGBET и т.д.). Теперь
+# источник один — константа. Используется во всех местах, где раньше
+# писалось/читалось имя букмекера для новых (v5) данных.
+BOOKMAKER_NAME = "BETKING"
 
 MIN_VALID_MATCHES = 30
 
@@ -2611,11 +2618,37 @@ def _build_live_stat_support(main: dict, stat_sp: dict) -> dict:
 # ─────────────────────────────────────────────
 # HELPERS — league quarter duration
 # ─────────────────────────────────────────────
+# ── ТЗ v5.0 §4: явна тривалість чверті замість вгадування за назвою ──────
+# Якщо парсер віддає новий формат JSON із match.rules.quarter_minutes,
+# ця тривалість МАЄ пріоритет над будь-якою евристикою за назвою турніру
+# (яка й раніше давала збій, напр. NBA Summer League рахувалась як 12 хв,
+# хоча по факту 4x10). Стара евристика лишається як fallback для legacy-
+# джерел, де rules ще не передаються.
+_CURRENT_MATCH_RULES: dict = {}
+
+
+def set_current_match_rules(rules: Optional[dict]) -> None:
+    """
+    Registers the explicit match.rules block (quarters/quarter_minutes/...)
+    for the match currently being processed by run()/process_match(). Call
+    with None (or {}) to clear the override and fall back to name-based
+    heuristics (legacy two-file pipeline).
+    """
+    global _CURRENT_MATCH_RULES
+    _CURRENT_MATCH_RULES = dict(rules) if rules else {}
+
+
 def quarter_duration_minutes(tour: str) -> int:
     """
     Return quarter duration in minutes for a given league/tournament string.
     NBA / G-League / Summer League: 12 min. FIBA (default): 10 min.
+
+    ТЗ v5.0: if an explicit match.rules override was registered via
+    set_current_match_rules(), its quarter_minutes always wins — parser
+    facts override name-based guessing.
     """
+    if _CURRENT_MATCH_RULES.get("quarter_minutes"):
+        return safe_int(_CURRENT_MATCH_RULES.get("quarter_minutes"), 10)
     if not tour:
         return 10
     t = tour.upper()
@@ -2637,6 +2670,8 @@ def resolve_minutes_in_quarter(tour: str) -> int:
       - NBA (regular season / playoffs)                                      -> 12
       - Everything else (not NBA — FIBA, Euroleague, national leagues, etc.) -> 10
     """
+    if _CURRENT_MATCH_RULES.get("quarter_minutes"):
+        return safe_int(_CURRENT_MATCH_RULES.get("quarter_minutes"), 10)
     if not tour:
         return 10
     t = tour.upper()
@@ -3210,6 +3245,11 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
     main   = parsed["main_match"]
     if not main:
         return {"error": "No MAIN MATCH found"}
+
+    # ── ТЗ v5.0 §3: без надійного live score/часу — PASS, а не вгадування ──
+    if main.get("_v5_missing_score_or_clock"):
+        return {"error": "PASS", "reason": "LIVE_SCORE_OR_CLOCK_MISSING",
+                "match_id": main.get("mid", "")}
 
     match_id = main.get("mid", "")
     home_team= main.get("ht", "Home")
@@ -7283,6 +7323,13 @@ def build_result_json(match_result: dict, lines_data: dict = None,
         # ── ТЗ §11: Required top-level keys ─────────────────────────────
         "schema_version": "basketball_history_zones_v1.1",
 
+        # ── rules — формат матча (для _format_info() в super_basket) ────
+        "rules": {
+            "quarters": 4,
+            "quarter_minutes": _q_dur,
+            "regulation_minutes": 4 * _q_dur,
+        },
+
         # ── meta — match identity & live state ───────────────────────────
         "meta": {
             "match_id":   meta.get("match_id"),
@@ -7308,6 +7355,7 @@ def build_result_json(match_result: dict, lines_data: dict = None,
             "days_since_season_end": meta.get("days_since_season_end"),
             "current_season_start_dt": meta.get("current_season_start_dt"),
             "days_since_season_start": meta.get("days_since_season_start"),
+            "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         },
 
         # ── raw_lines — сырые линии от букмекера (до обогащения) ────────────
@@ -7373,6 +7421,318 @@ def build_result_json(match_result: dict, lines_data: dict = None,
 # ─────────────────────────────────────────────
 # ENTRYPOINT — loop over all match blocks
 # ─────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════
+# ТЗ v5.0 — АДАПТЕР НОВОГО ЄДИНОГО JSON-ФОРМАТУ ПАРСЕРА
+# ═════════════════════════════════════════════════════════════════════
+# Нічого зі старого пайплайну (load_lines / parse_records / build_hist_row /
+# process_match) не видаляється й не змінюється по суті. Нижче — лише
+# конвертери, які перетворюють новий формат парсера (PARSER_JSON_TZ_UA.md)
+# у ті самі внутрішні структури, які вже вміє їсти старий код. Це дозволяє
+# новому формату проходити через ВЕСЬ існуючий розрахунковий пайплайн без
+# змін у ньому.
+#
+# Букмекер за новим ТЗ завжди один — константа BOOKMAKER_NAME ("BETKING"),
+# незалежно від того, що прийшло в полі "bookmaker" у bookmaker_offers.
+
+_V5_STAT_KEYS = ("FGM", "FGA", "2PM", "2PA", "3PM", "3PA", "FTM", "FTA",
+                 "ORB", "DRB", "REB", "AST", "TO", "STL", "BLK", "FOULS")
+
+
+def is_v5_parser_json(data) -> bool:
+    """True if `data` is a top-level JSON object in the new ТЗ v5.0 format
+    (has schema_version + match), as opposed to the legacy raw list format."""
+    return isinstance(data, dict) and "schema_version" in data and isinstance(data.get("match"), dict)
+
+
+def _v5_map_stats(stats: Optional[dict], prefix: str) -> dict:
+    """
+    Map a ТЗ v5.0 live_stats/quarter_stats/history stats block
+    ({FGM, FGA, 2PM, 2PA, 3PM, 3PA, FTM, FTA, ORB, DRB, AST, TO, STL, BLK, FOULS})
+    onto the legacy abbreviated keys the rest of the script expects
+    (e.g. prefix='h' → hfgam, hfgmm, h2pam, h2pmm, h3pam, h3pmm, hftam, ...).
+    """
+    stats = stats or {}
+    fga = stats.get("FGA"); fgm = stats.get("FGM")
+    pa2 = stats.get("2PA"); pm2 = stats.get("2PM")
+    pa3 = stats.get("3PA"); pm3 = stats.get("3PM")
+    fta = stats.get("FTA"); ftm = stats.get("FTM")
+    orb = stats.get("ORB"); drb = stats.get("DRB"); reb = stats.get("REB")
+    if reb is None and orb is not None and drb is not None:
+        reb = safe_int(orb) + safe_int(drb)
+    out = {
+        f"{prefix}fgam": fga, f"{prefix}fgmm": fgm,
+        f"{prefix}2pam": pa2, f"{prefix}2pmm": pm2,
+        f"{prefix}3pam": pa3, f"{prefix}3pmm": pm3,
+        f"{prefix}ftam": fta, f"{prefix}ftmm": ftm,
+        f"{prefix}orbm": orb, f"{prefix}drbm": drb, f"{prefix}rbm": reb,
+        f"{prefix}astm": stats.get("AST"), f"{prefix}tovm": stats.get("TO"),
+        f"{prefix}stlm": stats.get("STL"), f"{prefix}blkm": stats.get("BLK"),
+        f"{prefix}flsm": stats.get("FOULS"),
+    }
+    if fga: out[f"{prefix}fgpm"] = round(100 * safe_int(fgm) / safe_int(fga), 1)
+    if pa3: out[f"{prefix}3ppm"] = round(100 * safe_int(pm3) / safe_int(pa3), 1)
+    if fta: out[f"{prefix}ftpm"] = round(100 * safe_int(ftm) / safe_int(fta), 1)
+    return out
+
+
+def _v5_status_string(match: dict) -> str:
+    """
+    Build a legacy free-text `st` status string from ТЗ v5.0
+    match.status / match.stage / match.clock so it flows unchanged through
+    the existing _derive_stage() / _is_match_finished() / parse_minutes_played()
+    regex parsers (nothing there needs to change).
+    """
+    status = (match.get("status") or "").upper()
+    stage  = (match.get("stage") or "").upper()
+    rules  = match.get("rules") or {}
+    quarters = safe_int(rules.get("quarters"), 4)
+    q_min    = safe_int(rules.get("quarter_minutes"), 10)
+
+    if status == "FINISHED" or stage == "FINAL":
+        return "Finished"
+    if stage == "HT":
+        return "Halftime"
+    if stage == "AFTER_3Q":
+        return "Перерва (після Q3)"
+    if stage in ("PRE_MATCH",) or status in ("SCHEDULED", "POSTPONED"):
+        return ""
+
+    clock = match.get("clock") or {}
+    elapsed = clock.get("elapsed_game_seconds")
+
+    if stage.startswith("Q") and stage[1:].isdigit():
+        period = int(stage[1:])
+        if elapsed is not None:
+            minute_in_q = max(0, round((safe_int(elapsed) - (period - 1) * q_min * 60) / 60))
+        else:
+            minute_in_q = 0
+        return f"Live ({period}-а чверть {minute_in_q}')"
+
+    if stage == "OT":
+        # (quarters + 1)-й "quarter" trick: parse_minutes_played computes
+        # (n-1)*q + minute, so n = quarters+1 gives exactly
+        # regulation_minutes + minutes played in OT.
+        regulation_seconds = quarters * q_min * 60
+        minute_in_ot = max(0, round((safe_int(elapsed) - regulation_seconds) / 60)) if elapsed is not None else 0
+        return f"Live ({quarters + 1}-а чверть {minute_in_ot}')"
+
+    return "Live" if status == "LIVE" else ""
+
+
+def _v5_build_main_record(data: dict) -> dict:
+    """Convert the ТЗ v5.0 root object into the legacy flat main_match record."""
+    match = data.get("match") or {}
+    rules = match.get("rules") or {}
+    score = match.get("score") or {}
+    clock = match.get("clock") or {}
+    live_stats = data.get("live_stats") or {}
+    quarter_stats = data.get("quarter_stats") or {}
+
+    home_team = match.get("home_team", "Home")
+    away_team = match.get("away_team", "Away")
+
+    rec = {
+        "mid": match.get("id", ""),
+        "ht": home_team, "at": away_team,
+        "hs": score.get("home"), "as_": score.get("away"),
+        "st": _v5_status_string(match),
+        "tour": match.get("tournament", ""),
+        "dt": (data.get("meta") or {}).get("generated_at", ""),
+        "url": "",
+        "src": "MAIN MATCH",
+        "_v5_rules": rules,
+        "_v5_alignment_status": (live_stats.get("alignment_status")
+                                  or match.get("alignment_status")),
+        "_v5_missing_score_or_clock": (
+            score.get("home") is None or score.get("away") is None
+            or (match.get("status") == "LIVE" and not clock)
+        ),
+    }
+
+    for period_data in match.get("quarters_score") or []:
+        p = safe_int(period_data.get("period"))
+        if 1 <= p <= 4:
+            rec[f"q{p}h"] = period_data.get("home")
+            rec[f"q{p}a"] = period_data.get("away")
+
+    rec.update(_v5_map_stats(live_stats.get("home"), "h"))
+    rec.update(_v5_map_stats(live_stats.get("away"), "a"))
+
+    # Current-quarter tail stats (ТЗ §6 quarter_stats) → per-quarter fields
+    # used by threshold hit-rate logic (q{N}_fga / q{N}_fta / q{N}_fouls / ...).
+    q_period = quarter_stats.get("period")
+    if q_period:
+        p = safe_int(q_period)
+        for side, prefix in (("home", "h"), ("away", "a")):
+            st_ = (quarter_stats.get(side) or {})
+            rec[f"{prefix}fga{p}"] = st_.get("FGA")
+            rec[f"{prefix}fta{p}"] = st_.get("FTA")
+            rec[f"{prefix}fls{p}"] = st_.get("FOULS")
+            rec[f"{prefix}orb{p}"] = st_.get("ORB")
+            rec[f"{prefix}tov{p}"] = st_.get("TO")
+
+    return rec
+
+
+def _v5_build_history_record(item: dict) -> Optional[dict]:
+    """
+    Convert one element of history.home_last35 / history.away_last35
+    (ТЗ v5.0 §4.2) into a legacy flat box-score record compatible with
+    build_hist_row(). home_away tells us which side ("h"/"a" prefix) the
+    tracked team occupies in that historical game.
+    """
+    if not isinstance(item, dict):
+        return None
+    score = item.get("score") or {}
+    home_away = (item.get("home_away") or "HOME").upper()
+    team_is_home = home_away != "AWAY"
+
+    team_name = item.get("team", "")
+    opp_name  = item.get("opponent", "")
+    home_name = team_name if team_is_home else opp_name
+    away_name = opp_name  if team_is_home else team_name
+    home_score = score.get("team") if team_is_home else score.get("opponent")
+    away_score = score.get("opponent") if team_is_home else score.get("team")
+
+    rec = {
+        "mid": item.get("match_id", ""),
+        "ht": home_name, "at": away_name,
+        "hs": home_score, "as_": away_score,
+        "st": "Finished",
+        "tour": item.get("competition", ""),
+        "dt": item.get("played_at", ""),
+        "src": f"{team_name} (Recent) LAST 35",
+        "_v5_rules": item.get("rules") or {},
+    }
+
+    for period_data in item.get("quarters_score") or []:
+        p = safe_int(period_data.get("period"))
+        if 1 <= p <= 4:
+            t_pts = period_data.get("team")
+            o_pts = period_data.get("opponent")
+            if team_is_home:
+                rec[f"q{p}h"], rec[f"q{p}a"] = t_pts, o_pts
+            else:
+                rec[f"q{p}h"], rec[f"q{p}a"] = o_pts, t_pts
+
+    stats = item.get("stats") or {}
+    if team_is_home:
+        rec.update(_v5_map_stats(stats, "h"))
+    else:
+        rec.update(_v5_map_stats(stats, "a"))
+
+    return rec
+
+
+def load_v5_json(path: str) -> dict:
+    """
+    Read a ТЗ v5.0 single-file parser snapshot and return the same shape
+    parse_records() produces: {main_match, team_a_hist, team_b_hist, h2h_hist}.
+    h2h_hist is always [] — the new ТЗ format does not carry a H2H block.
+    """
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not is_v5_parser_json(data):
+        raise ValueError(f"{path} is not a ТЗ v5.0 parser JSON (missing schema_version/match)")
+
+    main_match = _v5_build_main_record(data)
+    history = data.get("history") or {}
+    team_a_hist = [r for r in (_v5_build_history_record(x) for x in history.get("home_last35") or []) if r]
+    team_b_hist = [r for r in (_v5_build_history_record(x) for x in history.get("away_last35") or []) if r]
+
+    return {
+        "main_match": main_match,
+        "team_a_hist": team_a_hist,
+        "team_b_hist": team_b_hist,
+        "h2h_hist": [],
+        "_v5_raw": data,
+    }
+
+
+def build_lines_data_from_v5(data: dict) -> dict:
+    """
+    Convert ТЗ v5.0 `bookmaker_offers` (§7) into the legacy lines_data shape
+    consumed by load_lines()/extract_bk_*(). Bookmaker is always forced to
+    BOOKMAKER_NAME ("BETKING"), regardless of the "bookmaker" value in the
+    source offer. Only OPEN offers are kept as active lines; suspended/closed
+    offers are dropped here (parser already tags them per §7, but we defend
+    against stale/duplicate offers with a market-key dedupe keeping best odds).
+    """
+    lines_data = {
+        "match_total": [], "half_total": [], "quarter_total": [],
+        "match_handicap": [], "match_1x2": [], "other": [],
+        "home_ind_total": [], "away_ind_total": [],
+    }
+    match = (data.get("match") or {})
+    home_team = match.get("home_team", "")
+    away_team = match.get("away_team", "")
+
+    best_by_key = {}
+    for offer in data.get("bookmaker_offers") or []:
+        if not isinstance(offer, dict):
+            continue
+        if (offer.get("status") or "OPEN").upper() != "OPEN":
+            continue
+        market = offer.get("market_type")
+        segment = offer.get("segment")
+        team = offer.get("team")
+        side = offer.get("side")
+        line = offer.get("line")
+        odds = offer.get("odds")
+        if line is None or odds is None or market is None:
+            continue
+        key = (market, team, segment, side, line)
+        if key in best_by_key and safe_float(best_by_key[key].get("odds")) >= safe_float(odds):
+            continue
+        best_by_key[key] = offer
+
+    # Merge OVER + UNDER offers of the same (market, team, segment, line)
+    # into ONE entry — this is the shape the rest of the script (and the
+    # analysis-prompt schema documented at build_result_json) expects:
+    # a single object per line carrying both overOdd/over_odd and
+    # underOdd/under_odd, not two separate one-sided objects.
+    merged: dict = {}
+    for (market, team, segment, side, line), offer in best_by_key.items():
+        mkey = (market, team, segment, line)
+        entry_scope = "Match" if segment == "MATCH" else segment
+        entry = merged.setdefault(mkey, {
+            "line": float(line),
+            "scope": entry_scope,
+            "bookmaker": BOOKMAKER_NAME,   # ТЗ: единственный источник линий
+            "captured_at": offer.get("captured_at"),
+        })
+        odds = safe_float(offer.get("odds"))
+        if side == "OVER":
+            entry["over_odd"] = odds
+        elif side == "UNDER":
+            entry["under_odd"] = odds
+        else:
+            entry["odds"] = odds
+        if team:
+            entry["team"] = team
+
+    for (market, team, segment, line), base in merged.items():
+        if market == "MATCH_TOTAL":
+            lines_data["match_total"].append(base)
+        elif market == "SEGMENT_TOTAL" and segment in ("Q1", "Q2", "Q3", "Q4"):
+            lines_data["quarter_total"].append(base)
+        elif market == "SEGMENT_TOTAL" and segment in ("H1", "H2"):
+            lines_data["half_total"].append(base)
+        elif market in ("TEAM_IT_MATCH", "TEAM_IT_SEGMENT"):
+            if market == "TEAM_IT_SEGMENT":
+                base["scope"] = segment
+            if team == home_team:
+                lines_data["home_ind_total"].append(base)
+            elif team == away_team:
+                lines_data["away_ind_total"].append(base)
+            else:
+                lines_data["other"].append(base)
+        else:
+            lines_data["other"].append(base)
+
+    return lines_data
+
+
 def run(filepath: str, lines_path: str) -> list:
     path = Path(filepath)
     if not path.exists():
@@ -7380,6 +7740,22 @@ def run(filepath: str, lines_path: str) -> list:
 
     with open(path, "r", encoding="utf-8") as f:
         raw = json.load(f)
+
+    # ── ТЗ v5.0: новий єдиний JSON-формат парсера ────────────────────────
+    # Один файл = один snapshot одного матчу, з полями schema_version/match/
+    # live_stats/bookmaker_offers/history. Якщо це так — весь конвертований
+    # snapshot (match + історія + лінії) іде через ТОЙ САМИЙ process_match(),
+    # що й раніше; жодна розрахункова логіка нижче не змінюється.
+    if is_v5_parser_json(raw):
+        set_current_match_rules((raw.get("match") or {}).get("rules"))
+        parsed = load_v5_json(filepath)
+        lines_data = build_lines_data_from_v5(raw)
+        if not parsed["main_match"]:
+            return []
+        result = process_match(parsed, lines_data=lines_data)
+        return [(result, parsed, [parsed["main_match"], *parsed["team_a_hist"], *parsed["team_b_hist"]])]
+
+    set_current_match_rules(None)  # legacy pipeline: use name-based heuristics
 
     # Load bookmaker lines from line_result.json
     lines_data = load_lines(lines_path)
@@ -7433,6 +7809,20 @@ def _discover_files_in_data(data_dir: Path):
         raise FileNotFoundError(f"data directory not found: {data_dir}")
 
     json_files = list(data_dir.glob("*.json"))
+
+    # ── ТЗ v5.0: самодостатній файл (schema_version + match) ────────────
+    # Один файл містить і матч, і історію, і bookmaker_offers — окремий
+    # line_result*.json йому не потрібен. Перевіряємо це першим, щоб не
+    # вимагати старий двофайловий контракт там, де він не застосовний.
+    for f in json_files:
+        try:
+            with open(f, "r", encoding="utf-8") as fh:
+                candidate = json.load(fh)
+        except (json.JSONDecodeError, OSError):
+            continue
+        if is_v5_parser_json(candidate):
+            match_id = (candidate.get("match") or {}).get("id") or f.stem
+            return str(f), str(f), match_id
 
     line_result_path = None
     h2h_candidates = []
@@ -7497,7 +7887,28 @@ def main():
     """
     args = sys.argv[1:]
 
-    if args and args[0] == "--targets":
+    if len(args) == 1 and not args[0].startswith("--") and os.path.isfile(args[0]):
+        # ── ТЗ v5.0: один самодостатній файл (schema_version + match) ────
+        #    python math_script.py <snapshot.json>
+        h2h_path = line_result_path = args[0]
+        try:
+            with open(h2h_path, "r", encoding="utf-8") as fh:
+                _peek = json.load(fh)
+        except json.JSONDecodeError as e:
+            print(f"[math_script] ERROR: Invalid JSON — {e}", file=sys.stderr)
+            sys.exit(1)
+        if is_v5_parser_json(_peek):
+            match_id = (_peek.get("match") or {}).get("id") or Path(h2h_path).stem
+        else:
+            print(
+                "[math_script] ERROR: single-file mode requires a ТЗ v5.0 "
+                "snapshot (schema_version + match); got legacy format needing "
+                "--targets <h2h_file> <line_result_file>.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    elif args and args[0] == "--targets":
         # ── Explicit targets mode ────────────────────────────────────────
         if len(args) < 3:
             print(

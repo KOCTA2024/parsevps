@@ -43,7 +43,7 @@ const APP_ROOT  = path.resolve(__dirname, '..');
 const OPENAI_API_KEY    = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL      = process.env.OPENAI_MODEL      || 'gpt-5.4';
 const OPENAI_MAX_TOKENS       = Number(process.env.OPENAI_MAX_TOKENS)       || 32_000;
-const OPENAI_REASONING_EFFORT = process.env.OPENAI_REASONING_EFFORT || 'low'; // none | low | medium | high | xhigh
+const OPENAI_REASONING_EFFORT = process.env.OPENAI_REASONING_EFFORT || 'low'; // none | low | medium | high | xhigh | max
 const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS) || 180_000;
 
 // ─── Prompt caching config ────────────────────────────────────────────────
@@ -53,9 +53,40 @@ const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS) || 180_000;
 // Если гоняешь несколько независимых воркеров/пайплайнов с разными системными
 // промптами — задай им РАЗНЫЕ ключи через env, чтобы они не мешали друг другу.
 const OPENAI_PROMPT_CACHE_KEY = process.env.OPENAI_PROMPT_CACHE_KEY || 'sports-analyst-system-prompt-v1';
-// 24h retention работает только на моделях, которые её поддерживают (gpt-5.5+).
-// Для остальных — просто игнорируется/не отправляется.
+
+// ── gpt-5.6+ явное кэширование ──────────────────────────────────────────
+// С gpt-5.6 механизм кэша сменился:
+//   - prompt_cache_retention (24h/in_memory) для новых моделей БОЛЬШЕ НЕ
+//     ПОДДЕРЖИВАЕТСЯ — параметр просто проигнорируется. Актуальный аналог —
+//     prompt_cache_options.ttl (сейчас единственное поддерживаемое значение
+//     — "30m").
+//   - Раньше OpenAI сам решал, где резать префикс на кэшируемую часть
+//     (implicit). Теперь можно поставить EXPLICIT breakpoint вручную —
+//     ровно на границе системного промпта, ДО user-сообщения с данными
+//     конкретного матча. Это важно: если не резать явно, есть риск, что
+//     авто-breakpoint захwatит переменные данные матча в кэш — а write
+//     кэша стоит 1.25x от обычной цены input-токенов, и раз матч уникален,
+//     эти токены никогда не будут перечитаны из кэша — чистый убыток.
+//   - Явный breakpoint работает только если mode стоит на самих моделях
+//     семейства gpt-5.6+; для более старых моделей (gpt-5.4/5.5) эти поля
+//     просто не будут отправлены, и всё останется как было (implicit).
+const OPENAI_IS_GPT56_PLUS = /^gpt-5\.[6-9]/.test(OPENAI_MODEL) || /^gpt-[6-9]/.test(OPENAI_MODEL);
+const OPENAI_PROMPT_CACHE_MODE = process.env.OPENAI_PROMPT_CACHE_MODE || 'explicit'; // 'implicit' | 'explicit'
+const OPENAI_PROMPT_CACHE_TTL  = process.env.OPENAI_PROMPT_CACHE_TTL  || '30m'; // на момент написания — единственное поддерживаемое значение
+
+// Устаревший параметр — оставлен для обратной совместимости со старыми
+// моделями (gpt-5.4/5.5), которые ещё не понимают prompt_cache_options.
 const OPENAI_PROMPT_CACHE_RETENTION = process.env.OPENAI_PROMPT_CACHE_RETENTION || null; // 'in_memory' | '24h' | null
+
+// 'max' effort поддерживается только у gpt-5.6-sol (не у terra/luna) —
+// предупреждаем в логах, а не роняем запрос, т.к. поведение прочих
+// провайдеров/будущих моделей заранее не гарантировано.
+if (OPENAI_REASONING_EFFORT === 'max' && !/gpt-5\.6-sol/.test(OPENAI_MODEL)) {
+  console.warn(
+    `[openai_analyst] WARNING: reasoning_effort="max" запрошен для модели "${OPENAI_MODEL}", ` +
+    `но на момент написания "max" поддерживается только gpt-5.6-sol. Запрос может быть отклонён API.`
+  );
+}
 
 const OUTPUT_DIR        = process.env.ANALYSIS_OUTPUT_DIR
   ? path.resolve(process.env.ANALYSIS_OUTPUT_DIR)
@@ -310,6 +341,43 @@ function openaiRequest(payload, timeoutMs) {
   });
 }
 
+/**
+ * Собирает messages для Chat Completions.
+ *
+ * Для gpt-5.6+ system-сообщение отправляется как content-array с явным
+ * prompt_cache_breakpoint СРАЗУ ПОСЛЕ системного промпта — то есть кэшируется
+ * только он, а user-сообщение (данные конкретного матча, каждый раз разные)
+ * в кэш не попадает и не платит write-премию 1.25x впустую.
+ *
+ * Для более старых моделей (gpt-5.4/5.5) — просто обычные строки, как раньше,
+ * т.к. эти модели формат content-array с breakpoint не понимают.
+ */
+function buildMessages(systemPrompt, userMessage) {
+  if (!OPENAI_IS_GPT56_PLUS) {
+    return [
+      { role: 'system', content: systemPrompt },
+      { role: 'user',   content: userMessage  },
+    ];
+  }
+
+  return [
+    {
+      role: 'system',
+      content: [
+        {
+          type: 'text',
+          text: systemPrompt,
+          // Явная граница кэша: всё, что ДО этого блока (весь systemPrompt),
+          // становится кандидатом на кэш-префикс. userMessage идёт отдельным
+          // сообщением ниже и в этот breakpoint не входит.
+          prompt_cache_breakpoint: { mode: 'explicit' },
+        },
+      ],
+    },
+    { role: 'user', content: userMessage },
+  ];
+}
+
 function parseModelReply(text) {
   const stripped = text
     .replace(/^```(?:json)?\s*/i, '')
@@ -380,13 +448,18 @@ export async function analyseMatch(jobData, dataFilePath, lineFilePath, options 
     // КАЖДОМ запросе. Именно он даёт OpenAI сигнал "это тот же самый воркер,
     // роутите на ту же машину, где уже лежит закэшированный system prompt".
     prompt_cache_key: OPENAI_PROMPT_CACHE_KEY,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user',   content: userMessage  },
-    ],
+    messages: buildMessages(systemPrompt, userMessage),
   };
 
-  if (OPENAI_PROMPT_CACHE_RETENTION) {
+  if (OPENAI_IS_GPT56_PLUS) {
+    // gpt-5.6+: новый механизм. explicit-breakpoint уже проставлен внутри
+    // system-сообщения через buildMessages() — тут только режим и TTL.
+    payload.prompt_cache_options = {
+      mode: OPENAI_PROMPT_CACHE_MODE,
+      ttl:  OPENAI_PROMPT_CACHE_TTL,
+    };
+  } else if (OPENAI_PROMPT_CACHE_RETENTION) {
+    // gpt-5.4/5.5 и раньше — старый параметр.
     payload.prompt_cache_retention = OPENAI_PROMPT_CACHE_RETENTION;
   }
 
