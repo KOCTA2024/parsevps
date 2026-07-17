@@ -336,6 +336,17 @@ def adapt_match(source: dict[str, Any], config: dict[str, Any], strict: bool=Fal
     period_raw = first(match, ['period', 'quarter', 'current_quarter'])
     period_played_raw = first(match, ['period_minute_played', 'quarter_minute_played'])
     period_left_raw = first(match, ['period_minute_left', 'quarter_minute_left'])
+    # ── Fallback: math_script.py не пишет top-level "match" — время матча
+    # у него лежит в "meta" под другими именами (total_min_played,
+    # quarter_min_played, quarter_min_left). Без этого elapsed_raw всегда
+    # None → elapsed_seconds=0 → stage всегда PRE_MATCH, даже в live.
+    meta_block = source.get('meta', {}) if isinstance(source.get('meta'), dict) else {}
+    if elapsed_raw in (None, ''):
+        elapsed_raw = meta_block.get('total_min_played')
+    if period_played_raw in (None, ''):
+        period_played_raw = meta_block.get('quarter_min_played')
+    if period_left_raw in (None, ''):
+        period_left_raw = meta_block.get('quarter_min_left')
     elapsed_minutes = to_number(elapsed_raw)
     period = to_int(period_raw)
     period_played = to_number(period_played_raw)
@@ -353,7 +364,7 @@ def adapt_match(source: dict[str, Any], config: dict[str, Any], strict: bool=Fal
         period_left_seconds = max(0, quarter_seconds - period_elapsed_seconds)
     else:
         period_left_seconds = int(round((period_left or 0) * 60))
-    explicit_stage = str(first(match, ['stage', 'status']) or first(raw_main, ['st']) or '')
+    explicit_stage = str(first(match, ['stage', 'status']) or first(raw_main, ['st']) or meta_block.get('stage') or '')
     stage = _stage(elapsed_seconds, full_seconds, quarter_seconds, explicit_stage)
     raw_game = canonical_game(raw_main, config=config)
     quarters: list[dict[str, Optional[float]]] = []
