@@ -224,15 +224,6 @@ async function processJob(job) {
   if (skipReason) {
     log(jid, 'info', `Step 3 skipped — insufficient data: ${skipReason}`);
 
-    for (const filePath of [dataFilePath, lineFilePath]) {
-      try {
-        fs.unlinkSync(filePath);
-        log(jid, 'info', `Cleaned up ${filePath}`);
-      } catch (e) {
-        log(jid, 'info', `Could not delete ${filePath}: ${e.message}`);
-      }
-    }
-
     await job.updateProgress(100);
     log(jid, 'info', `✓ Chain stopped before AI for match ${matchId}`);
 
@@ -265,17 +256,6 @@ async function processJob(job) {
     aiResult = { verdict: 'ERROR', error: err.message };
   }
   await job.updateProgress(90);
-
-  // ── Cleanup: remove per-match data files ─────────────────────────────────
-  // NOTE: analysis_<matchId>.json is kept — it's the final output.
-  for (const filePath of [dataFilePath, lineFilePath]) {
-    try {
-      fs.unlinkSync(filePath);
-      log(jid, 'info', `Cleaned up ${filePath}`);
-    } catch (e) {
-      log(jid, 'info', `Could not delete ${filePath}: ${e.message}`);
-    }
-  }
 
   await job.updateProgress(100);
   log(jid, 'info', `✓ Full chain completed for match ${matchId}`);
