@@ -1844,7 +1844,8 @@ class SuperBasketCalculator:
         unhashed.pop('super_basket_calculation', None)
         unhashed.pop('super_basket_system', None)
         snapshot_hash = hashlib.sha256(json.dumps(unhashed, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')).hexdigest()
-        calculation = {'engine_version': str(self.config.get('engine_version', '5.0')), 'calculated_at': source.get('meta', {}).get('generated_at') or source.get('generated_at'), 'input_snapshot_hash': snapshot_hash, 'canonical_snapshot': {'match_id': canonical['match_id'], 'name': canonical['name'], 'stage': canonical['stage'], 'explicit_stage': canonical['explicit_stage'], 'current_quarter': canonical['current_quarter'], 'clock': canonical['clock'], 'score': canonical['score'], 'elapsed_game_seconds': canonical['elapsed_game_seconds'], 'remaining_game_seconds': canonical['remaining_game_seconds'], 'stat_support': canonical['stat_support'], 'format': canonical.get('format')}, 'data_gate': canonical['data_gate'], 'market_audit': dedupe_summary, 'markets_detected': audit, 'market_evaluations': evaluations, 'candidates': candidates, 'best_candidate': best, 'gpt_dispatch': {'threshold': threshold, 'eligible': bool(payload_candidates), 'candidate_count': len(payload_candidates), 'payload': {'match_id': canonical['match_id'], 'stage': canonical['stage'], 'candidates': payload_candidates}}}
+        match_url = str(first(source.get('match', {}) or {}, ['url', 'match_url', 'link', 'flashscore_url']) or source.get('match_url') or source.get('url') or '')
+        calculation = {'engine_version': str(self.config.get('engine_version', '5.0')), 'calculated_at': source.get('meta', {}).get('generated_at') or source.get('generated_at'), 'input_snapshot_hash': snapshot_hash, 'canonical_snapshot': {'match_id': canonical['match_id'], 'name': canonical['name'], 'home_team': canonical.get('home_team'), 'away_team': canonical.get('away_team'), 'tournament': canonical.get('tournament'), 'match_url': match_url, 'stage': canonical['stage'], 'explicit_stage': canonical['explicit_stage'], 'current_quarter': canonical['current_quarter'], 'clock': canonical['clock'], 'score': canonical['score'], 'quarters': canonical.get('quarters'), 'elapsed_game_seconds': canonical['elapsed_game_seconds'], 'remaining_game_seconds': canonical['remaining_game_seconds'], 'stat_support': canonical['stat_support'], 'format': canonical.get('format')}, 'data_gate': canonical['data_gate'], 'market_audit': dedupe_summary, 'markets_detected': audit, 'market_evaluations': evaluations, 'candidates': candidates, 'best_candidate': best, 'gpt_dispatch': {'threshold': threshold, 'eligible': bool(payload_candidates), 'candidate_count': len(payload_candidates), 'payload': {'match_id': canonical['match_id'], 'stage': canonical['stage'], 'candidates': payload_candidates}}}
         output = deepcopy(source)
         output['super_basket_calculation'] = calculation
         return output
@@ -2212,6 +2213,15 @@ class LearningStore:
         CREATE INDEX IF NOT EXISTS idx_signal_calibration
         ON signals(format_key, market_type, stage, side, result);
         ''')
+        for column_ddl in (
+            'ALTER TABLE signals ADD COLUMN telegram_deterministic_status TEXT',
+            'ALTER TABLE signals ADD COLUMN telegram_deterministic_message_id TEXT',
+        ):
+            try:
+                self.connection.execute(column_ddl)
+            except sqlite3.OperationalError as exc:
+                if 'duplicate column name' not in str(exc).lower():
+                    raise
         self.connection.commit()
 
     def calibration(self, evaluation: dict[str, Any], stage: str, format_key: str) -> dict[str, Any]:
@@ -2277,6 +2287,15 @@ class LearningStore:
 
     def update_delivery(self, signal_id: str, final_action: str, gpt_status: str, telegram_status: str, message_id: Optional[str]) -> None:
         self.connection.execute('''UPDATE signals SET final_action=?, gpt_status=?, telegram_status=?, telegram_message_id=? WHERE signal_id=?''', (final_action, gpt_status, telegram_status, message_id, signal_id))
+        self.connection.commit()
+
+    def update_deterministic_delivery(self, signal_id: str, telegram_status: str, message_id: Optional[str]) -> None:
+        """Трекінг відправки в ТГ без GPT (deterministic-only канал) — окрема колонка,
+        щоб не змішувати статус з основним GPT-reviewed telegram_status."""
+        self.connection.execute(
+            '''UPDATE signals SET telegram_deterministic_status=?, telegram_deterministic_message_id=? WHERE signal_id=?''',
+            (telegram_status, message_id, signal_id),
+        )
         self.connection.commit()
 
     def mark_processed(self, input_hash: str, source_path: str, output_path: str, status: str) -> None:
@@ -2527,6 +2546,96 @@ def build_telegram_message(decision: dict[str, Any], calculation: dict[str, Any]
     ]
     return '\n'.join(lines)
 
+_MARKET_TYPE_LABELS_UK = {
+    'TOTAL': 'Total',
+    'TEAM_IT': 'Team IT',
+    'CURRENT_QUARTER_TEAM_IT': 'Q{q} Team IT',
+}
+_SEGMENT_LABELS_UK = {
+    'MATCH': 'Match',
+    'H1': '1st Half',
+    'H2': '2nd Half',
+}
+
+
+def _market_label_uk(market: dict[str, Any], calculation: dict[str, Any]) -> str:
+    segment = str(market.get('segment') or '')
+    market_type = str(market.get('market_type') or '')
+    segment_label = _SEGMENT_LABELS_UK.get(segment, segment.title() if segment else '')
+    type_label = _MARKET_TYPE_LABELS_UK.get(market_type, market_type.replace('_', ' ').title())
+    if '{q}' in type_label:
+        type_label = type_label.format(q=calculation['canonical_snapshot'].get('current_quarter') or '?')
+    team = market.get('team')
+    if market_type.startswith('TEAM_IT') or market_type == 'CURRENT_QUARTER_TEAM_IT':
+        return f'{team or ""} IT'.strip()
+    return f'{segment_label} {type_label}'.strip()
+
+
+def _score_line_uk(calculation: dict[str, Any]) -> Optional[str]:
+    """HT-счёт если доступны 1 и 2 четверти, иначе текущий live-счёт по четверти."""
+    snapshot = calculation['canonical_snapshot']
+    quarters = snapshot.get('quarters') or []
+    score = snapshot.get('score') or {}
+    if len(quarters) >= 2:
+        q1, q2 = quarters[0], quarters[1]
+        if None not in (q1.get('home'), q1.get('away'), q2.get('home'), q2.get('away')):
+            ht_home = q1['home'] + q2['home']
+            ht_away = q1['away'] + q2['away']
+            return f'HT {ht_home:.0f}-{ht_away:.0f}'
+    if score.get('home') is not None and score.get('away') is not None:
+        quarter = snapshot.get('current_quarter')
+        label = f'Q{quarter}' if quarter else 'Live'
+        return f'{label} {score["home"]:.0f}-{score["away"]:.0f}'
+    return None
+
+
+def build_deterministic_telegram_message(decision: dict[str, Any], calculation: dict[str, Any]) -> str:
+    """Формує повідомлення в ТГ виключно з детермінованого рішення (deterministic_action),
+    без будь-якого звернення до GPT — ані статус, ані дію рев'ю сюди не підмішуємо."""
+    snapshot = calculation['canonical_snapshot']
+    market = decision['market'] or {}
+    action = decision['deterministic_action']
+    probability = decision['probabilities'].get('p_final')
+    home = snapshot.get('home_team') or ''
+    away = snapshot.get('away_team') or ''
+    title = f'{home} vs {away}' if home and away else str(snapshot.get('name') or '')
+    verdict_icon = '✅' if action == 'PLAY' else '⚠️' if action == 'RISK' else '⛔'
+
+    market_label = _market_label_uk(market, calculation)
+    line = market.get('line')
+    odds = market.get('odds')
+    side = market.get('side')
+    line_text = f'{float(line):.1f}' if line is not None else '?'
+    odds_text = f'@{float(odds):.2f}' if odds is not None else ''
+    side_text = str(side or '')
+    prob_text = f'{float(probability):.0%}' if probability is not None else 'n/a'
+
+    lines = [
+        f'🏀 {html.escape(title)}',
+    ]
+    tournament = snapshot.get('tournament')
+    if tournament:
+        lines.append(f'🏆 {html.escape(str(tournament))}')
+    lines.append(f'{verdict_icon} Вердикт: {html.escape(action)}')
+    lines.append(f'📌 {html.escape(market_label)} {line_text} {odds_text} {html.escape(side_text)} — P_final: {prob_text}'.replace('  ', ' '))
+
+    score_line = _score_line_uk(calculation)
+    if score_line:
+        lines.append(f'   {html.escape(score_line)}')
+
+    comment_parts = [part for part in (decision.get('explanation_uk'), decision.get('main_risk_uk')) if part]
+    if comment_parts:
+        lines.append(f'💬 {html.escape(" ".join(comment_parts))}')
+
+    match_url = snapshot.get('match_url')
+    if match_url:
+        lines.append(f'🔗 Матч ({html.escape(str(match_url))})')
+
+    timestamp = calculation.get('calculated_at') or utc_now()
+    lines.append(f'🕐 {html.escape(str(timestamp))}')
+    return '\n'.join(lines)
+
+
 def _extract_chat_ids(raw: Any) -> list[str]:
     """Достаёт список chat_id из произвольной формы telegram_chats.json:
     ["123","456"] / [{"chat_id":123}] / {"chat_ids":[...]} / {"123":{...},"456":{...}}."""
@@ -2646,10 +2755,12 @@ def process_vps_match_file(
     require_gpt: bool = True,
     enable_gpt: bool = True,
     enable_telegram: bool = True,
+    enable_deterministic_telegram: Optional[bool] = None,
     dry_run: bool = False,
     strict_schema: bool = False,
     gpt_reviewer: Optional[Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]] = None,
     telegram_sender: Optional[Callable[[str], dict[str, Any]]] = None,
+    deterministic_telegram_sender: Optional[Callable[[str], dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     mode = mode.upper()
     if mode not in {'ACTION', 'STRICT'}:
@@ -2677,6 +2788,30 @@ def process_vps_match_file(
             decision['explanation_uk'] = 'Рішення PASS: готова таблиця парсера не збігається з повторним розрахунком raw history.'
             decision['main_risk_uk'] = 'Неможливо визначити, яке джерело історії є актуальним.'
         deterministic_action = decision['action']
+
+        # ── Незалежний канал: відправка в ТГ БЕЗ участі GPT (чистий детермінований сигнал).
+        # Вмикається/вимикається через .env: TELEGRAM_DETERMINISTIC_ENABLED=true|false
+        # (або аргументом enable_deterministic_telegram). chat_id береться з того ж
+        # джерела, що і основний канал (state/telegram_chats.json / TELEGRAM_CHAT_ID).
+        # У повідомлення НЕ потрапляють gpt_status і GPT-рев'ювнута дія — тільки
+        # deterministic_action, ринок і детерміновані пояснення.
+        deterministic_telegram_enabled = (
+            enable_deterministic_telegram if enable_deterministic_telegram is not None
+            else env_bool('TELEGRAM_DETERMINISTIC_ENABLED', False)
+        )
+        deterministic_delivery = {'status': 'DISABLED', 'sent': False, 'message_id': None}
+        if deterministic_telegram_enabled and selected and decision.get('signal_id') and deterministic_action in {'PLAY', 'RISK'}:
+            existing_det, _ = store.record_signal(decision, calculation)
+            if existing_det.get('telegram_deterministic_status') == 'SENT':
+                deterministic_delivery = {'status': 'SKIPPED_DUPLICATE_ALREADY_SENT', 'sent': False, 'message_id': existing_det.get('telegram_deterministic_message_id')}
+            elif dry_run:
+                deterministic_delivery = {'status': 'DRY_RUN_NOT_SENT', 'sent': False, 'message_id': None}
+            else:
+                det_message = build_deterministic_telegram_message(decision, calculation)
+                det_sender = deterministic_telegram_sender or (lambda value: send_telegram_message(value))
+                deterministic_delivery = det_sender(det_message)
+            store.update_deterministic_delivery(decision['signal_id'], deterministic_delivery['status'], deterministic_delivery.get('message_id'))
+
         existing_before_review = store.get_signal(decision['signal_id']) if decision.get('signal_id') else None
         duplicate_already_sent = bool(existing_before_review and existing_before_review.get('telegram_status') == 'SENT')
         review: dict[str, Any]
@@ -2756,6 +2891,7 @@ def process_vps_match_file(
             'decision_text': f"{decision['action']} | {decision['status']} | P_final {probability_text}",
             'gpt_review': review,
             'telegram_delivery': {**delivery, 'duplicate_signal': duplicate},
+            'telegram_deterministic_delivery': deterministic_delivery,
             'learning': evaluation_for_output.get('calibration') if evaluation_for_output else {'status': 'NO_MARKET'},
         }
         core_result['super_basket_system'] = system
@@ -2825,6 +2961,7 @@ def watch_inbox(
     require_gpt: bool,
     enable_gpt: bool,
     enable_telegram: bool,
+    enable_deterministic_telegram: Optional[bool] = None,
     poll_seconds: float,
 ) -> None:
     inbox_path = Path(inbox).expanduser().resolve()
@@ -2854,7 +2991,7 @@ def watch_inbox(
                 continue
             output = outbox_path / f'{path.stem}_result.json'
             try:
-                result = process_vps_match_file(path, output_path=output, zones_path=zones_path, db_path=db_path, mode=mode, require_gpt=require_gpt, enable_gpt=enable_gpt, enable_telegram=enable_telegram)
+                result = process_vps_match_file(path, output_path=output, zones_path=zones_path, db_path=db_path, mode=mode, require_gpt=require_gpt, enable_gpt=enable_gpt, enable_telegram=enable_telegram, enable_deterministic_telegram=enable_deterministic_telegram)
                 decision = result['super_basket_system']['decision']
                 print(f"{utc_now()} {path.name}: {decision['action']} {decision['status']}", flush=True)
                 processed[key] = signature
@@ -2900,6 +3037,8 @@ def _add_runtime_switches(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--no-gpt', dest='enable_gpt', action='store_false')
     parser.add_argument('--telegram', dest='enable_telegram', action='store_true', default=True)
     parser.add_argument('--no-telegram', dest='enable_telegram', action='store_false')
+    parser.add_argument('--deterministic-telegram', dest='enable_deterministic_telegram', action='store_true', default=env_bool('TELEGRAM_DETERMINISTIC_ENABLED', False))
+    parser.add_argument('--no-deterministic-telegram', dest='enable_deterministic_telegram', action='store_false')
 
 def _single_file_cli(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -2952,6 +3091,7 @@ def _single_file_cli(argv: list[str] | None = None) -> int:
                 require_gpt=args.require_gpt,
                 enable_gpt=args.enable_gpt,
                 enable_telegram=args.enable_telegram,
+                enable_deterministic_telegram=args.enable_deterministic_telegram,
                 dry_run=args.dry_run,
                 strict_schema=args.strict_schema,
             )
@@ -2964,13 +3104,14 @@ def _single_file_cli(argv: list[str] | None = None) -> int:
                 'decision': deepcopy(system['decision']),
                 'gpt_status': system['gpt_review']['status'],
                 'telegram_status': system['telegram_delivery']['status'],
+                'telegram_deterministic_status': system['telegram_deterministic_delivery']['status'],
             }
             summary['decision'].pop('p_trace', None)
             summary['decision'].pop('caps', None)
             summary['decision'].pop('blockers', None)
             print(json.dumps(summary, ensure_ascii=False, indent=2))
         elif args.command == 'watch':
-            watch_inbox(args.inbox, args.outbox, zones_path=args.zones, db_path=args.db, mode=args.mode, require_gpt=args.require_gpt, enable_gpt=args.enable_gpt, enable_telegram=args.enable_telegram, poll_seconds=args.poll_seconds)
+            watch_inbox(args.inbox, args.outbox, zones_path=args.zones, db_path=args.db, mode=args.mode, require_gpt=args.require_gpt, enable_gpt=args.enable_gpt, enable_telegram=args.enable_telegram, enable_deterministic_telegram=args.enable_deterministic_telegram, poll_seconds=args.poll_seconds)
         elif args.command == 'settle':
             store = LearningStore(args.db)
             try:
@@ -3000,6 +3141,7 @@ def _single_file_cli(argv: list[str] | None = None) -> int:
                 'telegram_chats_loaded': len(load_telegram_chat_ids()),
                 'telegram_chat_id_fallback_set': bool(os.getenv('TELEGRAM_CHAT_ID')),
                 'require_gpt': env_bool('SUPER_BASKET_REQUIRE_GPT', True),
+                'telegram_deterministic_enabled': env_bool('TELEGRAM_DETERMINISTIC_ENABLED', False),
             }, ensure_ascii=False, indent=2))
     except KeyboardInterrupt:
         print('STOPPED', file=sys.stderr)
