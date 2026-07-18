@@ -1,0 +1,11 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+[remote "rep"]
+	url = https://github.com/KOCTA2024/parsevps.git
+	fetch = +refs/heads/*:refs/remotes/rep/*
+[branch "master"]
+	remote = rep
+	merge = refs/heads/main

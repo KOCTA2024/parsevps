@@ -28,15 +28,79 @@
  * fsign кешується на FSIGN_TTL_MS, щоб не відкривати сторінку в Playwright
  * на кожну хвилинну перевірку — рефрешиться лише коли протух або фід
  * повернув щось незрозуміле.
+ *
+ * ─── Пам'ять / стабільність на слабкому VPS (доповнення) ───────────────────
+ * Раніше браузер запускався один раз на весь час життя процесу (тижнями) з
+ * прапорцем --single-process, який зливає browser+GPU+network+renderer в
+ * ОДИН OS-процес. На малій пам'яті (1-2GB) це рано чи пізно призводило до
+ * OOM/деградації, після чого ВСІ page.goto() починали висіти до таймауту
+ * одночасно — незалежно від конкретного матчу (весь браузер — один процес,
+ * і якщо він "захлинувся", валиться геть усе одразу).
+ *
+ * Тепер:
+ *   - НЕ використовуємо --single-process / --no-zygote. Замість цього —
+ *     --renderer-process-limit=1: один рендерер-процес на всі таби (значна
+ *     економія пам'яті порівняно з дефолтним process-per-site), але
+ *     browser/network-процеси лишаються окремими — без ефекту "все в одній
+ *     кошику", що й ламало page.goto для всіх матчів одночасно.
+ *   - --js-flags=--max-old-space-size=96 обрізає V8-хіп рендерера, щоб
+ *     повільна витікаюча пам'ять не накопичувалась непомітно тижнями.
+ *   - Жорстке блокування важких типів ресурсів (image/stylesheet/font/media)
+ *     на рівні мережі (context.route) — нам потрібен лише заголовок x-fsign,
+ *     сама верстка не рендериться візуально ніколи.
+ *   - Періодичний recycle браузера (_maybeRecycle): за часом життя, за
+ *     кількістю відкритих сторінок і за вільною пам'яттю системи
+ *     (/proc/meminfo). Спрацьовує лениво — перед наступним _captureFsign.
+ *   - Семафор на кількість одночасно відкритих сторінок (MAX_CONCURRENT_PAGES),
+ *     щоб під час rescan()/catch-up вікон одразу для купи матчів не
+ *     відкривалось 10+ сторінок паралельно на слабкому CPU/RAM.
  */
 
 import { chromium } from 'playwright';
 import https from 'https';
 import zlib from 'zlib';
+import fs from 'fs';
 
 const FSIGN_TTL_MS              = Number(process.env.STAGE_FSIGN_TTL_MS) || 5 * 60_000; // 5 хв
 const FSIGN_CAPTURE_TIMEOUT_MS  = Number(process.env.STAGE_FSIGN_CAPTURE_TIMEOUT_MS) || 20_000;
 const FEED_PREFIX_DEFAULT       = '35';
+
+// ─── Налаштування recycle / concurrency (тюнити під конкретний VPS) ────────
+const BROWSER_RECYCLE_MS   = Number(process.env.STAGE_BROWSER_RECYCLE_MS)   || 3 * 60 * 60_000; // recycle раз на 3 год
+const BROWSER_MAX_CAPTURES = Number(process.env.STAGE_BROWSER_MAX_CAPTURES) || 500;             // recycle після N відкритих сторінок
+const MIN_FREE_MEM_MB      = Number(process.env.STAGE_MIN_FREE_MEM_MB)      || 150;             // recycle якщо вільної пам'яті менше
+const MAX_CONCURRENT_PAGES = Number(process.env.STAGE_MAX_CONCURRENT_PAGES) || 3;               // макс. одночасних page.goto()
+
+function getFreeMemMb() {
+  try {
+    const meminfo = fs.readFileSync('/proc/meminfo', 'utf8');
+    const m = meminfo.match(/MemAvailable:\s+(\d+)\s+kB/);
+    if (m) return Math.round(Number(m[1]) / 1024);
+  } catch {}
+  return null; // не Linux / немає доступу до /proc — просто пропускаємо цю перевірку
+}
+
+// ─── Простий семафор, щоб не відкривати забагато сторінок одночасно ────────
+class Semaphore {
+  constructor(max) {
+    this._max = max;
+    this._active = 0;
+    this._queue = [];
+  }
+  async acquire() {
+    if (this._active < this._max) {
+      this._active++;
+      return;
+    }
+    await new Promise(resolve => this._queue.push(resolve));
+    this._active++;
+  }
+  release() {
+    this._active--;
+    const next = this._queue.shift();
+    if (next) next();
+  }
+}
 
 // ─── KV / feed helpers (той самий формат, що й у match_h2h_export.js) ───────
 
@@ -101,10 +165,75 @@ function parseDaDi(rawDc) {
 
 class MatchStageChecker {
   constructor() {
-    this._browser    = null;
-    this._context    = null;
-    this._launching  = null;
-    this._fsignCache = new Map(); // matchId -> { fsign, prefix, ts }
+    this._browser       = null;
+    this._context       = null;
+    this._launching     = null;
+    this._fsignCache    = new Map(); // matchId -> { fsign, prefix, ts }
+    this._launchedAt    = 0;
+    this._captureCount  = 0;
+    this._recycling     = null;      // проміс поточного recycle (щоб не паралелити)
+    this._pageSemaphore = new Semaphore(MAX_CONCURRENT_PAGES);
+  }
+
+  async _launchBrowser() {
+    const browser = await chromium.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-extensions',
+        '--disable-background-networking',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-breakpad',
+        '--disable-client-side-phishing-detection',
+        '--disable-component-update',
+        '--disable-default-apps',
+        '--disable-sync',
+        '--disable-translate',
+        '--disable-features=Translate,site-per-process,IsolateOrigins',
+        '--disable-hang-monitor',
+        '--disable-ipc-flooding-protection',
+        '--disable-popup-blocking',
+        '--disable-prompt-on-repost',
+        '--metrics-recording-only',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--mute-audio',
+        '--blink-settings=imagesEnabled=false',
+        '--disable-application-cache',
+        '--disable-cache',
+        // КЛЮЧОВЕ замість --single-process: один рендерер-процес на всі
+        // таби (економія пам'яті), але browser/network-процеси лишаються
+        // окремими — тому "зависання" одного не кладе одразу весь браузер.
+        '--renderer-process-limit=1',
+        // Обрізаємо V8-хіп рендерера — повільний memory leak на довгій
+        // дистанції впирається в ліміт і сам себе прибирає, а не росте
+        // непомітно тижнями до OOM усього хоста.
+        '--js-flags=--max-old-space-size=96',
+      ],
+    });
+
+    const context = await browser.newContext();
+
+    // Нам потрібен лише заголовок x-fsign із запиту до flashscore.ninja.
+    // Картинки/шрифти/стилі/медіа для цього не потрібні взагалі — ріжемо їх
+    // на рівні мережі (додатково до --blink-settings=imagesEnabled=false).
+    await context.route('**/*', route => {
+      const type = route.request().resourceType();
+      if (type === 'image' || type === 'stylesheet' || type === 'font' || type === 'media') {
+        return route.abort();
+      }
+      return route.continue();
+    });
+
+    this._launchedAt   = Date.now();
+    this._captureCount = 0;
+
+    return { browser, context };
   }
 
   async _ensureContext() {
@@ -112,23 +241,10 @@ class MatchStageChecker {
     if (this._launching) return this._launching;
 
     this._launching = (async () => {
-      this._browser = await chromium.launch({
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--no-zygote',
-          '--single-process',
-          '--disable-extensions',
-          '--blink-settings=imagesEnabled=false',
-          '--disable-application-cache',
-          '--disable-cache',
-        ],
-      });
-      this._context = await this._browser.newContext();
-      return this._context;
+      const { browser, context } = await this._launchBrowser();
+      this._browser = browser;
+      this._context = context;
+      return context;
     })();
 
     const ctx = await this._launching;
@@ -137,44 +253,87 @@ class MatchStageChecker {
   }
 
   /**
+   * Ліниво перевіряє (перед кожним _captureFsign), чи не пора перезапустити
+   * браузер: за віком, за кількістю відкритих сторінок або за нестачею
+   * вільної пам'яті системи. Якщо recycle вже йде — просто чекаємо його.
+   */
+  async _maybeRecycle() {
+    if (!this._browser) return;
+    if (this._recycling) return this._recycling;
+
+    const age    = Date.now() - this._launchedAt;
+    const freeMb = getFreeMemMb();
+    const reasons = [];
+    if (age > BROWSER_RECYCLE_MS)                 reasons.push(`age ${(age / 60_000).toFixed(0)}min`);
+    if (this._captureCount >= BROWSER_MAX_CAPTURES) reasons.push(`captures ${this._captureCount}`);
+    if (freeMb !== null && freeMb < MIN_FREE_MEM_MB) reasons.push(`low mem ${freeMb}MB free`);
+
+    if (reasons.length === 0) return;
+
+    console.log(`[match-stage] ♻ Recycling browser (${reasons.join(', ')})`);
+
+    this._recycling = (async () => {
+      const oldBrowser = this._browser;
+      const oldContext = this._context;
+      this._browser = null;
+      this._context = null;
+      this._fsignCache.clear(); // fsign прив'язаний до старої сесії — валідність не гарантована
+      try { await oldContext?.close(); } catch {}
+      try { await oldBrowser?.close(); } catch {}
+    })();
+
+    await this._recycling;
+    this._recycling = null;
+  }
+
+  /**
    * Відкриває легку сторінку матчу лише щоб перехопити x-fsign.
    * НЕ чекає на detailScore/DOM-статус, НЕ ходить за архівами/h2h —
    * це і робить перевірку набагато дешевшою за повний парсер.
    */
   async _captureFsign(matchId) {
-    const context = await this._ensureContext();
-    const page = await context.newPage();
-    let fsign = '', prefix = FEED_PREFIX_DEFAULT;
+    await this._maybeRecycle();
+    await this._pageSemaphore.acquire();
 
-    let resolveFsign;
-    const fsignPromise = new Promise(res => { resolveFsign = res; });
-    const handler = req => {
-      const h = req.headers();
-      if (h['x-fsign'] && req.url().includes('flashscore.ninja')) {
-        const m = req.url().match(/https:\/\/(\d+)\.flashscore\.ninja/);
-        resolveFsign({ fsign: h['x-fsign'], prefix: (m && m[1].length > 1) ? m[1] : FEED_PREFIX_DEFAULT });
-      }
-    };
-    context.on('request', handler);
-
+    let page;
     try {
-      await page.goto(`https://www.flashscore.ua/match/${matchId}/#/h2h/overall`, {
-        waitUntil: 'domcontentloaded',
-        timeout: 30_000,
-      });
+      const context = await this._ensureContext();
+      this._captureCount++;
+      page = await context.newPage();
 
-      const captured = await Promise.race([
-        fsignPromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('fsign timeout')), FSIGN_CAPTURE_TIMEOUT_MS)),
-      ]).catch(() => null);
+      let fsign = '', prefix = FEED_PREFIX_DEFAULT;
+      let resolveFsign;
+      const fsignPromise = new Promise(res => { resolveFsign = res; });
+      const handler = req => {
+        const h = req.headers();
+        if (h['x-fsign'] && req.url().includes('flashscore.ninja')) {
+          const m = req.url().match(/https:\/\/(\d+)\.flashscore\.ninja/);
+          resolveFsign({ fsign: h['x-fsign'], prefix: (m && m[1].length > 1) ? m[1] : FEED_PREFIX_DEFAULT });
+        }
+      };
+      context.on('request', handler);
 
-      if (captured) { fsign = captured.fsign; prefix = captured.prefix; }
+      try {
+        await page.goto(`https://www.flashscore.ua/match/${matchId}/#/h2h/overall`, {
+          waitUntil: 'domcontentloaded',
+          timeout: 30_000,
+        });
+
+        const captured = await Promise.race([
+          fsignPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('fsign timeout')), FSIGN_CAPTURE_TIMEOUT_MS)),
+        ]).catch(() => null);
+
+        if (captured) { fsign = captured.fsign; prefix = captured.prefix; }
+      } finally {
+        context.off('request', handler);
+      }
+
+      return { fsign, prefix };
     } finally {
-      context.off('request', handler);
-      await page.close().catch(() => {});
+      await page?.close().catch(() => {});
+      this._pageSemaphore.release();
     }
-
-    return { fsign, prefix };
   }
 
   async _getFsign(matchId, { forceRefresh = false } = {}) {
