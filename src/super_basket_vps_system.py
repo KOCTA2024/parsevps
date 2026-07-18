@@ -2605,6 +2605,7 @@ def build_deterministic_telegram_message(decision: dict[str, Any], calculation: 
     market = decision['market'] or {}
     action = decision['deterministic_action']
     probability = decision['probabilities'].get('p_final')
+    p_hist_value = decision['probabilities'].get('p_hist')
     home = snapshot.get('home_team') or ''
     away = snapshot.get('away_team') or ''
     title = f'{home} vs {away}' if home and away else str(snapshot.get('name') or '')
@@ -2618,6 +2619,7 @@ def build_deterministic_telegram_message(decision: dict[str, Any], calculation: 
     odds_text = f'@{float(odds):.2f}' if odds is not None else ''
     side_text = str(side or '')
     prob_text = f'{float(probability):.0%}' if probability is not None else 'n/a'
+    p_hist_text = f'{float(p_hist_value):.0%}' if p_hist_value is not None else 'n/a'
 
     lines = [
         f'🏀 {html.escape(title)}',
@@ -2626,7 +2628,7 @@ def build_deterministic_telegram_message(decision: dict[str, Any], calculation: 
     if tournament:
         lines.append(f'🏆 {html.escape(str(tournament))}')
     lines.append(f'{verdict_icon} Вердикт: {html.escape(action)}')
-    lines.append(f'📌 {html.escape(market_label)} {line_text} {odds_text} {html.escape(side_text)} — P_final: {prob_text}'.replace('  ', ' '))
+    lines.append(f'📌 {html.escape(market_label)} {line_text} {odds_text} {html.escape(side_text)} — P_final: {prob_text} | P_history: {p_hist_text}'.replace('  ', ' '))
 
     score_line = _score_line_uk(calculation)
     if score_line:

@@ -16,15 +16,14 @@
  * чверті й тривалості перерв — не "плоскими" 2×Q/3×Q, бо ті ігнорують самі
  * перерви між чвертями)
  *
- * Checkpoint #3 має додаткову умову: перш ніж відкривати вікно, чекаємо
+ * Checkpoint #3 завжди відкриває вікно й завжди дає сигнал — навіть якщо
  * вердикт Checkpoint #2 (aiVerdict з результату відповідного job'а —
  * "PLAY"/"STRONG PLAY"/"PASS"/"CONFLICT"/"RISK ENTRY"/"PARSE_ERROR" від
- * openai_analyst.js, або "NO_DATA"/"ERROR" від worker.js). Якщо вердикт
- * "PLAY" або "STRONG PLAY" — Checkpoint #3 пропускається ПОВНІСТЮ (вікно
- * не відкривається, break не очікується). У будь-якому іншому випадку
- * (інший вердикт, невідомий вердикт, таймаут очікування, матч уже
- * закінчився або вікно Checkpoint #2 сплило без перерви) — Checkpoint #3
- * працює як завжди.
+ * openai_analyst.js, або "NO_DATA"/"ERROR" від worker.js) був "PLAY" чи
+ * "STRONG PLAY". Раніше такий вердикт повністю пропускав Checkpoint #3 —
+ * тепер це прибрано: Checkpoint #3 лише ЧЕКАЄ, поки Checkpoint #2
+ * завершиться (щоб не поллити стадію паралельно з ним), а сам вердикт іде
+ * лише в лог, на рішення "відкривати вікно чи ні" більше не впливає.
  *
  * Для кожної контрольної точки: починаючи з моменту старту вікна, раз на
  * хвилину питаємо стадію матчу (match_stage.js — легка перевірка, БЕЗ
@@ -46,6 +45,32 @@
  * Якщо перерва (або, для Checkpoint #1, старт Q2) так і не настала за
  * CHECK_WINDOW_MS від старту вікна — здаємось по цій контрольній точці
  * (лог warning) і чекаємо наступну.
+ *
+ * Catch-up при (пере)запуску / rescan: якщо на момент запуску деякі матчі
+ * вже пройшли заплановане вікно чекпоінта, kickoff у фіді міг брехати в
+ * ОБИДВА боки, і сліпа арифметика "kickoff+offset" однаково небезпечна в
+ * обох випадках:
+ *   - матч стартував ПІЗНІШЕ заявленого kickoff (типово — велика затримка
+ *     старту) → "прострочений дедлайн" — фікція, матч ще навіть не почався;
+ *   - матч стартував РАНІШЕ / скрипт довго простояв → матч уже реально на
+ *     пізнішій чверті, ніж припускає розклад.
+ * Тому перед тим, як наздоганяти застарілий чекпоінт, stage_monitor спершу
+ * робить ОДИН live-запит реального статусу матчу (handleStaleCheckpoint):
+ *   - "not_started" → kickoff відставав "у мінус" → staleness-перевірка по
+ *     часу ігнорується повністю, вікно відкривається негайно (ризику зловити
+ *     не ту чверть немає — жодна ще не йшла);
+ *   - "finished" → чекпоінт пропускається;
+ *   - "live"/"break"/невдалий live-запит → матч реально йде → відкриваємо
+ *     вікно "заднім числом" ЛИШЕ якщо реальний час ще НЕ переступив момент,
+ *     коли мав би початись НАСТУПНИЙ чекпоінт (для #3 — орієнтовний час
+ *     завершення матчу). Якщо переступив — точку вже фізично неможливо
+ *     "наздогнати" правильно: freeze-prone-фолбек Checkpoint #1/#3
+ *     (скидання/зависання liveMinute) або очікування "будь-якого break" для
+ *     Checkpoint #2 з високою ймовірністю зловлять межу ІНШОЇ, пізнішої
+ *     чверті — і надішлють сигнал під невірною міткою (напр. "Q1 checkpoint",
+ *     хоча матч насправді вже на Q2/Q3). У цьому випадку вікно взагалі не
+ *     відкривається — точка просто пропускається з логом, без жодного
+ *     (потенційно помилкового) сигналу.
  *
  * Usage:  node src/stage_monitor.js
  */
@@ -114,9 +139,18 @@ const CHECKPOINT2_VERDICT_WAIT_MS = Number(process.env.CHECKPOINT2_VERDICT_WAIT_
 // замовчуванням теж 2 хв.
 const STALL_CONFIRM_MS = Number(process.env.STAGE_STALL_CONFIRM_MS) || 2 * 60_000; // 2 хв
 
-// Вердикти Checkpoint #2 (job.aiVerdict, див. worker.js / openai_analyst.js),
-// при яких Checkpoint #3 повністю пропускається.
+// Вердикти Checkpoint #2 (job.aiVerdict, див. worker.js / openai_analyst.js).
+// РАНІШЕ при цих вердиктах Checkpoint #3 повністю пропускався. Тепер
+// Checkpoint #3 завжди відкриває вікно й завжди дає сигнал — цей набір
+// лишається лише для логування ("який був вердикт #2"), на рішення
+// відкривати вікно чи ні він більше не впливає.
 const SKIP_CHECKPOINT3_VERDICTS = new Set(['PLAY', 'STRONG PLAY']);
+
+// Скільки запасу давати оцінці "кінця матчу" для catch-up-перевірки
+// Checkpoint #3 (останньої точки — "наступного" чекпоінта, з яким можна
+// звірити реальний час, не існує). Оцінка = kickoff + офсет Q3 + довжина
+// чверті (як орієнтир для Q4) + цей запас (овертайми, затримки фіду тощо).
+const CATCHUP_STALE_BUFFER_MS = Number(process.env.CATCHUP_STALE_BUFFER_MS) || 20 * 60_000; // 20 хв
 
 // Зсуви контрольних точок рахуємо КУМУЛЯТИВНО від реальної структури матчу
 // (довжина чверті + перерви між чвертями), а не "плоскими" 2×Q / 3×Q як
@@ -508,28 +542,113 @@ function scheduleCheckpoint2(match, checkpointIndex, sportId, quarterMin) {
 
 /**
  * Викликається в момент, коли Checkpoint #3 мав би відкрити вікно за старим
- * розкладом (kickoff + offset). Замість того, щоб відкривати вікно одразу,
- * спершу чекаємо, поки остаточно не вирішиться доля Checkpoint #2 (half-time):
+ * розкладом (kickoff + offset). Перш ніж відкривати вікно, чекаємо, поки
+ * остаточно не вирішиться доля Checkpoint #2 (half-time):
  *   - job завершився / зафейлився / не встигли дочекатись → verdict відомий (або null)
  *   - вікно Checkpoint #2 сплило без перерви, або матч уже закінчився → verdict = null
- * Якщо verdict "PLAY" або "STRONG PLAY" → Checkpoint #3 пропускається повністю
- * (вікно не відкривається, break не очікується). Інакше — Checkpoint #3
- * стартує як завжди (watchCheckpoint), просто можливо трохи пізніше за
- * початково заплановані kickoff+offset хвилин.
+ * Це чекання лишається виключно щоб не поллити стадію ПАРАЛЕЛЬНО з
+ * Checkpoint #2. Сам вердикт більше НЕ впливає на те, чи відкривати вікно —
+ * Checkpoint #3 завжди запускається (watchCheckpoint) і завжди дає сигнал,
+ * незалежно від того, яким був вердикт #2 (в т.ч. "PLAY"/"STRONG PLAY").
  */
 function scheduleCheckpoint3(match, checkpointIndex, sportId, quarterMin) {
   const { id } = match;
-  log(id, `⏳ Checkpoint #${checkpointIndex + 1} reached scheduled time — waiting for Checkpoint #2 verdict before deciding…`);
+  log(id, `⏳ Checkpoint #${checkpointIndex + 1} reached scheduled time — waiting for Checkpoint #2 to finish before opening the window…`);
 
   const waiter = getCheckpoint2Waiter(id);
   waiter.promise.then((verdict) => {
     if (verdict && SKIP_CHECKPOINT3_VERDICTS.has(verdict)) {
-      log(id, `⏭ Checkpoint #2 verdict was "${verdict}" → skipping Checkpoint #3 entirely (window not opened).`);
-      return;
+      log(id, `ℹ Checkpoint #2 verdict was "${verdict}" — skip is disabled, Checkpoint #3 still proceeds.`);
+    } else {
+      log(id, `▶ Checkpoint #2 verdict was "${verdict ?? '(none/unresolved)'}" → proceeding with Checkpoint #3.`);
     }
-    log(id, `▶ Checkpoint #2 verdict was "${verdict ?? '(none/unresolved)'}" → proceeding with Checkpoint #3.`);
     watchCheckpoint(match, checkpointIndex, sportId, quarterMin);
   });
+}
+
+// ─── Рішення по "простроченому" (за кikoff+offset) чекпоінту ────────────────
+
+/**
+ * Викликається, коли за розкладом (kickoffMs + offset) чекпоінт мав би вже
+ * відкрити вікно, але цього не сталося (скрипт (пере)запустився пізно /
+ * matches.json довго не оновлювався / kickoff у фіді неточний). Розв'язує
+ * ДВІ протилежні проблеми відразу — тому перше, що робимо, це ОДИН live-запит
+ * реального статусу матчу (той самий matchStageChecker.checkStage, що й у
+ * watchCheckpoint):
+ *
+ *   1) kickoff у фіді "збрехав У МІНУС" (матч стартував ПІЗНІШЕ за заявлений
+ *      kickoff, типово — велика затримка старту матчу). Тоді арифметика
+ *      "дедлайн уже минув" — фікція: матч ще навіть не починався. Якщо тут
+ *      сліпо застосувати перевірку "чи не занадто пізно наздоганяти" (по
+ *      kickoff-часу), вона хибно вирішить "занадто пізно" і НАЗАВЖДИ пропустить
+ *      чекпоінт, хоча насправді ще нічого не відбулось. Розпізнається через
+ *      live-статус "not_started" — у цьому випадку staleness-перевірку просто
+ *      ІГНОРУЄМО і відкриваємо вікно негайно (ризику зловити не ту чверть
+ *      немає: жодна чверть ще не йшла).
+ *
+ *   2) kickoff у фіді "збрехав У ПЛЮС" (матч стартував РАНІШЕ, ніж заявлено,
+ *      або скрипт довго простояв) — це протилежний випадок, коли матч уже
+ *      реально прогресує ДАЛІ, ніж припускає розклад. Якщо тут наздоганяти
+ *      #1/#3 через freeze-prone-фолбек (скидання/зависання liveMinute) або
+ *      #2 через "будь-який break", легко зловити межу ІНШОЇ, пізнішої чверті —
+ *      і надіслати сигнал під невірною міткою (напр. "Q1 checkpoint", хоча
+ *      матч уже на Q2/Q3). Розпізнається через live-статус "live"/"break" —
+ *      у цьому випадку ЗАСТОСОВУЄМО nextCheckpointStartMs-перевірку.
+ *
+ * Якщо сам live-запит не вдався (мережа/Playwright), падаємо назад на поле
+ * match.status із matches.json — і про всяк випадок ПОВОДИМОСЬ ОБЕРЕЖНО:
+ * не довіряємо "not_started"-шляху без свіжого підтвердження, тобто
+ * застосовуємо staleness-перевірку (безпечніше пропустити сумнівну точку,
+ * ніж ризикнути надіслати сигнал під невірною міткою).
+ */
+async function handleStaleCheckpoint(match, idx, minutes, checkpointDeadline, nextCheckpointStartMs, sportId, startCheckpoint) {
+  const { id } = match;
+
+  let liveStatus = null;
+  try {
+    liveStatus = await matchStageChecker.checkStage(id, sportId);
+  } catch (e) {
+    log(id, `⚠ Live status check failed for stale Checkpoint #${idx + 1} (${e.message}) — ` +
+            `falling back to matches.json status + kickoff-time staleness check.`);
+  }
+
+  const status = liveStatus?.status ?? (match.status || 'unknown');
+
+  if (status === 'finished') {
+    log(id, `Checkpoint #${idx + 1} (+${minutes} min) window long expired and match is finished → skipping.`);
+    if (idx === 0) settleCheckpoint1(id);
+    if (idx === 1) settleCheckpoint2(id, null);
+    return;
+  }
+
+  if (liveStatus?.status === 'not_started') {
+    // Live-підтверджено: реальний матч ще не почався — kickoff у фіді
+    // відставав "у мінус" (затримка старту). Прострочений дедлайн тут —
+    // фікція, staleness-перевірку по kickoff-часу ігноруємо повністю.
+    log(id, `⏰ Checkpoint #${idx + 1} (+${minutes} min) deadline looked expired by kickoff-time math, but a live ` +
+            `check shows the match hasn't actually started yet (delayed kickoff) → opening the window now anyway, ` +
+            `kickoff-time staleness check skipped (no risk of catching the wrong quarter — none has happened yet).`);
+    startCheckpoint();
+    return;
+  }
+
+  // status тут: 'live' / 'break' / 'unknown' (включно з випадком, коли сам
+  // live-запит не вдався) — матч, найімовірніше, реально вже йде, тож
+  // застосовуємо захист від "не тієї чверті".
+  if (Date.now() > nextCheckpointStartMs) {
+    log(id, `⏰ Checkpoint #${idx + 1} (+${minutes} min) is too stale to catch up safely — real time already passed ` +
+            `the start of the next checkpoint / estimated match window (${new Date(nextCheckpointStartMs).toISOString()}), ` +
+            `and the match is confirmed live/already had a break → match is likely on a later quarter already. ` +
+            `Skipping WITHOUT opening a window, to avoid sending a signal under the wrong checkpoint label.`);
+    if (idx === 0) settleCheckpoint1(id);
+    if (idx === 1) settleCheckpoint2(id, null);
+    return;
+  }
+
+  log(id, `⏰ Checkpoint #${idx + 1} (+${minutes} min) scheduled window already passed ` +
+          `(deadline was ${new Date(checkpointDeadline).toISOString()}), but match is still in progress ` +
+          `and hasn't reached the next checkpoint yet → opening catch-up window now instead of skipping silently.`);
+  startCheckpoint();
 }
 
 // ─── Планування всіх трьох чекпоінтів матчу ──────────────────────────────────
@@ -561,33 +680,28 @@ function scheduleMatch(match) {
     const checkpointStart    = kickoffMs + minutes * 60_000;
     const checkpointDeadline = checkpointStart + CHECK_WINDOW_MS;
 
+    // Для перевірки "чи не застаріла точка НАСТІЛЬКИ, що наздоганяти її вже
+    // небезпечно" потрібен орієнтир — момент старту НАСТУПНОГО чекпоінта.
+    // Для #3 (останньої точки) такого наступного офсету немає — оцінюємо
+    // орієнтовний кінець матчу як kickoff + офсет Q3 + довжина чверті (Q4) +
+    // запас (овертайми/затримки фіду).
+    const nextCheckpointStartMs = idx + 1 < offsets.length
+      ? kickoffMs + offsets[idx + 1] * 60_000
+      : checkpointStart + quarterMin * 60_000 + CATCHUP_STALE_BUFFER_MS;
+
     const startCheckpoint = idx === 2
-      ? () => scheduleCheckpoint3(match, idx, sportId, quarterMin) // #3 — спершу чекає вердикт #2, може пропустити вікно повністю
+      ? () => scheduleCheckpoint3(match, idx, sportId, quarterMin) // #3 — спершу чекає завершення #2 (сигнал дає завжди)
       : idx === 1
         ? () => scheduleCheckpoint2(match, idx, sportId, quarterMin) // #2 — спершу чекає завершення #1, щоб не поллити паралельно
         : () => watchCheckpoint(match, idx, sportId, quarterMin);    // #1 — без змін
 
     if (now > checkpointDeadline) {
-      // Вікно вже минуло за розкладом (kickoff у фіді був неточний / stage_monitor
-      // піднявся або перечитав matches.json із запізненням / matches.json довго не
-      // оновлювався). Раніше тут просто мовчки помічали чекпоінт "оброблено" — і
-      // матч, що насправді ще триває, лишався взагалі без жодної перевірки і без
-      // жодного логу. Тепер: якщо матч ще НЕ "finished" — все одно відкриваємо
-      // вікно зараз (наздоганяючий старт), лишень з явним логом про причину.
       doneSet.add(idx);
-      if (match.status && match.status !== 'finished') {
-        log(id, `⏰ Checkpoint #${idx + 1} (+${minutes} min) scheduled window already passed ` +
-                `(deadline was ${new Date(checkpointDeadline).toISOString()}), but match status is ` +
-                `"${match.status}" → opening catch-up window now instead of skipping silently.`);
-        startCheckpoint();
-      } else {
-        log(id, `Checkpoint #${idx + 1} (+${minutes} min) window long expired and match status is ` +
-                `"${match.status || 'unknown'}" → skipping.`);
-        // Чекпоінт узагалі не запускається — фіксуємо "завершення" одразу,
-        // щоб наступний чекпоінт (якщо раптом чекає на цей) не завис назавжди.
-        if (idx === 0) settleCheckpoint1(id);
-        if (idx === 1) settleCheckpoint2(id, null);
-      }
+      // Fire-and-forget: рішення по застарілому чекпоінту вимагає одного
+      // live-запиту статусу (див. handleStaleCheckpoint), тому асинхронне.
+      // forEach не чекає на нього — інші чекпоінти/матчі плануються далі.
+      handleStaleCheckpoint(match, idx, minutes, checkpointDeadline, nextCheckpointStartMs, sportId, startCheckpoint)
+        .catch(e => console.error(`[stage-monitor] handleStaleCheckpoint failed for match ${id} checkpoint #${idx + 1}:`, e));
       return;
     }
 
@@ -653,8 +767,9 @@ async function main() {
     `stall-confirm (Checkpoints #1/#3 fallback) ${STALL_CONFIRM_MS / 60_000} min | ` +
     `rescanning matches.json every ${RESCAN_INTERVAL_MS / 60_000} min | ` +
     `Checkpoint #2 waits up to ${CHECKPOINT1_WAIT_MS / 60_000} min for Checkpoint #1 to finish | ` +
-    `Checkpoint #3 skipped when Checkpoint #2 verdict ∈ {${[...SKIP_CHECKPOINT3_VERDICTS].join(', ')}} ` +
-    `(waiting up to ${CHECKPOINT2_VERDICT_WAIT_MS / 60_000} min for that verdict)`
+    `Checkpoint #3 always runs (no skip on verdict) once Checkpoint #2 is done | ` +
+    `stale catch-up checkpoints (real time already past the next one) are skipped, not fired ` +
+    `(#3 stale buffer ${CATCHUP_STALE_BUFFER_MS / 60_000} min)`
   );
 }
 
