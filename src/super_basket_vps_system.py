@@ -1751,9 +1751,17 @@ class SuperBasketCalculator:
         elif same_format_n < 20:
             caps.append(_cap('SMALL_SAME_FORMAT_SAMPLE', self.config['caps']['small_sample'], 'Same-format history sample is below 20 games', {'same_format_pooled_n': same_format_n}))
         live_mode = canonical['stage'] != 'PRE_MATCH'
+        no_stat_mode = False
         if live_mode and stat['stat_support'] == 'OFF':
-            caps.append(_cap('STAT_SUPPORT_OFF', self.config['caps']['stat_off'], 'Live statistics unavailable'))
-            blockers.append(_blocker('STAT_GATE_OFF', 'Live market requires score, time and statistical support'))
+            # Немає live-статистики для team-relative stat-gate. Раніше це був hard
+            # blocker (STAT_GATE_OFF) з cap 0.67, який завжди примусово давав PASS,
+            # навіть якщо P_hist/P_scenario/P_live виглядали нормально. Тепер ми НЕ
+            # блокуємо і НЕ занижуємо ймовірність штучно — P_final рахується як
+            # завжди (P_hist/P_scenario/P_live), просто без team-relative
+            # підтвердження. Сигнал позначається no_stat_mode, щоб піти окремим
+            # детермінованим каналом у Telegram (без участі GPT/нейромережі),
+            # оскільки GPT-рев'ю без статистики ненадійне.
+            no_stat_mode = True
         elif live_mode and stat['stat_support'] == 'LIMITED':
             caps.append(_cap('STAT_SUPPORT_LIMITED', self.config['caps']['stat_limited'], 'Incomplete live statistics'))
         if stat['stat_gate_status'] == 'AGAINST':
@@ -1815,7 +1823,7 @@ class SuperBasketCalculator:
             _trace_step('P_LIVE', canonical['stage'] != 'PRE_MATCH', 'Phi(line edge / sigma) from conservative multi-component projection', {'projection_used': live.get('projection_used'), 'line': market['line'], 'line_edge': live.get('line_edge'), 'sigma': live.get('sigma'), 'scenario_projection_method': live.get('scenario_projection_method')}, None, live['p_live']),
             _trace_step('STAGE_WEIGHTS', True, 'w_hist*P_hist + w_scenario*P_scenario + w_live*P_live', {'stage': stage_key, 'weights': normalized_weights, 'normalization_applied': normalization_applied}, None, p_raw),
             _trace_step('PRODUCTION_ROUTER', router['status'] != 'ALLOW', 'router may allow, cap, prioritize or block the market', router, p_raw, p_raw, [router['reason']]),
-            _trace_step('STAT_GATE', stat.get('stat_gate_status') != 'OFF', 'team-relative 3-of-5 confirmation gate', {'support': stat.get('stat_support'), 'status': stat.get('stat_gate_status'), 'over_score': stat.get('over_gate_score'), 'under_score': stat.get('under_gate_score')}, p_raw, p_raw, [f"STAT_{stat.get('stat_gate_status')}"]),
+            _trace_step('STAT_GATE', stat.get('stat_gate_status') != 'OFF', 'team-relative 3-of-5 confirmation gate', {'support': stat.get('stat_support'), 'status': stat.get('stat_gate_status'), 'over_score': stat.get('over_gate_score'), 'under_score': stat.get('under_gate_score'), 'no_stat_mode': no_stat_mode, 'note': 'no_stat_mode: probability kept from P_hist/P_scenario/P_live, no cap/blocker applied; routed to deterministic (no-GPT) Telegram channel' if no_stat_mode else None}, p_raw, p_raw, [f"STAT_{stat.get('stat_gate_status')}"]),
             _trace_step('FAKE_PROFILE', bool((market['side'] == 'OVER' and stat.get('fake_over')) or (market['side'] == 'UNDER' and stat.get('fake_under'))), 'fake over/under applies cap only to the evaluated side', {'fake_over': stat.get('fake_over'), 'fake_under': stat.get('fake_under'), 'evaluated_side': market['side']}, p_raw, p_raw, [item['rule_id'] for item in caps if item['rule_id'].startswith('FAKE_')]),
             _trace_step('LIVE_HISTORY_CONFLICT', any(item['rule_id'] == 'STRONG_HISTORY_LIVE_CONFLICT' for item in blockers), 'strong opposite live edge blocks the history side', {'p_hist': history['p_hist'], 'line_edge': live.get('line_edge'), 'required_edge': strong_edge}, p_raw, p_raw, [item['rule_id'] for item in blockers if 'CONFLICT' in item['rule_id']]),
             _trace_step('FORMAT_AND_SAMPLE_GATE', same_format_n < 20, 'exact-line hits use same regulation duration only; cross-format games are normalized baseline only', {'format': canonical.get('format'), 'same_format_pooled_n': same_format_n, 'cross_format_team_a_n': canonical['data_gate'].get('cross_format_team_a_n'), 'cross_format_team_b_n': canonical['data_gate'].get('cross_format_team_b_n')}, p_raw, p_raw, [item['rule_id'] for item in caps if 'SAMPLE' in item['rule_id'] or 'FORMAT' in item['rule_id']]),
@@ -1825,7 +1833,7 @@ class SuperBasketCalculator:
             _trace_step('HARD_BLOCKERS', bool(blockers), 'any hard blocker forces PASS without inventing a replacement market', {'blockers': blockers}, p_final, p_final, [item['rule_id'] for item in blockers]),
             _trace_step('P_FINAL_RULE', True, 'clamp(P_context, active caps); blockers control verdict', {'strong_clean': strong_clean}, p_final, p_final, [verdict]),
         ]
-        return {**market, 'history': history, 'scenario': scenario, 'live': live, 'stat_comparison': stat, 'q4_context': q4, 'weights': {'original': original_weights, 'normalized': normalized_weights, 'normalization_applied': normalization_applied}, 'p_raw': p_raw, 'router': router, 'caps': caps, 'blockers': blockers, 'hard_conflict': bool(blockers), 'p_final': p_final, 'verdict': verdict, 'p_trace': p_trace, 'strong_requirements': {'aligned': alignment, 'stat_confirmation': stat['stat_gate_status'] == 'CONFIRMED', 'sample_sufficient': sample_sufficient, 'clean': strong_clean}}
+        return {**market, 'history': history, 'scenario': scenario, 'live': live, 'stat_comparison': stat, 'q4_context': q4, 'weights': {'original': original_weights, 'normalized': normalized_weights, 'normalization_applied': normalization_applied}, 'p_raw': p_raw, 'router': router, 'caps': caps, 'blockers': blockers, 'hard_conflict': bool(blockers), 'p_final': p_final, 'verdict': verdict, 'p_trace': p_trace, 'no_stat_mode': no_stat_mode, 'strong_requirements': {'aligned': alignment, 'stat_confirmation': stat['stat_gate_status'] == 'CONFIRMED', 'sample_sufficient': sample_sufficient, 'clean': strong_clean}}
 
     def calculate(self, source: dict[str, Any], dispatch_threshold: Optional[float]=None, strict_schema: bool=False) -> dict[str, Any]:
         canonical = adapt_match(source, self.config, strict_schema)
@@ -2456,6 +2464,7 @@ def build_decision(selected: Optional[dict[str, Any]], closest: Optional[dict[st
         'market': market,
         'probabilities': probabilities,
         'stake': stake,
+        'no_stat_mode': bool(evaluation.get('no_stat_mode')) if evaluation else False,
         'explanation_uk': explanation,
         'main_risk_uk': main_risk,
         'trigger_uk': trigger,
@@ -2622,6 +2631,9 @@ def build_deterministic_telegram_message(decision: dict[str, Any], calculation: 
     score_line = _score_line_uk(calculation)
     if score_line:
         lines.append(f'   {html.escape(score_line)}')
+
+    if decision.get('no_stat_mode'):
+        lines.append('🧮 Немає live-статистики (stat-gate OFF) — сигнал без участі GPT/нейромережі, P_final з P_hist/P_scenario/P_live.')
 
     comment_parts = [part for part in (decision.get('explanation_uk'), decision.get('main_risk_uk')) if part]
     if comment_parts:
@@ -2799,6 +2811,12 @@ def process_vps_match_file(
             enable_deterministic_telegram if enable_deterministic_telegram is not None
             else env_bool('TELEGRAM_DETERMINISTIC_ENABLED', False)
         )
+        # Якщо сигналу бракує live-статистики (no_stat_mode), GPT-рев'ю без stat-gate
+        # ненадійне і легко "гасить" валідний сигнал. Тому для no_stat_mode сигналів
+        # детермінований канал (без участі GPT/нейромережі) вмикається примусово —
+        # інакше PLAY/RISK без статистики міг би взагалі не дійти до Telegram.
+        if decision.get('no_stat_mode') and deterministic_action in {'PLAY', 'RISK'}:
+            deterministic_telegram_enabled = True
         deterministic_delivery = {'status': 'DISABLED', 'sent': False, 'message_id': None}
         if deterministic_telegram_enabled and selected and decision.get('signal_id') and deterministic_action in {'PLAY', 'RISK'}:
             existing_det, _ = store.record_signal(decision, calculation)
