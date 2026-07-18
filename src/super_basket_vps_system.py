@@ -1654,6 +1654,11 @@ def _router(market: dict[str, Any], canonical: dict[str, Any]) -> dict[str, Any]
             status, reason, cap = ('DOWNGRADE', 'Q2_Q3_STANDALONE_NO_CLEAN_PLAY', 0.74)
         elif market.get('segment') == 'Q4':
             status, reason = ('CONTEXT_GATE', 'Q4_REQUIRES_CONTEXT_GATE')
+    elif market_type in {'MATCH_TOTAL', 'TEAM_IT_MATCH'} and current == 1:
+        # Сигнал народився в 1-й чверті — на весь матч ще занадто рано (по суті
+        # прогноз всього матчу з даних лише 1-ї чверті). Дозволяємо сигнал лише
+        # на 1-у половину (H1_TOTAL / TEAM_IT_H1), тотал матчу блокуємо жорстко.
+        status, reason, hard_block = ('BLOCK', 'MATCH_TOTAL_BLOCKED_DURING_Q1_USE_H1', True)
     elif market_type in {'MATCH_TOTAL', 'TEAM_IT_MATCH'} and stage == 'AFTER_3Q':
         status, reason = ('PRIORITY', 'AFTER_3Q_PRIORITY')
     elif market_type in {'MATCH_TOTAL', 'TEAM_IT_MATCH', 'H2_TOTAL', 'TEAM_IT_H2'} and stage == 'HT':
@@ -2531,6 +2536,16 @@ def gpt_review_decision(decision: dict[str, Any], calculation: dict[str, Any], *
     except Exception as exc:  # network/API failures fail closed by design
         return {'status': 'ERROR_GPT_REVIEW_FAILED', 'approved': False, 'action': 'PASS', 'error': f'{type(exc).__name__}: {exc}', 'explanation_uk': '', 'main_risk_uk': '', 'telegram_text_uk': ''}
 
+_NO_GPT_REVIEW_STATUSES = {
+    'BYPASSED_BY_CONFIGURATION',  # --no-gpt / SUPER_BASKET_REQUIRE_GPT=false: сигнал пройшов без виклику GPT
+}
+
+def _review_used_gpt(review: dict[str, Any]) -> bool:
+    """True, якщо reviewer() реально викликався (навіть якщо GPT потім даунгрейднули/відхилили).
+    False — коли сигнал пройшов в обхід GPT-рев'ю за конфігурацією."""
+    return review.get('status') not in _NO_GPT_REVIEW_STATUSES
+
+
 def build_telegram_message(decision: dict[str, Any], calculation: dict[str, Any], review: dict[str, Any]) -> str:
     market = decision['market'] or {}
     probability = decision['probabilities'].get('p_final')
@@ -2550,9 +2565,18 @@ def build_telegram_message(decision: dict[str, Any], calculation: dict[str, Any]
         f'<b>Stake:</b> {html.escape(decision["stake"])}',
         f'<b>Пояснення:</b> {html.escape(explanation)}',
         f'<b>Головний ризик:</b> {html.escape(risk)}',
+    ]
+    # Якщо GPT/нейромережа реально не викликалась (сигнал пройшов в обхід за
+    # конфігурацією --no-gpt / SUPER_BASKET_REQUIRE_GPT=false), додаємо посилання
+    # на матч, щоб отримувач міг сам перевірити лінію/рахунок без AI-рев'ю.
+    if not _review_used_gpt(review):
+        match_url = calculation['canonical_snapshot'].get('match_url')
+        if match_url:
+            lines.append(f'<b>Без участі GPT — перевірте самостійно:</b> <a href="{html.escape(str(match_url))}">посилання на матч</a>')
+    lines.extend([
         '<i>Сигнал чинний лише для вказаних лінії, коефіцієнта, рахунку та часу.</i>',
         f'<code>{html.escape(str(decision.get("signal_id") or ""))}</code>',
-    ]
+    ])
     return '\n'.join(lines)
 
 _MARKET_TYPE_LABELS_UK = {
