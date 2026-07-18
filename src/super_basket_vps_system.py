@@ -2665,7 +2665,7 @@ def _extract_chat_ids(raw: Any) -> list[str]:
             else:
                 add(item)
     elif isinstance(raw, dict):
-        for key in ('chat_ids', 'chats', 'ids'):
+        for key in ('chat_ids', 'chatIds', 'chats', 'ids'):
             if key in raw:
                 ids.extend(_extract_chat_ids(raw[key]))
                 return ids
