@@ -86,6 +86,48 @@ MIN_VALID_MATCHES = 30
 HIST_OUTPUT_LIMIT = 20
 
 
+def _sanitize_half_total_lines(entries: list, home_ind_entries: list, away_ind_entries: list) -> tuple[list, list]:
+    """
+    Захист від бага букмекерського фіда (спостерігалось у джерелі "betking"):
+    лінії ІНДИВІДУАЛЬНОГО тоталу однієї команди (home_ind_total/away_ind_total,
+    типово ~42-55) іноді потрапляють у half_total з тегом scope="H1"/"H2",
+    хоча насправді half_total має описувати СУМУ очок ОБОХ команд за половину
+    матчу (типово ~60-115, приблизно половина від match_total).
+
+    Якщо це не відфільтрувати, downstream-розрахунок порівнює live-проекцію
+    по ВСІЙ половині матчу (наприклад ~102 очки) з лінією, яка насправді
+    призначена для однієї команди (наприклад 46.5) — і отримує штучно
+    завищений P_final (умовно кажучи "гарантований" OVER, якого нема).
+
+    Правило видалення: half_total-запис зі scope H1/H2 викидається, якщо
+    його line ТОЧНО збігається з якоюсь line з home_ind_total/away_ind_total
+    ЦЬОГО Ж матчу, і сама line при цьому нижча за правдоподібний поріг
+    половини матчу (60 очок сумарно — нижче цього для двох команд разом
+    практично неможливо на рівні НБА/EuroLeague-темпу).
+
+    Повертає (clean, excluded) — excluded зберігається окремо лише для
+    діагностики/логів, у розрахунки не потрапляє.
+    """
+    ind_lines = {
+        e.get("line")
+        for e in (list(home_ind_entries or []) + list(away_ind_entries or []))
+        if e.get("line") is not None
+    }
+    clean: list = []
+    excluded: list = []
+    for e in entries or []:
+        scope = e.get("scope", "")
+        line_val = e.get("line")
+        looks_like_ind_total_dupe = (
+            scope in ("H1", "H2")
+            and line_val is not None
+            and line_val in ind_lines
+            and line_val < 60
+        )
+        (excluded if looks_like_ind_total_dupe else clean).append(e)
+    return clean, excluded
+
+
 def load_lines(path: str) -> dict:
     """
     Load bookmaker lines from line_result.json.
@@ -96,15 +138,28 @@ def load_lines(path: str) -> dict:
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
+        home_ind_total = data.get("home_ind_total", [])
+        away_ind_total = data.get("away_ind_total", [])
+        half_total_clean, half_total_excluded = _sanitize_half_total_lines(
+            data.get("half_total", []), home_ind_total, away_ind_total,
+        )
+        if half_total_excluded:
+            print(
+                f"[math_script] WARNING: {len(half_total_excluded)} half_total "
+                f"line(s) dropped — matched individual-team-total line(s) with "
+                f"scope H1/H2 (likely feed bug): "
+                f"{[e.get('line') for e in half_total_excluded]}",
+                file=sys.stderr,
+            )
         return {
             "match_total":    data.get("match_total", []),
-            "half_total":     data.get("half_total", []),
+            "half_total":     half_total_clean,
             "quarter_total":  data.get("quarter_total", []),
             "match_handicap": data.get("match_handicap", []),
             "match_1x2":      data.get("match_1x2", []),
             "other":          data.get("other", []),
-            "home_ind_total": data.get("home_ind_total", []),
-            "away_ind_total": data.get("away_ind_total", []),
+            "home_ind_total": home_ind_total,
+            "away_ind_total": away_ind_total,
         }
     except (FileNotFoundError, json.JSONDecodeError, Exception):
         return {
@@ -7729,6 +7784,21 @@ def build_lines_data_from_v5(data: dict) -> dict:
                 lines_data["other"].append(base)
         else:
             lines_data["other"].append(base)
+
+    # Захист про запас: той самий фільтр, що й у load_lines() — на випадок,
+    # якщо TEAM_IT_SEGMENT/SEGMENT_TOTAL офери прийдуть з тегом не тієї
+    # segment вже на рівні парсера v5.
+    lines_data["half_total"], _v5_half_total_excluded = _sanitize_half_total_lines(
+        lines_data["half_total"], lines_data["home_ind_total"], lines_data["away_ind_total"],
+    )
+    if _v5_half_total_excluded:
+        print(
+            f"[math_script] WARNING: {len(_v5_half_total_excluded)} half_total "
+            f"line(s) dropped from v5 offers — matched individual-team-total "
+            f"line(s) with scope H1/H2 (likely feed bug): "
+            f"{[e.get('line') for e in _v5_half_total_excluded]}",
+            file=sys.stderr,
+        )
 
     return lines_data
 
