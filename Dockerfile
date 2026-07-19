@@ -3,10 +3,11 @@
 FROM mcr.microsoft.com/playwright:v1.56.0-noble
 
 # Python + curl (curl нужен scheduler-контейнеру для скачивания supercrond)
-# python3-pip — нужен для super_basket_vps_system.py (openai + pydantic, GPT-review сигналов)
+# python3-pip — нужен для super_basket_vps_system.py (openai + pydantic, GPT-review сигналов;
+# openpyxl — экспорт БД в Excel по команде /db в телеграм-боте)
 RUN apt-get update && apt-get install -y python3 python3-pip curl cron --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
-    && pip3 install --no-cache-dir --break-system-packages openai pydantic
+    && pip3 install --no-cache-dir --break-system-packages openai pydantic openpyxl
 
 COPY package*.json ./
 RUN npm ci --omit=dev
