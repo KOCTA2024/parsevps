@@ -197,8 +197,23 @@ function buildCheckpointOffsets(quarterMin) {
 const CHECKPOINTS_DEFAULT = buildCheckpointOffsets(QUARTER_MIN_DEFAULT);
 const CHECKPOINTS_NBA     = buildCheckpointOffsets(QUARTER_MIN_NBA);
 
+// Summer League і WNBA у фіді теж матчаться на "NBA"/"НБА" (напр. "США: Літня
+// ліга НБА в Лас-Вегасі"), але реально грають 10-хвилинні чверті, як і решта
+// не-NBA ліг — 12 хв лише в "справжній" (regular season/playoffs) NBA.
+// Без цього винятку і offsetsFor(), і nearQuarterEnd-поріг у watchCheckpoint
+// рахувались за QUARTER_MIN_NBA=12 для матчів, які реально йдуть по 10 —
+// вікна відкривались із запізненням, а freeze-фолбек чекав "зависання" на
+// 11'/12', яке ніколи не настає (реальне зависання — на 9'/10').
+const NBA_EXCLUDE_PATTERN = /літня|летняя|summer[\s-]?league|жіноч|женск|women|WNBA/i;
+
+function quarterMinFor(league) {
+  const l = league || '';
+  if (NBA_EXCLUDE_PATTERN.test(l)) return QUARTER_MIN_DEFAULT;
+  return NBA_PATTERN.test(l) ? QUARTER_MIN_NBA : QUARTER_MIN_DEFAULT;
+}
+
 function offsetsFor(league) {
-  return NBA_PATTERN.test(league || '') ? CHECKPOINTS_NBA : CHECKPOINTS_DEFAULT;
+  return quarterMinFor(league) === QUARTER_MIN_NBA ? CHECKPOINTS_NBA : CHECKPOINTS_DEFAULT;
 }
 
 /**
@@ -402,18 +417,22 @@ function watchCheckpoint(match, checkpointIndex, sportId, quarterMin) {
   const notStartedWaitStartedAt = Date.now(); // стеля для 'not_started' — див. NOT_STARTED_MAX_WAIT_MS
   let stopped = false;
 
-  // Checkpoint #1 (після Q1) і Checkpoint #3 (після Q3) — фід ЧАСТО не
-  // репортить status="break" на цих межах (на відміну від half-time, де
-  // break приходить стабільно). Замість "break" тут потрібно розпізнавати
-  // дві альтернативні ознаки:
+  // Усі три межі (Q1→Q2, half-time, Q3→Q4) стражають від того самого:
+  // фід ЧАСТО не репортить status="break" — замість цього liveMinute просто
+  // "зависає" (напр. на 10'/12' залежно від довжини чверті) і більше не
+  // оновлюється, поки не почнеться наступна чверть. Раніше вважалось, що
+  // half-time — виняток, де break приходить стабільно, але на практиці це
+  // не так: там теж часто просто зависання лічильника на 2 хв на позначці
+  // кінця Q2, без жодного явного break-статусу. Тому фолбек тепер
+  // застосовується до ВСІХ чекпоінтів однаково:
   //   (a) liveMinute СКИНУВСЯ на менше значення — нова чверть уже почалась,
   //       перерву пропустили повністю (наздоганяючий тригер);
   //   (b) liveMinute "завис" (не змінюється) кілька тіків поспіль близько
   //       до довжини чверті — перерва, ймовірно, вже йде просто зараз, фід
   //       лише не позначив це статусом.
-  // status === 'break' теж перевіряємо паралельно — фід іноді все ж таки
+  // status === 'break' завжди перевіряємо першим — фід іноді все ж таки
   // його присилає, і тоді реагуємо одразу, не чекаючи стабілізації stall'у.
-  const isFreezeProneCheckpoint = checkpointIndex === 0 || checkpointIndex === 2;
+  const isFreezeProneCheckpoint = true;
   let prevLiveMinute = null;
   let stallSinceMs = null; // коли вперше побачили поточне (незмінне) значення liveMinute
 
@@ -472,7 +491,19 @@ function watchCheckpoint(match, checkpointIndex, sportId, quarterMin) {
     if (stage.status === 'finished') {
       stopped = true;
       clearInterval(timer);
-      log(id, `Match already finished — checkpoint #${checkpointIndex + 1} skipped.`);
+      if (checkpointIndex === 2) {
+        // Checkpoint #3 задекларований як "завжди дає сигнал" — якщо матч
+        // встиг завершитись до того, як спрацював явний break АБО
+        // freeze-фолбек (типовий випадок: вікно #3 відкрилось із запізненням
+        // через накопичений дрейф і зловило вже Q4, а Q4→finished стався
+        // одним стрибком без паузи), все одно ставимо job замість тихого
+        // пропуску.
+        log(id, `⚠ Match finished before an explicit break/stall trigger — ` +
+                `Checkpoint #3 is "always-signal", queueing analysis anyway (fallback-at-finish).`);
+        await enqueueAnalysis(match, checkpointIndex);
+      } else {
+        log(id, `Match already finished — checkpoint #${checkpointIndex + 1} skipped.`);
+      }
       if (checkpointIndex === 0) settleCheckpoint1(id);
       if (checkpointIndex === 1) settleCheckpoint2(id, null);
       return;
@@ -486,8 +517,9 @@ function watchCheckpoint(match, checkpointIndex, sportId, quarterMin) {
         stopped = true;
         clearInterval(timer);
         log(id, `✓ Checkpoint #${checkpointIndex + 1} тригер: явний break-статус — queueing analysis.`);
-        await enqueueAnalysis(match, checkpointIndex);
+        const job = await enqueueAnalysis(match, checkpointIndex);
         if (checkpointIndex === 0) settleCheckpoint1(id);
+        if (checkpointIndex === 1) resolveCheckpoint2FromJob(id, job);
         return;
       }
 
@@ -520,24 +552,16 @@ function watchCheckpoint(match, checkpointIndex, sportId, quarterMin) {
           ? `скидання liveMinute (${prev}' → ${stage.liveMinute}')`
           : `liveMinute завис на ${stage.liveMinute}' ≥${STALL_CONFIRM_MS / 60_000} хв`;
         log(id, `✓ Checkpoint #${checkpointIndex + 1} тригер (фолбек): ${reason} — queueing analysis.`);
-        await enqueueAnalysis(match, checkpointIndex);
+        const job = await enqueueAnalysis(match, checkpointIndex);
         if (checkpointIndex === 0) settleCheckpoint1(id);
+        if (checkpointIndex === 1) resolveCheckpoint2FromJob(id, job);
       }
       // інакше — break не було, лічильник ще росте / ще не близько до кінця чверті → чекаємо наступного тіку
       return;
     }
-
-    if (stage.status === 'break') {
-      stopped = true;
-      clearInterval(timer);
-      const job = await enqueueAnalysis(match, checkpointIndex);
-      if (checkpointIndex === 1) {
-        // Не блокуємо поточний тік — Checkpoint #3 (якщо вже чекає) сам
-        // прокинеться, коли resolveCheckpoint2FromJob зафіксує вердикт.
-        resolveCheckpoint2FromJob(id, job);
-      }
-    }
-    // 'live' / 'not_started' / 'unknown' → просто чекаємо наступного тіку
+    // isFreezeProneCheckpoint тепер завжди true (усі три чекпоінти) —
+    // окрема гілка "лише break" більше не потрібна, лишили тільки
+    // фолбек-гілку вище. 'live' / 'not_started' / 'unknown' → чекаємо тіку.
   }, POLL_INTERVAL_MS);
 }
 
@@ -707,7 +731,7 @@ function scheduleMatch(match) {
   }
 
   const offsets = offsetsFor(league);
-  const quarterMin = NBA_PATTERN.test(league || '') ? QUARTER_MIN_NBA : QUARTER_MIN_DEFAULT;
+  const quarterMin = quarterMinFor(league);
   const sportId = sportIdFor(match);
   const now = Date.now();
 
@@ -745,7 +769,7 @@ function scheduleMatch(match) {
     doneSet.add(idx);
     const delay = Math.max(0, checkpointStart - now);
     setTimeout(startCheckpoint, delay);
-    log(id, `Scheduled checkpoint #${idx + 1} (+${minutes} min${NBA_PATTERN.test(league || '') ? ', NBA' : ''}) ` +
+    log(id, `Scheduled checkpoint #${idx + 1} (+${minutes} min${quarterMin === QUARTER_MIN_NBA ? ', NBA' : ''}) ` +
             `→ opens in ${(delay / 60_000).toFixed(1)} min`);
   });
 }

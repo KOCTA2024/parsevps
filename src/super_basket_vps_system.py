@@ -1683,12 +1683,19 @@ def _router(market: dict[str, Any], canonical: dict[str, Any]) -> dict[str, Any]
     current = canonical.get('current_quarter')
     status, reason, cap = ('ALLOW', 'SUPPORTED_BY_STAGE_ROUTER', None)
     hard_block = False
-    if market_type in {'MATCH_TOTAL', 'TEAM_IT_MATCH'} and current == 2:
+    in_q2_window = canonical['quarter_seconds'] <= canonical['elapsed_game_seconds'] < canonical['full_game_seconds'] / 2
+    if market_type in {'MATCH_TOTAL', 'TEAM_IT_MATCH'} and (current == 2 or in_q2_window):
         # Checkpoint #1 (stage_monitor.js) opens the analysis window right after
         # Q1 ends, i.e. during Q2 — the whole Q2 window, until half-time (which
         # is Checkpoint #2). In that window a full-match total/team-IT signal is
         # too early and noisy; only the half-scoped markets (H1_TOTAL/TEAM_IT_H1)
         # are allowed to fire here.
+        # NOTE: gated on elapsed game time (in_q2_window), not only on the
+        # provider's raw `current_quarter` field. Some feeds keep `period` at 1
+        # during the break right after Q1 ends (score/time already reflect a
+        # finished Q1) until Q2 officially tips off, which let full-match total
+        # signals slip through the old `current == 2`-only check for that
+        # window.
         status, reason, hard_block = ('BLOCK', 'MATCH_TOTAL_BLOCKED_DURING_Q2_AFTER_CHECKPOINT1_ONLY_HALF_MARKETS', True)
     elif market_type == 'H1_TOTAL' or market_type == 'TEAM_IT_H1':
         if canonical['elapsed_game_seconds'] >= canonical['full_game_seconds'] / 2:
