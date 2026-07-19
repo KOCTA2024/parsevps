@@ -1794,10 +1794,10 @@ class SuperBasketCalculator:
             caps.append(_cap('SMALL_SAME_FORMAT_SAMPLE', self.config['caps']['small_sample'], 'Same-format history sample is below 20 games', {'same_format_pooled_n': same_format_n}))
         live_mode = canonical['stage'] != 'PRE_MATCH'
         if live_mode and stat['stat_support'] == 'OFF':
-            # Missing live stats (fouls/FTA/etc.) no longer hard-blocks the signal —
-            # it only caps P_final via STAT_SUPPORT_OFF below. The deterministic
-            # P_hist/P_scenario/P_live blend is still allowed through.
-            caps.append(_cap('STAT_SUPPORT_OFF', self.config['caps']['stat_off'], 'Live statistics unavailable'))
+            # Missing live stats (fouls/FTA/etc.) no longer caps P_final at all.
+            # The deterministic P_hist/P_scenario/P_live blend is allowed through
+            # uncapped, same as when full stats are available (no-stats/PLAY-without-stats mode).
+            pass
         elif live_mode and stat['stat_support'] == 'LIMITED':
             caps.append(_cap('STAT_SUPPORT_LIMITED', self.config['caps']['stat_limited'], 'Incomplete live statistics'))
         if stat['stat_gate_status'] == 'AGAINST':

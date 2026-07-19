@@ -491,12 +491,22 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
     // In 'home'/'away' mode we also require uniqueness — if more than one card
     // matches the single keyword we skip it (ambiguous).
 
-    async function tryFindCard(homeKws, awayKws, matchMode, strategyLabel) {
+    async function tryFindCard(homeKws, awayKws, matchMode, strategyLabel, homeQuals = [], awayQuals = []) {
       return page.evaluate(
-        ([hKws, aKws, mode, label]) => {
+        ([hKws, aKws, mode, label, hQuals, aQuals]) => {
           function wordIn(nameOnPage, kws) {
             const n = nameOnPage.toLowerCase().trim();
             return kws.some(k => n.includes(k) || k.includes(n));
+          }
+
+          // Age/gender qualifiers (u17, u20, w, m, …) must ALSO be present on the
+          // card side when we only matched on a bare team-name word. Without this,
+          // "словенія" alone matches any Slovenia team regardless of age group —
+          // e.g. it would happily click "Словенія U20" while looking for "Словенія U17 W".
+          function qualifiersOk(nameOnPage, quals) {
+            if (quals.length === 0) return true;
+            const n = nameOnPage.toLowerCase();
+            return quals.every(q => n.includes(q));
           }
 
           // Collect all cards from DOM + shadow DOM, dedupe by joined competitor text
@@ -524,9 +534,9 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
             if (mode === 'both')
               return ns.some(n => wordIn(n, hKws)) && ns.some(n => wordIn(n, aKws));
             if (mode === 'home')
-              return ns.some(n => wordIn(n, hKws));
+              return ns.some(n => wordIn(n, hKws)) && ns.some(n => qualifiersOk(n, hQuals));
             if (mode === 'away')
-              return ns.some(n => wordIn(n, aKws));
+              return ns.some(n => wordIn(n, aKws)) && ns.some(n => qualifiersOk(n, aQuals));
             return false;
           });
 
@@ -537,7 +547,7 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
           matches[0].card.click();
           return { clicked: true, foundNames: matches[0].names, strategy: label };
         },
-        [homeKws, awayKws, matchMode, strategyLabel]
+        [homeKws, awayKws, matchMode, strategyLabel, homeQuals, awayQuals]
       );
     }
 
@@ -601,11 +611,27 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
       return [...words].sort((a, b) => b.length - a.length);
     }
 
+    // Age-group / gender qualifiers (u16, u17, u20, w, m, …) get dropped by the
+    // `length > 3` filter above, which lets a bare team-name word like "словенія"
+    // match ANY age group for that country. Extract them separately so fallback
+    // single-team strategies can still require them to match.
+    function significantQualifiers(variants) {
+      const quals = new Set();
+      for (const v of variants)
+        for (const w of v.split(/[\s\-.,]+/))
+          if (/^u\d{1,2}$/.test(w) || /^[wm]$/.test(w)) quals.add(w);
+      return [...quals];
+    }
+
     const homeWords = significantWords(homeVariants);
     const awayWords = significantWords(awayVariants);
+    const homeQualifiers = significantQualifiers(homeVariants);
+    const awayQualifiers = significantQualifiers(awayVariants);
 
     console.log(`  [betking] homeWords: ${JSON.stringify(homeWords)}`);
     console.log(`  [betking] awayWords: ${JSON.stringify(awayWords)}`);
+    console.log(`  [betking] homeQualifiers: ${JSON.stringify(homeQualifiers)}`);
+    console.log(`  [betking] awayQualifiers: ${JSON.stringify(awayQualifiers)}`);
 
     // ─── Search pass — run after every scroll step ────────────────────────────
     // Returns clickResult or null.
@@ -628,15 +654,15 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
         }
       }
 
-      // 3. Home word alone (unique)
+      // 3. Home word alone (unique) — must still match the age/gender qualifier
       for (const hw of homeWords) {
-        r = await tryFindCard([hw], [], 'home', `home-word(${hw})`);
+        r = await tryFindCard([hw], [], 'home', `home-word(${hw})`, homeQualifiers, []);
         if (r) return r;
       }
 
-      // 4. Away word alone (unique)
+      // 4. Away word alone (unique) — must still match the age/gender qualifier
       for (const aw of awayWords) {
-        r = await tryFindCard([], [aw], 'away', `away-word(${aw})`);
+        r = await tryFindCard([], [aw], 'away', `away-word(${aw})`, [], awayQualifiers);
         if (r) return r;
       }
 
