@@ -130,6 +130,12 @@ const CHECKPOINT1_WAIT_MS = Number(process.env.CHECKPOINT1_WAIT_MS) || (CHECK_WI
 // невідомим, і Checkpoint #3 стартує як завжди (тобто НЕ пропускається).
 const CHECKPOINT2_VERDICT_WAIT_MS = Number(process.env.CHECKPOINT2_VERDICT_WAIT_MS) || 10 * 60_000; // 10 хв
 
+// Safety only: Checkpoint #3 no longer depends on completion of the heavy Q2
+// parser/AI job. It waits only until Checkpoint #2 has been detected/queued.
+// If that signal is somehow never settled (process/network edge case), #3 still
+// opens after this timeout; quarter-aware gating prevents an early false fire.
+const CHECKPOINT2_TRIGGER_WAIT_MS = Number(process.env.CHECKPOINT2_TRIGGER_WAIT_MS) || (CHECK_WINDOW_MS + 10 * 60_000);
+
 // Checkpoint #1 (після Q1) і Checkpoint #3 (після Q3) страждають від одного й
 // того самого: фід ЧАСТО не репортить status="break" на цих межах — замість
 // цього liveMinute просто "зависає" (напр. на 10' при 10-хвилинній чверті) і
@@ -247,6 +253,18 @@ function log(matchId, ...args) {
   console.log(`[stage-monitor][match:${matchId}]`, ...args);
 }
 
+// Pure checkpoint classifier used by the watcher and regression tests.
+// TARGET means exactly the requested quarter boundary has been reached;
+// STALE means this lower checkpoint was missed and must not be replayed later.
+function checkpointProgressState(stage, checkpointIndex) {
+  const completed = stage?.completedQuarters;
+  const target = checkpointIndex + 1;
+  if (!Number.isInteger(completed)) return 'UNKNOWN';
+  if (completed === target) return 'TARGET';
+  if (completed > target) return 'STALE';
+  return 'WAIT';
+}
+
 // ─── State ───────────────────────────────────────────────────────────────────
 
 // matchId(String) -> Set(індексів чекпоінтів 0..2), які вже заплановані —
@@ -329,19 +347,19 @@ function settleCheckpoint2(matchId, verdict) {
  * CHECKPOINT2_VERDICT_WAIT_MS — вважаємо вердикт невідомим (null), що для
  * Checkpoint #3 еквівалентно "не PLAY" (працює як завжди).
  */
-async function resolveCheckpoint2FromJob(matchId, job) {
-  if (!job) {
-    settleCheckpoint2(matchId, null);
-    return;
-  }
+async function observeCheckpoint2Job(matchId, job) {
+  if (!job || !queueEvents) return;
   try {
     const result = await job.waitUntilFinished(queueEvents, CHECKPOINT2_VERDICT_WAIT_MS);
-    log(matchId, `Checkpoint #2 job finished — aiVerdict: ${result?.aiVerdict ?? '(none)'}`);
-    settleCheckpoint2(matchId, result?.aiVerdict ?? null);
+    const verdict = result?.aiVerdict
+      ?? result?.decision?.action
+      ?? result?.decision?.status
+      ?? null;
+    log(matchId, `Checkpoint #2 job finished — verdict: ${verdict ?? '(none)'}`);
   } catch (e) {
-    log(matchId, `⚠ Could not get Checkpoint #2 verdict (job ${job.id}) within ${CHECKPOINT2_VERDICT_WAIT_MS / 60_000} min: ${e.message}. ` +
-                 `Treating as unresolved → Checkpoint #3 will proceed normally.`);
-    settleCheckpoint2(matchId, null);
+    log(matchId, `⚠ Could not observe Checkpoint #2 job ${job.id} within ` +
+                 `${CHECKPOINT2_VERDICT_WAIT_MS / 60_000} min: ${e.message}. ` +
+                 `This does NOT block Checkpoint #3.`);
   }
 }
 
@@ -413,36 +431,42 @@ async function enqueueAnalysis(match, checkpointIndex) {
  */
 function watchCheckpoint(match, checkpointIndex, sportId, quarterMin) {
   const { id } = match;
+  const targetCompletedQuarters = checkpointIndex + 1;
   let windowOpenedAt = Date.now();
-  const notStartedWaitStartedAt = Date.now(); // стеля для 'not_started' — див. NOT_STARTED_MAX_WAIT_MS
+  const notStartedWaitStartedAt = Date.now();
   let stopped = false;
-
-  // Усі три межі (Q1→Q2, half-time, Q3→Q4) стражають від того самого:
-  // фід ЧАСТО не репортить status="break" — замість цього liveMinute просто
-  // "зависає" (напр. на 10'/12' залежно від довжини чверті) і більше не
-  // оновлюється, поки не почнеться наступна чверть. Раніше вважалось, що
-  // half-time — виняток, де break приходить стабільно, але на практиці це
-  // не так: там теж часто просто зависання лічильника на 2 хв на позначці
-  // кінця Q2, без жодного явного break-статусу. Тому фолбек тепер
-  // застосовується до ВСІХ чекпоінтів однаково:
-  //   (a) liveMinute СКИНУВСЯ на менше значення — нова чверть уже почалась,
-  //       перерву пропустили повністю (наздоганяючий тригер);
-  //   (b) liveMinute "завис" (не змінюється) кілька тіків поспіль близько
-  //       до довжини чверті — перерва, ймовірно, вже йде просто зараз, фід
-  //       лише не позначив це статусом.
-  // status === 'break' завжди перевіряємо першим — фід іноді все ж таки
-  // його присилає, і тоді реагуємо одразу, не чекаючи стабілізації stall'у.
-  const isFreezeProneCheckpoint = true;
   let prevLiveMinute = null;
-  let stallSinceMs = null; // коли вперше побачили поточне (незмінне) значення liveMinute
+  let stallSinceMs = null;
+  let timer = null;
 
-  log(id, `▶ Checkpoint #${checkpointIndex + 1} window opened — polling every ${POLL_INTERVAL_MS / 1000}s ` +
-          (isFreezeProneCheckpoint
-            ? `(break — основна ознака; якщо фід її не дасть, фолбек — скидання/зависання liveMinute; ` +
-              `giving up after ${CHECK_WINDOW_MS / 60_000} min)`
-            : `(giving up after ${CHECK_WINDOW_MS / 60_000} min if no break seen)`));
+  const finishWatcher = () => {
+    stopped = true;
+    if (timer) clearTimeout(timer);
+  };
 
-  const timer = setInterval(async () => {
+  const settleAfterQueue = (job) => {
+    if (checkpointIndex === 0) settleCheckpoint1(id);
+    if (checkpointIndex === 1) {
+      // Critical: release Checkpoint #3 as soon as the HT trigger has been
+      // detected and queued. Waiting for parser + calculator + GPT made Q3
+      // open late or never open when a job stalled.
+      settleCheckpoint2(id, job ? 'QUEUED' : null);
+      if (job) observeCheckpoint2Job(id, job); // logging only, non-blocking
+    }
+  };
+
+  const queueTarget = async (reason) => {
+    finishWatcher();
+    log(id, `✓ Checkpoint #${checkpointIndex + 1} trigger: ${reason} — queueing analysis.`);
+    const job = await enqueueAnalysis(match, checkpointIndex);
+    settleAfterQueue(job);
+  };
+
+  log(id, `▶ Checkpoint #${checkpointIndex + 1} window opened — target: ` +
+          `${targetCompletedQuarters} completed quarter(s); polling every ${POLL_INTERVAL_MS / 1000}s; ` +
+          `window ${CHECK_WINDOW_MS / 60_000} min after real start.`);
+
+  const poll = async () => {
     if (stopped) return;
 
     let stage;
@@ -450,119 +474,115 @@ function watchCheckpoint(match, checkpointIndex, sportId, quarterMin) {
       stage = await matchStageChecker.checkStage(id, sportId);
     } catch (e) {
       log(id, `⚠ stage check failed (will retry next tick): ${e.message}`);
+      timer = setTimeout(poll, POLL_INTERVAL_MS);
       return;
     }
 
-    // Матч ще фізично не почався (kickoff у фіді збрехав "у мінус" — реальна
-    // затримка старту). Час чекання тут НЕ має витрачати CHECK_WINDOW_MS —
-    // інакше вікно згорає вхолосту ще до того, як реально настане Q1/Q3.
-    // Зсуваємо windowOpenedAt вперед на кожному тіку, поки бачимо not_started;
-    // реальний відлік CHECK_WINDOW_MS почнеться лише коли матч дійсно піде.
-    // Обмежено окремою стелею (NOT_STARTED_MAX_WAIT_MS), щоб не висіти вічно
-    // на скасованому/перенесеному матчі.
     if (stage.status === 'not_started') {
       if (Date.now() - notStartedWaitStartedAt > NOT_STARTED_MAX_WAIT_MS) {
-        stopped = true;
-        clearInterval(timer);
+        finishWatcher();
         log(id, `⏱ Checkpoint #${checkpointIndex + 1} — match still not_started after ` +
-                `${NOT_STARTED_MAX_WAIT_MS / 60_000} min of waiting → giving up (likely postponed/cancelled).`);
+                `${NOT_STARTED_MAX_WAIT_MS / 60_000} min → giving up (postponed/cancelled).`);
         if (checkpointIndex === 0) settleCheckpoint1(id);
         if (checkpointIndex === 1) settleCheckpoint2(id, null);
         return;
       }
-      log(id, `Checkpoint #${checkpointIndex + 1} — match hasn't started yet (delayed kickoff) — ` +
-              `window clock paused, not counting this wait against CHECK_WINDOW_MS.`);
       windowOpenedAt = Date.now();
+      log(id, `Checkpoint #${checkpointIndex + 1} — delayed kickoff; window clock paused.`);
+      timer = setTimeout(poll, POLL_INTERVAL_MS);
       return;
     }
 
     if (Date.now() - windowOpenedAt > CHECK_WINDOW_MS) {
-      stopped = true;
-      clearInterval(timer);
-      log(id, `⏱ Checkpoint #${checkpointIndex + 1} window expired — no trigger detected. Giving up on this checkpoint.`);
+      finishWatcher();
+      log(id, `⏱ Checkpoint #${checkpointIndex + 1} window expired — target quarter not confirmed.`);
       if (checkpointIndex === 0) settleCheckpoint1(id);
       if (checkpointIndex === 1) settleCheckpoint2(id, null);
       return;
     }
 
+    const progressText = stage.completedQuarters !== null && stage.completedQuarters !== undefined
+      ? `; completedQ=${stage.completedQuarters}; currentQ=${stage.currentQuarter ?? '?'}`
+      : '; completedQ=?';
     log(id, `Checkpoint #${checkpointIndex + 1} — stage: ${stage.status}` +
-            (stage.liveMinute !== null ? ` (${stage.liveMinute}')` : ''));
+            (stage.liveMinute !== null ? ` (${stage.liveMinute}')` : '') + progressText);
+
+    // Primary trigger: actual quarter-score progress. This prevents a delayed
+    // match's Q1 break from being mistaken for HT/Q3 and also catches a missed
+    // break as soon as the next quarter has a score.
+    const progressState = checkpointProgressState(stage, checkpointIndex);
+    if (progressState === 'STALE') {
+      finishWatcher();
+      log(id, `↷ Checkpoint #${checkpointIndex + 1} skipped: feed already confirms ` +
+              `${stage.completedQuarters} completed quarters (target was ${targetCompletedQuarters}).`);
+      if (checkpointIndex === 0) settleCheckpoint1(id);
+      if (checkpointIndex === 1) settleCheckpoint2(id, null);
+      return;
+    }
+    if (progressState === 'TARGET') {
+      await queueTarget(`df_sur confirms Q${targetCompletedQuarters} completed`);
+      return;
+    }
 
     if (stage.status === 'finished') {
-      stopped = true;
-      clearInterval(timer);
+      finishWatcher();
       if (checkpointIndex === 2) {
-        // Checkpoint #3 задекларований як "завжди дає сигнал" — якщо матч
-        // встиг завершитись до того, як спрацював явний break АБО
-        // freeze-фолбек (типовий випадок: вікно #3 відкрилось із запізненням
-        // через накопичений дрейф і зловило вже Q4, а Q4→finished стався
-        // одним стрибком без паузи), все одно ставимо job замість тихого
-        // пропуску.
-        log(id, `⚠ Match finished before an explicit break/stall trigger — ` +
-                `Checkpoint #3 is "always-signal", queueing analysis anyway (fallback-at-finish).`);
-        await enqueueAnalysis(match, checkpointIndex);
+        log(id, `⚠ Match finished before Q3 trigger was observed — queueing Checkpoint #3 fallback-at-finish.`);
+        const job = await enqueueAnalysis(match, checkpointIndex);
+        settleAfterQueue(job);
       } else {
-        log(id, `Match already finished — checkpoint #${checkpointIndex + 1} skipped.`);
+        log(id, `Match finished — checkpoint #${checkpointIndex + 1} skipped.`);
+        if (checkpointIndex === 0) settleCheckpoint1(id);
+        if (checkpointIndex === 1) settleCheckpoint2(id, null);
       }
-      if (checkpointIndex === 0) settleCheckpoint1(id);
-      if (checkpointIndex === 1) settleCheckpoint2(id, null);
       return;
     }
 
-    if (isFreezeProneCheckpoint) {
-      // 1) ОСНОВНА ознака — той самий явний "break", що й для Checkpoint #2.
-      //    Перевіряємо його першим на кожному тіку: якщо фід його дав —
-      //    реагуємо негайно, без огляду на стан liveMinute.
-      if (stage.status === 'break') {
-        stopped = true;
-        clearInterval(timer);
-        log(id, `✓ Checkpoint #${checkpointIndex + 1} тригер: явний break-статус — queueing analysis.`);
-        const job = await enqueueAnalysis(match, checkpointIndex);
-        if (checkpointIndex === 0) settleCheckpoint1(id);
-        if (checkpointIndex === 1) resolveCheckpoint2FromJob(id, job);
+    // A generic break is only valid when quarter progress agrees with this
+    // checkpoint. If df_sur is unavailable, retain the old fallback behavior.
+    if (stage.status === 'break') {
+      const progressKnown = Number.isInteger(stage.completedQuarters);
+      if (!progressKnown) {
+        await queueTarget('explicit break (quarter-score feed unavailable)');
         return;
       }
-
-      // 2) ФОЛБЕК — застосовується лише коли break не прийшов: скидання
-      //    liveMinute (нова чверть уже почалась) або "зависання" лічильника
-      //    близько до довжини чверті (перерва йде, фід просто не позначив).
-      const prev = prevLiveMinute;
-
-      const minuteReset =
-        stage.status === 'live' &&
-        stage.liveMinute !== null &&
-        prev !== null &&
-        stage.liveMinute < prev;
-
-      if (stage.liveMinute !== null && stage.liveMinute === prev) {
-        if (stallSinceMs === null) stallSinceMs = Date.now();
-      } else {
-        stallSinceMs = null;
-      }
-      const stalledLongEnough = stallSinceMs !== null && (Date.now() - stallSinceMs) >= STALL_CONFIRM_MS;
-      const nearQuarterEnd = stage.liveMinute !== null && quarterMin != null && stage.liveMinute >= quarterMin - 1;
-      const minuteStalled = stage.status === 'live' && stalledLongEnough && nearQuarterEnd;
-
-      if (stage.liveMinute !== null) prevLiveMinute = stage.liveMinute;
-
-      if (minuteReset || minuteStalled) {
-        stopped = true;
-        clearInterval(timer);
-        const reason = minuteReset
-          ? `скидання liveMinute (${prev}' → ${stage.liveMinute}')`
-          : `liveMinute завис на ${stage.liveMinute}' ≥${STALL_CONFIRM_MS / 60_000} хв`;
-        log(id, `✓ Checkpoint #${checkpointIndex + 1} тригер (фолбек): ${reason} — queueing analysis.`);
-        const job = await enqueueAnalysis(match, checkpointIndex);
-        if (checkpointIndex === 0) settleCheckpoint1(id);
-        if (checkpointIndex === 1) resolveCheckpoint2FromJob(id, job);
-      }
-      // інакше — break не було, лічильник ще росте / ще не близько до кінця чверті → чекаємо наступного тіку
+      log(id, `↷ Break ignored for Checkpoint #${checkpointIndex + 1}: ` +
+              `completedQ=${stage.completedQuarters}, target=${targetCompletedQuarters}.`);
+      timer = setTimeout(poll, POLL_INTERVAL_MS);
       return;
     }
-    // isFreezeProneCheckpoint тепер завжди true (усі три чекпоінти) —
-    // окрема гілка "лише break" більше не потрібна, лишили тільки
-    // фолбек-гілку вище. 'live' / 'not_started' / 'unknown' → чекаємо тіку.
-  }, POLL_INTERVAL_MS);
+
+    const prev = prevLiveMinute;
+    const minuteReset = stage.status === 'live' && stage.liveMinute !== null &&
+      prev !== null && stage.liveMinute < prev;
+
+    if (stage.liveMinute !== null && stage.liveMinute === prev) {
+      if (stallSinceMs === null) stallSinceMs = Date.now();
+    } else {
+      stallSinceMs = null;
+    }
+    const stalledLongEnough = stallSinceMs !== null && (Date.now() - stallSinceMs) >= STALL_CONFIRM_MS;
+    const nearQuarterEnd = stage.liveMinute !== null && quarterMin != null && stage.liveMinute >= quarterMin - 1;
+    const minuteStalled = stage.status === 'live' && stalledLongEnough && nearQuarterEnd;
+    if (stage.liveMinute !== null) prevLiveMinute = stage.liveMinute;
+
+    // Minute-only fallback is allowed only when df_sur cannot tell us the
+    // completed-quarter count. With reliable progress, target matching above is
+    // authoritative and prevents cross-quarter false triggers.
+    if ((minuteReset || minuteStalled) && !stage.quarterProgressReliable) {
+      const reason = minuteReset
+        ? `liveMinute reset (${prev}' → ${stage.liveMinute}') with no quarter-score data`
+        : `liveMinute stalled at ${stage.liveMinute}' ≥${STALL_CONFIRM_MS / 60_000} min with no quarter-score data`;
+      await queueTarget(reason);
+      return;
+    }
+
+    timer = setTimeout(poll, POLL_INTERVAL_MS);
+  };
+
+  // Poll immediately. setInterval previously waited a full minute before the
+  // first check and could miss a short Q1/Q3 break entirely.
+  void poll();
 }
 
 // ─── Checkpoint #2: чекаємо завершення Checkpoint #1, перш ніж стартувати ────
@@ -614,14 +634,24 @@ function scheduleCheckpoint2(match, checkpointIndex, sportId, quarterMin) {
  */
 function scheduleCheckpoint3(match, checkpointIndex, sportId, quarterMin) {
   const { id } = match;
-  log(id, `⏳ Checkpoint #${checkpointIndex + 1} reached scheduled time — waiting for Checkpoint #2 to finish before opening the window…`);
+  log(id, `⏳ Checkpoint #${checkpointIndex + 1} reached scheduled time — waiting only for Checkpoint #2 trigger (not for parser/GPT completion)…`);
 
   const waiter = getCheckpoint2Waiter(id);
-  waiter.promise.then((verdict) => {
-    if (verdict && SKIP_CHECKPOINT3_VERDICTS.has(verdict)) {
-      log(id, `ℹ Checkpoint #2 verdict was "${verdict}" — skip is disabled, Checkpoint #3 still proceeds.`);
+  let timeoutHandle;
+  const timeoutPromise = new Promise((resolve) => {
+    timeoutHandle = setTimeout(() => resolve('timeout'), CHECKPOINT2_TRIGGER_WAIT_MS);
+  });
+
+  Promise.race([
+    waiter.promise.then((value) => ({ type: 'settled', value })),
+    timeoutPromise.then(() => ({ type: 'timeout', value: null })),
+  ]).then(({ type, value }) => {
+    clearTimeout(timeoutHandle);
+    if (type === 'timeout') {
+      log(id, `⚠ Checkpoint #2 trigger was not settled within ${CHECKPOINT2_TRIGGER_WAIT_MS / 60_000} min — ` +
+              `opening Checkpoint #3 safety window. Quarter-aware gating prevents an early fire.`);
     } else {
-      log(id, `▶ Checkpoint #2 verdict was "${verdict ?? '(none/unresolved)'}" → proceeding with Checkpoint #3.`);
+      log(id, `▶ Checkpoint #2 trigger state: "${value ?? '(none)'}" → opening Checkpoint #3 window.`);
     }
     watchCheckpoint(match, checkpointIndex, sportId, quarterMin);
   });
@@ -693,22 +723,36 @@ async function handleStaleCheckpoint(match, idx, minutes, checkpointDeadline, ne
     return;
   }
 
-  // status тут: 'live' / 'break' / 'unknown' (включно з випадком, коли сам
-  // live-запит не вдався) — матч, найімовірніше, реально вже йде, тож
-  // застосовуємо захист від "не тієї чверті".
+  // Prefer actual quarter progress over scheduled kickoff math. This is the
+  // delayed-start fix: a match can be live in Q1 while wall-clock arithmetic
+  // says even Q3 should already be over.
+  const targetCompleted = idx + 1;
+  const completed = liveStatus?.completedQuarters;
+  if (Number.isInteger(completed)) {
+    if (completed > targetCompleted) {
+      log(id, `⏰ Checkpoint #${idx + 1} catch-up skipped: actual feed already confirms ` +
+              `${completed} completed quarters (target=${targetCompleted}).`);
+      if (idx === 0) settleCheckpoint1(id);
+      if (idx === 1) settleCheckpoint2(id, null);
+      return;
+    }
+
+    log(id, `⏰ Checkpoint #${idx + 1} kickoff deadline is stale, but actual quarter progress is ` +
+            `completedQ=${completed}, target=${targetCompleted} → opening target-aware catch-up window.`);
+    startCheckpoint();
+    return;
+  }
+
+  // Quarter-score feed unavailable: retain conservative wall-clock fallback.
   if (Date.now() > nextCheckpointStartMs) {
-    log(id, `⏰ Checkpoint #${idx + 1} (+${minutes} min) is too stale to catch up safely — real time already passed ` +
-            `the start of the next checkpoint / estimated match window (${new Date(nextCheckpointStartMs).toISOString()}), ` +
-            `and the match is confirmed live/already had a break → match is likely on a later quarter already. ` +
-            `Skipping WITHOUT opening a window, to avoid sending a signal under the wrong checkpoint label.`);
+    log(id, `⏰ Checkpoint #${idx + 1} is too stale and quarter progress is unavailable — skipping to avoid a wrong label.`);
     if (idx === 0) settleCheckpoint1(id);
     if (idx === 1) settleCheckpoint2(id, null);
     return;
   }
 
-  log(id, `⏰ Checkpoint #${idx + 1} (+${minutes} min) scheduled window already passed ` +
-          `(deadline was ${new Date(checkpointDeadline).toISOString()}), but match is still in progress ` +
-          `and hasn't reached the next checkpoint yet → opening catch-up window now instead of skipping silently.`);
+  log(id, `⏰ Checkpoint #${idx + 1} scheduled window passed, quarter progress unavailable, ` +
+          `but next checkpoint time has not passed → opening conservative catch-up window.`);
   startCheckpoint();
 }
 
@@ -828,7 +872,7 @@ async function main() {
     `stall-confirm (Checkpoints #1/#3 fallback) ${STALL_CONFIRM_MS / 60_000} min | ` +
     `rescanning matches.json every ${RESCAN_INTERVAL_MS / 60_000} min | ` +
     `Checkpoint #2 waits up to ${CHECKPOINT1_WAIT_MS / 60_000} min for Checkpoint #1 to finish | ` +
-    `Checkpoint #3 always runs (no skip on verdict) once Checkpoint #2 is done | ` +
+    `Checkpoint #3 waits only for the Q2 trigger, never for parser/GPT completion | ` +
     `stale catch-up checkpoints (real time already past the next one) are skipped, not fired ` +
     `(#3 stale buffer ${CATCHUP_STALE_BUFFER_MS / 60_000} min)`
   );

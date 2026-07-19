@@ -1,0 +1,22 @@
+Q1/Q3 CHECKPOINT FIX
+
+Changed files:
+- stage_monitor.js
+- match_stage.js
+- worker.js
+- super_basket_vps_system.py
+
+What was fixed:
+1. Q1/Q2/Q3 triggers now follow actual completed-quarter progress from the score feed, not only scheduled kickoff offsets.
+2. Delayed starts no longer move checkpoint watchers to the wrong quarter.
+3. Q3 no longer waits for completion of the full Q2 parsing/analysis job; it waits only until the HT task is queued, with a safety timeout.
+4. Polling starts immediately and uses serial timers to prevent overlapping async checks.
+5. When a quarter break was missed, an old checkpoint is marked stale instead of firing during a later break.
+6. Worker forwards --checkpoint 1/2/3 to Python.
+7. Checkpoint 1 has a hard market allowlist: H1_TOTAL and TEAM_IT_H1 only. MATCH_TOTAL and TEAM_IT_MATCH are always blocked after Q1.
+
+Validation:
+- node --check stage_monitor.js match_stage.js worker.js
+- python3 -m py_compile super_basket_vps_system.py
+- node run_regression_tests.js
+- python3 test_checkpoint_router.py

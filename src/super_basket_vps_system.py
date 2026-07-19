@@ -370,6 +370,8 @@ def adapt_match(source: dict[str, Any], config: dict[str, Any], strict: bool=Fal
     if away_score is None:
         away_score = to_number(first(raw_main, ['as_', 'away_score'])) or 0.0
     explicit_stage = str(first(match, ['stage', 'status']) or first(raw_main, ['st']) or '')
+    analysis_context = source.get('analysis_context', {}) if isinstance(source.get('analysis_context'), dict) else {}
+    trigger_checkpoint = to_int(first(analysis_context, ['trigger_checkpoint', 'checkpoint']))
     elapsed_raw = first(match, ['match_minute_played', 'elapsed_minutes'])
     period_raw = first(match, ['period', 'quarter', 'current_quarter'])
     period_played_raw = first(match, ['period_minute_played', 'quarter_minute_played'])
@@ -489,6 +491,7 @@ def adapt_match(source: dict[str, Any], config: dict[str, Any], strict: bool=Fal
         'tournament': tournament,
         'explicit_stage': explicit_stage,
         'stage': stage,
+        'trigger_checkpoint': trigger_checkpoint,
         'current_quarter': period,
         'quarter_minutes': quarter_minutes,
         'quarter_seconds': quarter_seconds,
@@ -1683,8 +1686,16 @@ def _router(market: dict[str, Any], canonical: dict[str, Any]) -> dict[str, Any]
     current = canonical.get('current_quarter')
     status, reason, cap = ('ALLOW', 'SUPPORTED_BY_STAGE_ROUTER', None)
     hard_block = False
+    trigger_checkpoint = canonical.get('trigger_checkpoint')
     in_q2_window = canonical['quarter_seconds'] <= canonical['elapsed_game_seconds'] < canonical['full_game_seconds'] / 2
-    if market_type in {'MATCH_TOTAL', 'TEAM_IT_MATCH'} and (current == 2 or in_q2_window):
+    if trigger_checkpoint == 1 and market_type not in {'H1_TOTAL', 'TEAM_IT_H1'}:
+        # Absolute checkpoint-level protection. The Q1 job may start parsing a
+        # little later (already in Q2 or even at HT), so stage inference alone
+        # is not sufficient. A job triggered after Q1 may only emit first-half
+        # total / first-half team-IT; full-match total and TEAM_IT_MATCH are
+        # always blocked for this job.
+        status, reason, hard_block = ('BLOCK', 'CHECKPOINT1_ONLY_H1_TOTAL_AND_H1_TEAM_IT', True)
+    elif market_type in {'MATCH_TOTAL', 'TEAM_IT_MATCH'} and (current == 2 or in_q2_window):
         # Checkpoint #1 (stage_monitor.js) opens the analysis window right after
         # Q1 ends, i.e. during Q2 — the whole Q2 window, until half-time (which
         # is Checkpoint #2). In that window a full-match total/team-IT signal is
@@ -1902,7 +1913,7 @@ class SuperBasketCalculator:
         unhashed.pop('super_basket_calculation', None)
         unhashed.pop('super_basket_system', None)
         snapshot_hash = hashlib.sha256(json.dumps(unhashed, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')).hexdigest()
-        calculation = {'engine_version': str(self.config.get('engine_version', '5.0')), 'calculated_at': source.get('meta', {}).get('generated_at') or source.get('generated_at'), 'input_snapshot_hash': snapshot_hash, 'canonical_snapshot': {'match_id': canonical['match_id'], 'name': canonical['name'], 'stage': canonical['stage'], 'explicit_stage': canonical['explicit_stage'], 'current_quarter': canonical['current_quarter'], 'clock': canonical['clock'], 'score': canonical['score'], 'elapsed_game_seconds': canonical['elapsed_game_seconds'], 'remaining_game_seconds': canonical['remaining_game_seconds'], 'stat_support': canonical['stat_support'], 'format': canonical.get('format')}, 'data_gate': canonical['data_gate'], 'market_audit': dedupe_summary, 'markets_detected': audit, 'market_evaluations': evaluations, 'candidates': candidates, 'best_candidate': best, 'gpt_dispatch': {'threshold': threshold, 'eligible': bool(payload_candidates), 'candidate_count': len(payload_candidates), 'payload': {'match_id': canonical['match_id'], 'stage': canonical['stage'], 'candidates': payload_candidates}}}
+        calculation = {'engine_version': str(self.config.get('engine_version', '5.0')), 'calculated_at': source.get('meta', {}).get('generated_at') or source.get('generated_at'), 'input_snapshot_hash': snapshot_hash, 'canonical_snapshot': {'match_id': canonical['match_id'], 'name': canonical['name'], 'stage': canonical['stage'], 'explicit_stage': canonical['explicit_stage'], 'trigger_checkpoint': canonical.get('trigger_checkpoint'), 'current_quarter': canonical['current_quarter'], 'clock': canonical['clock'], 'score': canonical['score'], 'elapsed_game_seconds': canonical['elapsed_game_seconds'], 'remaining_game_seconds': canonical['remaining_game_seconds'], 'stat_support': canonical['stat_support'], 'format': canonical.get('format')}, 'data_gate': canonical['data_gate'], 'market_audit': dedupe_summary, 'markets_detected': audit, 'market_evaluations': evaluations, 'candidates': candidates, 'best_candidate': best, 'gpt_dispatch': {'threshold': threshold, 'eligible': bool(payload_candidates), 'candidate_count': len(payload_candidates), 'payload': {'match_id': canonical['match_id'], 'stage': canonical['stage'], 'candidates': payload_candidates}}}
         output = deepcopy(source)
         output['super_basket_calculation'] = calculation
         return output
@@ -2712,6 +2723,7 @@ def process_vps_match_file(
     enable_telegram: bool = True,
     dry_run: bool = False,
     strict_schema: bool = False,
+    checkpoint: Optional[int] = None,
     gpt_reviewer: Optional[Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]] = None,
     telegram_sender: Optional[Callable[[str], dict[str, Any]]] = None,
 ) -> dict[str, Any]:
@@ -2720,6 +2732,12 @@ def process_vps_match_file(
         raise ValueError('mode must be ACTION or STRICT')
     source_path = Path(match_path).expanduser().resolve()
     source = load_json(source_path)
+    if checkpoint is not None:
+        checkpoint = int(checkpoint)
+        if checkpoint not in {1, 2, 3}:
+            raise ValueError('checkpoint must be 1, 2 or 3')
+        context = source.get('analysis_context') if isinstance(source.get('analysis_context'), dict) else {}
+        source['analysis_context'] = {**context, 'trigger_checkpoint': checkpoint}
     zones = load_json(Path(zones_path).expanduser().resolve()) if zones_path else {}
     core_result = SuperBasketCalculator(deepcopy(DEFAULT_CONFIG), zones).calculate(source, dispatch_threshold=0.65, strict_schema=strict_schema)
     calculation = core_result['super_basket_calculation']
@@ -2820,7 +2838,8 @@ def process_vps_match_file(
             'timestamp':    system['processed_at'],          # utc_now(), напр. 2026-07-19T10:15:00+00:00
             'match_id':     snapshot['match_id'],
             'match_name':   snapshot['name'],
-            'checkpoint':   snapshot['stage'],                # PRE_MATCH / EARLY_LIVE / HT / AFTER_3Q / Q4_CONFIRMATION тощо
+            'checkpoint':   snapshot['stage'],                # computed live stage
+            'trigger_checkpoint': snapshot.get('trigger_checkpoint'), # 1/Q1, 2/HT, 3/Q3 queue source
             'explicit_stage': snapshot.get('explicit_stage'), # сирий статус з фіда, для звірки
             'verdict':      decision['action'],                # PASS / RISK / PLAY (фінальне рішення після GPT-гейту)
             'verdict_status': decision['status'],              # людський статус, напр. "RISK ENTRY — GPT DOWNGRADE"
@@ -2990,6 +3009,7 @@ def _single_file_cli(argv: list[str] | None = None) -> int:
     run.add_argument('--db', default=os.getenv('SUPER_BASKET_DB', 'super_basket.sqlite3'))
     run.add_argument('--dry-run', action='store_true', help='Calculate without external GPT/Telegram calls')
     run.add_argument('--strict-schema', action='store_true')
+    run.add_argument('--checkpoint', type=int, choices=[1, 2, 3], help='Queue trigger checkpoint: 1=after Q1, 2=HT, 3=after Q3')
     _add_runtime_switches(run)
 
     watch = subparsers.add_parser('watch', help='Continuously process stable JSON files in an inbox')
@@ -3029,12 +3049,14 @@ def _single_file_cli(argv: list[str] | None = None) -> int:
                 enable_telegram=args.enable_telegram,
                 dry_run=args.dry_run,
                 strict_schema=args.strict_schema,
+                checkpoint=args.checkpoint,
             )
             system = result['super_basket_system']
             summary = {
                 'output_status': system['status'],
                 'match_id': result['super_basket_calculation']['canonical_snapshot']['match_id'],
                 'stage': result['super_basket_calculation']['canonical_snapshot']['stage'],
+                'trigger_checkpoint': result['super_basket_calculation']['canonical_snapshot'].get('trigger_checkpoint'),
                 'format': system['format_gate']['current_format'],
                 'decision': deepcopy(system['decision']),
                 'gpt_status': system['gpt_review']['status'],

@@ -161,6 +161,67 @@ function parseDaDi(rawDc) {
   return { status: 'live', liveMinute: diNum };
 }
 
+
+// ─── Quarter progress from df_sur_ ───────────────────────────────────────────
+// dc_ gives only DA/DI (live/break + minute inside the current quarter).  That
+// is not enough when a match starts late: several checkpoint timers may already
+// be open and the same generic break could otherwise be mistaken for Q1, HT or
+// Q3.  df_sur_ contains quarter score pairs, so we can bind every checkpoint to
+// the number of quarters that have actually been completed.
+const PERIOD_KEY_PAIRS = [
+  ['BA', 'BB'], ['BC', 'BD'], ['BE', 'BF'], ['BG', 'BH'],
+];
+
+function hasScoreValue(value) {
+  return value !== undefined && value !== null && String(value).trim() !== '';
+}
+
+function parseQuarterProgress(rawSur, stageResult = { status: 'unknown', liveMinute: null }) {
+  const kv = {};
+  if (rawSur && rawSur.length >= 3) {
+    for (const block of rawSur.split('~')) Object.assign(kv, parseKV(block));
+  }
+
+  let highestQuarterWithScore = 0;
+  for (let i = 0; i < PERIOD_KEY_PAIRS.length; i++) {
+    const [homeKey, awayKey] = PERIOD_KEY_PAIRS[i];
+    if (hasScoreValue(kv[homeKey]) || hasScoreValue(kv[awayKey])) {
+      highestQuarterWithScore = i + 1;
+    }
+  }
+
+  const status = stageResult?.status || 'unknown';
+  let currentQuarter = null;
+  let completedQuarters = null;
+
+  if (status === 'not_started') {
+    currentQuarter = null;
+    completedQuarters = 0;
+  } else if (status === 'finished') {
+    currentQuarter = null;
+    completedQuarters = highestQuarterWithScore || 4;
+  } else if (status === 'break') {
+    currentQuarter = null;
+    completedQuarters = highestQuarterWithScore || null;
+  } else if (status === 'live') {
+    // During an active quarter df_sur_ normally already includes that quarter.
+    // If the new quarter has just tipped and is still 0:0, the highest visible
+    // score can lag by one quarter; returning the conservative lower value only
+    // delays a trigger until the first basket, never fires it too early.
+    currentQuarter = highestQuarterWithScore || null;
+    completedQuarters = highestQuarterWithScore > 0
+      ? Math.max(0, highestQuarterWithScore - 1)
+      : null;
+  }
+
+  return {
+    highestQuarterWithScore,
+    currentQuarter,
+    completedQuarters,
+    quarterProgressReliable: completedQuarters !== null,
+  };
+}
+
 // ─── Stage checker ───────────────────────────────────────────────────────────
 
 class MatchStageChecker {
@@ -353,19 +414,34 @@ class MatchStageChecker {
   }
 
   /**
-   * Повертає поточну стадію матчу.
-   * @returns {Promise<{status: 'not_started'|'live'|'break'|'finished'|'unknown', liveMinute: number|null}>}
+   * Повертає поточну стадію матчу і фактичний прогрес по чвертях.
+   * @returns {Promise<{
+   *   status: 'not_started'|'live'|'break'|'finished'|'unknown',
+   *   liveMinute: number|null,
+   *   highestQuarterWithScore: number,
+   *   currentQuarter: number|null,
+   *   completedQuarters: number|null,
+   *   quarterProgressReliable: boolean
+   * }>}
    */
   async checkStage(matchId, sportId = '5') {
     let { fsign, prefix } = await this._getFsign(matchId);
-    let raw = await fetchFeed(`dc_${sportId}_${matchId}`, fsign, prefix).catch(() => '');
-    let result = parseDaDi(raw);
+
+    const fetchStageFeeds = async () => {
+      const [rawDc, rawSur] = await Promise.all([
+        fetchFeed(`dc_${sportId}_${matchId}`, fsign, prefix).catch(() => ''),
+        fetchFeed(`df_sur_${sportId}_${matchId}`, fsign, prefix).catch(() => ''),
+      ]);
+      const base = parseDaDi(rawDc);
+      return { ...base, ...parseQuarterProgress(rawSur, base) };
+    };
+
+    let result = await fetchStageFeeds();
 
     // Фід порожній/незрозумілий → fsign, ймовірно, протух. Пробуємо оновити один раз.
     if (result.status === 'unknown') {
       ({ fsign, prefix } = await this._getFsign(matchId, { forceRefresh: true }));
-      raw = await fetchFeed(`dc_${sportId}_${matchId}`, fsign, prefix).catch(() => '');
-      result = parseDaDi(raw);
+      result = await fetchStageFeeds();
     }
 
     return result;
@@ -383,4 +459,4 @@ class MatchStageChecker {
 // Єдиний спільний інстанс на процес — щоб усі матчі перевірялись через
 // один і той самий Chromium-браузер, а не плодили по процесу на матч.
 export const matchStageChecker = new MatchStageChecker();
-export { MatchStageChecker, parseDaDi };
+export { MatchStageChecker, parseDaDi, parseQuarterProgress };

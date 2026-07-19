@@ -75,11 +75,13 @@ function log(jobId, level, ...args) {
 async function processJob(job) {
   const {
     matchId, home, away, homeSlug, awaySlug,
-    league, dataFilename, lineFilename, fireAt,
+    league, dataFilename, lineFilename, fireAt, checkpoint,
   } = job.data;
   const jid = job.id ?? matchId;
 
-  log(jid, 'info', `Starting analysis — ${home} vs ${away} [${league}] (scheduled fire: ${fireAt})`);
+  const triggerCheckpoint = Number(checkpoint) || 0;
+  log(jid, 'info', `Starting analysis — ${home} vs ${away} [${league}] ` +
+      `(scheduled fire: ${fireAt}; checkpoint: ${triggerCheckpoint || 'unknown'})`);
 
   // ── Step 1: Node parser ───────────────────────────────────────────────────
   const parserScript = path.join(APP_ROOT, 'src', 'match_h2h_export.js');
@@ -129,13 +131,18 @@ async function processJob(job) {
   // как --match. Все gates (stat/conflict/router/Team-IT/Q4), GPT-review
   // сигнала и отправка в Telegram теперь внутри этого скрипта.
   const superBasketScript = path.join(APP_ROOT, 'src', 'super_basket_vps_system.py');
-  log(jid, 'info', `Step 3 → ${PYTHON_BIN} ${superBasketScript} run --match ${dataFilePath}`);
+  log(jid, 'info', `Step 3 → ${PYTHON_BIN} ${superBasketScript} run --match ${dataFilePath} ` +
+      `--checkpoint ${triggerCheckpoint || 0}`);
 
-  const superBasketResult = await run(PYTHON_BIN, [
+  const superBasketArgs = [
     superBasketScript, 'run',
     '--match', dataFilePath,
     '--db', SUPER_BASKET_DB,
-  ], { jobId: jid });
+  ];
+  if (triggerCheckpoint >= 1 && triggerCheckpoint <= 3) {
+    superBasketArgs.push('--checkpoint', String(triggerCheckpoint));
+  }
+  const superBasketResult = await run(PYTHON_BIN, superBasketArgs, { jobId: jid });
   log(jid, 'info', `Step 3 exited ${superBasketResult.code}${superBasketResult.stderr ? '\n' + superBasketResult.stderr : ''}`);
   await job.updateProgress(90);
 
@@ -167,6 +174,8 @@ async function processJob(job) {
     calcExitCode:   calcResult.code,
     superBasketExitCode: superBasketResult.code,
     decision:       summary.decision ?? null,
+    aiVerdict:      summary.decision?.action ?? summary.decision?.status ?? null,
+    checkpoint:     triggerCheckpoint || null,
     outputStatus:   summary.output_status,
     completedAt:    new Date().toISOString(),
   };
