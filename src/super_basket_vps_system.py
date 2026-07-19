@@ -1663,7 +1663,7 @@ def _trace_step(step: str, applied: bool, formula: str, inputs: dict[str, Any], 
     }
 
 def _verdict(probability: float, blockers: list[dict[str, Any]], strong_clean: bool) -> str:
-    if blockers or probability < 0.68:
+    if blockers or probability < 0.65:
         return 'PASS'
     if probability < 0.7:
         return 'RISK ENTRY / BELOW DISPATCH'
@@ -1794,8 +1794,10 @@ class SuperBasketCalculator:
             caps.append(_cap('SMALL_SAME_FORMAT_SAMPLE', self.config['caps']['small_sample'], 'Same-format history sample is below 20 games', {'same_format_pooled_n': same_format_n}))
         live_mode = canonical['stage'] != 'PRE_MATCH'
         if live_mode and stat['stat_support'] == 'OFF':
+            # Missing live stats (fouls/FTA/etc.) no longer hard-blocks the signal —
+            # it only caps P_final via STAT_SUPPORT_OFF below. The deterministic
+            # P_hist/P_scenario/P_live blend is still allowed through.
             caps.append(_cap('STAT_SUPPORT_OFF', self.config['caps']['stat_off'], 'Live statistics unavailable'))
-            blockers.append(_blocker('STAT_GATE_OFF', 'Live market requires score, time and statistical support'))
         elif live_mode and stat['stat_support'] == 'LIMITED':
             caps.append(_cap('STAT_SUPPORT_LIMITED', self.config['caps']['stat_limited'], 'Incomplete live statistics'))
         if stat['stat_gate_status'] == 'AGAINST':
@@ -1911,7 +1913,7 @@ DEFAULT_CONFIG = json.loads(r"""{
   "engine_version": "5.0",
   "calibration_status": "calibration_default_not_backtested",
   "odds_min": 1.44,
-  "dispatch_threshold": 0.68,
+  "dispatch_threshold": 0.65,
   "smoothing": {"alpha": 1.0, "beta": 1.0},
   "credibility": {
     "h2h_k": 8.0,
@@ -2102,7 +2104,7 @@ def normalized_action(probability: float, blockers: list[dict[str, Any]], mode: 
     if mode.upper() == 'STRICT':
         if probability < 0.75:
             return 'PASS', 'TRIGGER ONLY', '0%'
-    elif probability < 0.68:
+    elif probability < 0.65:
         return 'PASS', 'PASS', '0%'
     if probability < 0.73:
         return 'RISK', 'RISK ENTRY', '10-15% live-limit'
@@ -2443,7 +2445,7 @@ def deterministic_explanation(evaluation: Optional[dict[str, Any]], action: str,
         main = codes[0] if codes else 'P_FINAL_BELOW_THRESHOLD'
         explanation = f'Найкращий доступний варіант має P_final {probability:.1%}; рішення PASS через {main}.'
         risk = 'Наявні дані або гейти не дозволяють безпечно перетворити цей варіант на активну ставку.'
-        trigger = f'Потрібні P_final не нижче {"75%" if mode.upper() == "STRICT" else "68%"}, відсутність hard blocker та stat-gate не проти.'
+        trigger = f'Потрібні P_final не нижче {"75%" if mode.upper() == "STRICT" else "65%"}, відсутність hard blocker та stat-gate не проти.'
         return explanation, risk, trigger
     explanation = (
         f'P_final {probability:.1%}: проєкція {live.get("projection_used"):.1f} очка, '
@@ -2451,7 +2453,7 @@ def deterministic_explanation(evaluation: Optional[dict[str, Any]], action: str,
         f'P_hist {float(history.get("p_hist") or 0):.1%}, stat-gate {stat.get("stat_gate_status")}.'
     )
     if action == 'RISK':
-        risk = 'Ймовірність перебуває в action-зоні 68–74%, тому це не clean PLAY і потрібен зменшений ліміт.'
+        risk = 'Ймовірність перебуває в action-зоні 65–74%, тому це не clean PLAY і потрібен зменшений ліміт.'
     else:
         risk = 'Лінія та коефіцієнт можуть змінитися; сигнал чинний лише для вказаного snapshot.'
     trigger = 'Брати тільки якщо та сама лінія ще доступна, odds >=1.44 і рахунок/час не змінилися суттєво.'
@@ -2590,27 +2592,68 @@ def build_telegram_message(decision: dict[str, Any], calculation: dict[str, Any]
     ]
     return '\n'.join(lines)
 
-def send_telegram_message(text_message: str, *, token: Optional[str]=None, chat_id: Optional[str]=None, retries: int=3) -> dict[str, Any]:
+def _load_telegram_chat_ids(chats_file: Optional[str] = None) -> list[str]:
+    """Read the {"offset":..., "chatIds":[...]} file the bot maintains and
+    return the chat ids as strings, in order, de-duplicated."""
+    path_value = chats_file or os.getenv('TELEGRAM_CHATS_FILE')
+    if not path_value:
+        return []
+    path = Path(path_value).expanduser()
+    try:
+        data = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return []
+    raw_ids = data.get('chatIds') if isinstance(data, dict) else None
+    if not isinstance(raw_ids, list):
+        return []
+    return list(dict.fromkeys(str(item) for item in raw_ids if item is not None))
+
+def send_telegram_message(text_message: str, *, token: Optional[str]=None, chat_id: Optional[str]=None, chat_ids: Optional[list[str]]=None, chats_file: Optional[str]=None, retries: int=3) -> dict[str, Any]:
     token = token or os.getenv('TELEGRAM_BOT_TOKEN')
-    chat_id = chat_id or os.getenv('TELEGRAM_CHAT_ID')
-    if not token or not chat_id:
+    if not token:
+        return {'status': 'SKIPPED_MISSING_TELEGRAM_CONFIG', 'sent': False, 'message_id': None}
+    targets: list[str] = []
+    if chat_id:
+        targets.append(str(chat_id))
+    for value in (chat_ids or _load_telegram_chat_ids(chats_file)):
+        if str(value) not in targets:
+            targets.append(str(value))
+    if not targets:
+        env_chat_id = os.getenv('TELEGRAM_CHAT_ID')
+        if env_chat_id:
+            targets.append(env_chat_id)
+    if not targets:
         return {'status': 'SKIPPED_MISSING_TELEGRAM_CONFIG', 'sent': False, 'message_id': None}
     url = f'https://api.telegram.org/bot{token}/sendMessage'
-    payload = json.dumps({'chat_id': chat_id, 'text': text_message[:4096], 'parse_mode': 'HTML', 'protect_content': True}).encode('utf-8')
-    last_error = ''
-    for attempt in range(1, retries + 1):
-        request = urllib.request.Request(url, data=payload, headers={'Content-Type': 'application/json'}, method='POST')
-        try:
-            with urllib.request.urlopen(request, timeout=20) as response:
-                body = json.loads(response.read().decode('utf-8'))
-            if body.get('ok'):
-                return {'status': 'SENT', 'sent': True, 'message_id': str((body.get('result') or {}).get('message_id')), 'attempts': attempt}
-            last_error = str(body.get('description') or 'Telegram returned ok=false')
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError) as exc:
-            last_error = f'{type(exc).__name__}: {exc}'
-        if attempt < retries:
-            time.sleep(min(4, 2 ** (attempt - 1)))
-    return {'status': 'ERROR_TELEGRAM_SEND_FAILED', 'sent': False, 'message_id': None, 'attempts': retries, 'error': last_error}
+    per_chat: list[dict[str, Any]] = []
+    for target in targets:
+        payload = json.dumps({'chat_id': target, 'text': text_message[:4096], 'parse_mode': 'HTML', 'protect_content': True}).encode('utf-8')
+        last_error = ''
+        outcome: Optional[dict[str, Any]] = None
+        for attempt in range(1, retries + 1):
+            request = urllib.request.Request(url, data=payload, headers={'Content-Type': 'application/json'}, method='POST')
+            try:
+                with urllib.request.urlopen(request, timeout=20) as response:
+                    body = json.loads(response.read().decode('utf-8'))
+                if body.get('ok'):
+                    outcome = {'chat_id': target, 'status': 'SENT', 'sent': True, 'message_id': str((body.get('result') or {}).get('message_id')), 'attempts': attempt}
+                    break
+                last_error = str(body.get('description') or 'Telegram returned ok=false')
+            except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError) as exc:
+                last_error = f'{type(exc).__name__}: {exc}'
+            if attempt < retries:
+                time.sleep(min(4, 2 ** (attempt - 1)))
+        per_chat.append(outcome or {'chat_id': target, 'status': 'ERROR_TELEGRAM_SEND_FAILED', 'sent': False, 'message_id': None, 'attempts': retries, 'error': last_error})
+    any_sent = any(item['sent'] for item in per_chat)
+    first_message_id = next((item['message_id'] for item in per_chat if item['sent']), None)
+    return {
+        'status': 'SENT' if any_sent else 'ERROR_TELEGRAM_SEND_FAILED',
+        'sent': any_sent,
+        'message_id': first_message_id,
+        'chats_attempted': len(targets),
+        'chats_sent': sum(1 for item in per_chat if item['sent']),
+        'per_chat': per_chat,
+    }
 
 def format_gate(calculation: dict[str, Any]) -> dict[str, Any]:
     snapshot_format = calculation['canonical_snapshot'].get('format', {})
@@ -2660,7 +2703,7 @@ def process_vps_match_file(
     source_path = Path(match_path).expanduser().resolve()
     source = load_json(source_path)
     zones = load_json(Path(zones_path).expanduser().resolve()) if zones_path else {}
-    core_result = SuperBasketCalculator(deepcopy(DEFAULT_CONFIG), zones).calculate(source, dispatch_threshold=0.68, strict_schema=strict_schema)
+    core_result = SuperBasketCalculator(deepcopy(DEFAULT_CONFIG), zones).calculate(source, dispatch_threshold=0.65, strict_schema=strict_schema)
     calculation = core_result['super_basket_calculation']
     target = Path(output_path).expanduser().resolve() if output_path else source_path.with_name(source_path.stem + '_result.json')
     store = LearningStore(db_path)
@@ -2704,19 +2747,11 @@ def process_vps_match_file(
             reviewed_action = deterministic_action
             review['status'] = 'MODEL_UPGRADE_BLOCKED'
             review['approved'] = False
+        # GPT review is recorded for context (gpt_status / explanation text) but never
+        # blocks or downgrades dispatch anymore — the deterministic action always stands,
+        # so RISK/PLAY signals go out to Telegram regardless of GPT approval or failure.
         if deterministic_action != 'PASS':
-            if require_gpt and not review.get('approved'):
-                decision['action'] = 'PASS'
-                decision['status'] = 'PASS — GPT NOT APPROVED'
-                decision['stake'] = '0%'
-            else:
-                decision['action'] = reviewed_action
-                if reviewed_action == 'RISK' and deterministic_action == 'PLAY':
-                    decision['status'] = 'RISK ENTRY — GPT DOWNGRADE'
-                    decision['stake'] = '10-15% live-limit'
-                elif reviewed_action == 'PASS':
-                    decision['status'] = 'PASS — GPT DOWNGRADE'
-                    decision['stake'] = '0%'
+            decision['action'] = deterministic_action
         decision['gpt_status'] = review.get('status')
         decision['telegram_status'] = 'NOT_ATTEMPTED'
         delivery = {'status': 'SKIPPED_PASS', 'sent': False, 'message_id': None}
@@ -3019,6 +3054,8 @@ def _single_file_cli(argv: list[str] | None = None) -> int:
                 'openai_model': os.getenv('OPENAI_MODEL', 'gpt-5.6'),
                 'telegram_bot_token_set': bool(os.getenv('TELEGRAM_BOT_TOKEN')),
                 'telegram_chat_id_set': bool(os.getenv('TELEGRAM_CHAT_ID')),
+                'telegram_chats_file': os.getenv('TELEGRAM_CHATS_FILE'),
+                'telegram_chats_file_chat_count': len(_load_telegram_chat_ids()),
                 'require_gpt': env_bool('SUPER_BASKET_REQUIRE_GPT', True),
             }, ensure_ascii=False, indent=2))
     except KeyboardInterrupt:
