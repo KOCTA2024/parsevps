@@ -1785,9 +1785,11 @@ class SuperBasketCalculator:
                 blockers.append(_blocker('TEAM_IT_NO_OPPONENT_ALLOWED', 'Opponent allowed history is mandatory'))
             if weakest is None:
                 blockers.append(_blocker('TEAM_IT_WEAKEST_MISSING', 'Own scored/opponent allowed gate is unavailable'))
+            elif weakest < 0.6:
+                caps.append(_cap('TEAM_IT_WEAKEST_BELOW_60', self.config['caps']['team_it_weak'], 'Weakest Team IT gate below 60%', {'weakest': weakest}))
+                blockers.append(_blocker('TEAM_IT_WEAKEST_BLOCK', 'Weakest Team IT gate below 60%', {'weakest': weakest}))
             elif weakest < 0.7:
-                caps.append(_cap('TEAM_IT_WEAKEST_BELOW_70', self.config['caps']['team_it_weak'], 'Weakest Team IT gate below 70%', {'weakest': weakest}))
-                blockers.append(_blocker('TEAM_IT_WEAKEST_BLOCK', 'Weakest Team IT gate below 70%', {'weakest': weakest}))
+                caps.append(_cap('TEAM_IT_WEAKEST_60_69', self.config['caps']['team_it_60_69'], 'Weakest Team IT gate is 60-69%', {'weakest': weakest}))
             elif weakest < 0.75:
                 caps.append(_cap('TEAM_IT_WEAKEST_70_74', self.config['caps']['team_it_70_74'], 'Weakest Team IT gate is 70-74%', {'weakest': weakest}))
             elif weakest < 0.8:
@@ -1963,6 +1965,7 @@ DEFAULT_CONFIG = json.loads(r"""{
     "fake_under": 0.74,
     "small_sample": 0.74,
     "team_it_weak": 0.55,
+    "team_it_60_69": 0.70,
     "team_it_70_74": 0.74,
     "team_it_75_79": 0.79,
     "q4_danger": 0.68
