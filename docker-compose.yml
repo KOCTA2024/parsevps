@@ -21,6 +21,7 @@ services:
       WORKER_CONCURRENCY: 2
       SUPER_BASKET_DB: /app/state/super_basket.sqlite3
       TELEGRAM_CHATS_FILE: /app/state/telegram_chats.json
+      VERDICT_LOG_FILE: /app/state/verdicts.log
     volumes:
       - ./src:/app/src
       - ./src/data:/app/data

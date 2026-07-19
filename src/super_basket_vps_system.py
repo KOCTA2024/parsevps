@@ -2016,6 +2016,27 @@ SYSTEM_VERSION = '5.0.0'
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec='seconds')
 
+# Кожен виклик process_vps_match_file() (тобто кожен чекпоінт кожного матчу)
+# дописує один JSON-рядок сюди — незалежно від того, PLAY це, RISK чи PASS.
+# Шлях налаштовується через VERDICT_LOG_FILE (в docker-compose природно
+# покласти поруч з SUPER_BASKET_DB, напр. /app/state/verdicts.log), щоб файл
+# лежав у volume 'state' і переживав рестарт контейнера.
+VERDICT_LOG_FILE = os.getenv('VERDICT_LOG_FILE', 'verdicts.log')
+
+def append_verdict_log(entry: dict[str, Any], path: str | Path | None = None) -> None:
+    """Дописує один JSON-рядок (JSON Lines) з підсумком чекпоінта.
+
+    Ніколи не кидає виняток назовні — збій запису логу не повинен зривати сам
+    аналіз/сигнал; помилка лише друкується в stderr.
+    """
+    target = Path(path or VERDICT_LOG_FILE).expanduser()
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open('a', encoding='utf-8') as fh:
+            fh.write(json.dumps(entry, ensure_ascii=False) + '\n')
+    except OSError as exc:
+        print(f'WARNING: could not write verdict log to {target}: {exc}', file=sys.stderr)
+
 def env_bool(name: str, default: bool) -> bool:
     value = os.getenv(name)
     if value is None:
@@ -2688,6 +2709,25 @@ def process_vps_match_file(
             'learning': evaluation_for_output.get('calibration') if evaluation_for_output else {'status': 'NO_MARKET'},
         }
         core_result['super_basket_system'] = system
+        snapshot = calculation['canonical_snapshot']
+        append_verdict_log({
+            'timestamp':    system['processed_at'],          # utc_now(), напр. 2026-07-19T10:15:00+00:00
+            'match_id':     snapshot['match_id'],
+            'match_name':   snapshot['name'],
+            'checkpoint':   snapshot['stage'],                # PRE_MATCH / EARLY_LIVE / HT / AFTER_3Q / Q4_CONFIRMATION тощо
+            'explicit_stage': snapshot.get('explicit_stage'), # сирий статус з фіда, для звірки
+            'verdict':      decision['action'],                # PASS / RISK / PLAY (фінальне рішення після GPT-гейту)
+            'verdict_status': decision['status'],              # людський статус, напр. "RISK ENTRY — GPT DOWNGRADE"
+            'deterministic_verdict': decision['deterministic_action'],  # рішення ДО GPT-огляду (чисті формули)
+            'p_final':      decision['probabilities'].get('p_final'),
+            'market':       decision.get('market'),
+            'description':  decision['explanation_uk'],
+            'main_risk':    decision['main_risk_uk'],
+            'reason_codes': decision['reason_codes'],
+            'input_hash':   calculation['input_snapshot_hash'],
+            'gpt_status':   system['gpt_review']['status'],
+            'telegram_status': system['telegram_delivery']['status'],
+        })
         save_json(target, core_result)
         store.mark_processed(calculation['input_snapshot_hash'], str(source_path), str(target), system['status'])
         return core_result
