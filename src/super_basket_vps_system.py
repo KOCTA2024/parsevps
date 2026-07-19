@@ -2589,10 +2589,14 @@ def build_telegram_message(decision: dict[str, Any], calculation: dict[str, Any]
     explanation = review.get('explanation_uk') or decision['explanation_uk']
     risk = review.get('main_risk_uk') or decision['main_risk_uk']
     name = calculation['canonical_snapshot']['name']
+    team = market.get('team')
+    market_line = f'<b>Ринок:</b> {html.escape(str(market.get("market_type")))} / {html.escape(str(market.get("segment")))}'
+    if team:
+        market_line += f' ({html.escape(str(team))})'
     lines = [
         f'<b>{icon} {html.escape(decision["action"])}</b>',
         f'<b>Матч:</b> {html.escape(str(name))}',
-        f'<b>Ринок:</b> {html.escape(str(market.get("market_type")))} / {html.escape(str(market.get("segment")))}',
+        market_line,
         f'<b>Сторона:</b> {html.escape(str(market.get("side")))}',
         f'<b>Лінія:</b> {float(market.get("line")):.1f}',
         f'<b>Коефіцієнт:</b> {float(market.get("odds")):.2f} ({html.escape(str(market.get("bookmaker") or ""))})',
