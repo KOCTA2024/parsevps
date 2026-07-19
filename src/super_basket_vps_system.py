@@ -163,6 +163,43 @@ def _stage(elapsed_seconds: int, full_seconds: int, quarter_seconds: int, explic
         return 'HT'
     return 'CURRENT_Q1_Q3'
 
+_STATUS_QUARTER_RE = re.compile("\\((\\d+)[^\\d)]*?чверть(?:\\s*(\\d+)')?\\s*\\)", re.IGNORECASE)
+_STATUS_BREAK_RE = re.compile('після\\s*Q(\\d+)', re.IGNORECASE)
+_STATUS_FINISHED_RE = re.compile('\\bFT\\b|FINAL|FINISHED|ENDED|ЗАВЕРШЕНО|КІНЕЦЬ', re.IGNORECASE)
+
+def _parse_status_clock(status: str, quarter_seconds: int, full_seconds: int) -> Optional[tuple[int, Optional[int], Optional[int]]]:
+    """Best-effort parser for the raw provider 'st' status string, used only as a fallback
+    when the payload has no numeric match_minute_played/period fields (this feed's 'match'
+    block is empty and only raw_data.main_match.st carries live-time info), e.g.:
+      "Live (2-а чверть 1')"  -> mid-quarter: quarter=2, minute=1
+      "Live (4-а чверть)"     -> quarter just started: quarter=4, minute=0
+      "Перерва (після Q2)"    -> half-time break: exactly 2 quarters elapsed
+      "Finished"              -> full game elapsed
+    Returns (elapsed_seconds, period, period_played_seconds) or None if unrecognised.
+    """
+    text = (status or '').strip()
+    if not text:
+        return None
+    upper = text.upper()
+    if upper.startswith('LIVE'):
+        match = _STATUS_QUARTER_RE.search(text)
+        if match:
+            period = int(match.group(1))
+            played_minutes = int(match.group(2)) if match.group(2) else 0
+            played_seconds = min(quarter_seconds, played_minutes * 60)
+            elapsed_seconds = min(full_seconds, (period - 1) * quarter_seconds + played_seconds)
+            return (elapsed_seconds, period, played_seconds)
+        # "Live" but sub-stage text not recognised (e.g. overtime) - don't fall back to
+        # PRE_MATCH; conservatively treat as deep in the 4th quarter.
+        return (max(0, full_seconds - 1), None, None)
+    match = _STATUS_BREAK_RE.search(text)
+    if match:
+        completed = int(match.group(1))
+        return (min(full_seconds, completed * quarter_seconds), None, None)
+    if _STATUS_FINISHED_RE.search(upper):
+        return (full_seconds, None, None)
+    return None
+
 def _game_key(row: dict[str, Any]) -> str:
     match_id = str(first(row, ['mid', 'match_id', 'id']) or '').strip()
     if match_id:
@@ -332,6 +369,7 @@ def adapt_match(source: dict[str, Any], config: dict[str, Any], strict: bool=Fal
         home_score = to_number(first(raw_main, ['hs', 'home_score'])) or 0.0
     if away_score is None:
         away_score = to_number(first(raw_main, ['as_', 'away_score'])) or 0.0
+    explicit_stage = str(first(match, ['stage', 'status']) or first(raw_main, ['st']) or '')
     elapsed_raw = first(match, ['match_minute_played', 'elapsed_minutes'])
     period_raw = first(match, ['period', 'quarter', 'current_quarter'])
     period_played_raw = first(match, ['period_minute_played', 'quarter_minute_played'])
@@ -343,6 +381,18 @@ def adapt_match(source: dict[str, Any], config: dict[str, Any], strict: bool=Fal
     time_reliable = elapsed_raw not in (None, '') or (period is not None and (period_played_raw not in (None, '') or period_left_raw not in (None, '')))
     if elapsed_minutes is None and period and (period_played is not None):
         elapsed_minutes = (period - 1) * quarter_minutes + period_played
+    if elapsed_minutes is None and period is None:
+        # No numeric time fields in the payload at all (e.g. 'match' block empty) - fall
+        # back to parsing the provider's textual status ("Live (N-а чверть M')",
+        # "Перерва (після QN)", "Finished") so the match isn't misclassified as PRE_MATCH.
+        status_clock = _parse_status_clock(explicit_stage, quarter_seconds, full_seconds)
+        if status_clock is not None:
+            status_elapsed_seconds, status_period, status_period_played_seconds = status_clock
+            elapsed_minutes = status_elapsed_seconds / 60.0
+            period = status_period
+            if status_period_played_seconds is not None:
+                period_played = status_period_played_seconds / 60.0
+            time_reliable = True
     if elapsed_minutes is None:
         elapsed_minutes = 0.0
     elapsed_seconds = max(0, min(full_seconds, int(round(elapsed_minutes * 60))))
@@ -353,7 +403,6 @@ def adapt_match(source: dict[str, Any], config: dict[str, Any], strict: bool=Fal
         period_left_seconds = max(0, quarter_seconds - period_elapsed_seconds)
     else:
         period_left_seconds = int(round((period_left or 0) * 60))
-    explicit_stage = str(first(match, ['stage', 'status']) or first(raw_main, ['st']) or '')
     stage = _stage(elapsed_seconds, full_seconds, quarter_seconds, explicit_stage)
     raw_game = canonical_game(raw_main, config=config)
     quarters: list[dict[str, Optional[float]]] = []
