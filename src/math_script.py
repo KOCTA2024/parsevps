@@ -2696,58 +2696,60 @@ def set_current_match_rules(rules: Optional[dict]) -> None:
 def quarter_duration_minutes(tour: str) -> int:
     """
     Return quarter duration in minutes for a given league/tournament string.
-    NBA / G-League / Summer League: 12 min. FIBA (default): 10 min.
 
-    ТЗ v5.0: if an explicit match.rules override was registered via
-    set_current_match_rules(), its quarter_minutes always wins — parser
-    facts override name-based guessing.
+    Single source of truth for every downstream time calculation and for the
+    ``rules.quarter_minutes`` value written to the output JSON.
+
+    Priority:
+      1. Explicit ``match.rules.quarter_minutes`` override.
+      2. WNBA / NBA Summer League / configured preseason aliases -> 10 min.
+      3. NBA / NBA G League -> 12 min.
+      4. FIBA-style/default competitions -> 10 min.
+
+    Important: WNBA and Summer League checks must run before the generic NBA
+    check because "WNBA" contains the substring "NBA".
     """
-    if _CURRENT_MATCH_RULES.get("quarter_minutes"):
-        return safe_int(_CURRENT_MATCH_RULES.get("quarter_minutes"), 10)
+    explicit = _CURRENT_MATCH_RULES.get("quarter_minutes")
+    if explicit:
+        return safe_int(explicit, 10)
     if not tour:
         return 10
-    t = tour.upper()
-    if any(k in t for k in ("NBA", "G LEAGUE", "G-LEAGUE", "GLEAGUE",
-                             "SUMMER LEAGUE", "NBL", "BIG3")):
+
+    t = str(tour).upper()
+
+    # 4x10 competitions that contain an NBA token in their name.
+    if any(k in t for k in (
+        "WNBA", "ВНБА", "ЖНБА",
+        "ЖІНОЧА ЛІГА НБА", "ЖІНОЧОЇ ЛІГИ НБА",
+    )):
+        return 10
+
+    if any(k in t for k in (
+        "SUMMER LEAGUE", "NBA SUMMER",
+        "ЛІТНЯ ЛІГА", "ЛІТНЬОЇ ЛІГИ", "ЛЕТНЯЯ ЛИГА",
+    )):
+        return 10
+
+    # Keep the existing project rule for preseason aliases.
+    if any(k in t for k in (
+        "PRESEASON", "PRE-SEASON", "PRE SEASON",
+        "ПЕРЕДСЕЗОН", "ПЕРЕД СЕЗОН", "ПРЕДСЕЗОН",
+    )):
+        return 10
+
+    # Regular NBA and NBA G League use 12-minute quarters.
+    if any(k in t for k in (
+        "G LEAGUE", "G-LEAGUE", "GLEAGUE",
+        "NBA", "НБА",
+    )):
         return 12
-    return 10  # FIBA default (Euroleague, Eurocup, national leagues, etc.)
+
+    return 10  # FIBA/default: EuroLeague, EuroCup, national leagues, etc.
 
 
 def resolve_minutes_in_quarter(tour: str) -> int:
-    """
-    Determine quarter length in minutes for the metadata.minutes_in_quarter field.
-
-    Rules:
-      - WNBA (https://www.flashscore.ua/basketball/usa/wnba/)                -> 10
-      - NBA Summer League Las Vegas
-        (https://www.flashscore.ua/basketball/usa/nba-las-vegas-summer-league/) -> 10
-      - NBA Preseason                                                        -> 10
-      - NBA (regular season / playoffs)                                      -> 12
-      - Everything else (not NBA — FIBA, Euroleague, national leagues, etc.) -> 10
-    """
-    if _CURRENT_MATCH_RULES.get("quarter_minutes"):
-        return safe_int(_CURRENT_MATCH_RULES.get("quarter_minutes"), 10)
-    if not tour:
-        return 10
-    t = tour.upper()
-
-    # WNBA must be checked before the generic "NBA" substring check,
-    # since "WNBA" (and its Cyrillic equivalent "ВНБА"/"ЖНБА") contains
-    # "NBA"/"НБА" as a substring.
-    if any(k in t for k in ("WNBA", "ВНБА", "ЖІНОЧА ЛІГА НБА", "ЖІНОЧОЇ ЛІГИ НБА")):
-        return 10
-
-    if any(k in t for k in ("SUMMER LEAGUE", "ЛІТНЯ ЛІГА", "ЛІТНЬОЇ ЛІГИ")):
-        return 10
-
-    if any(k in t for k in ("PRESEASON", "PRE-SEASON", "PRE SEASON",
-                             "ПЕРЕДСЕЗОН", "ПЕРЕД СЕЗОН")):
-        return 10
-
-    if any(k in t for k in ("NBA", "НБА")):
-        return 12
-
-    return 10
+    """Compatibility wrapper using the same duration resolver everywhere."""
+    return quarter_duration_minutes(tour)
 
 
 def parse_minutes_played(st: str, tour: str) -> float:
