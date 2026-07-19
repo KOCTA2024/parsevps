@@ -1191,11 +1191,25 @@ async function main() {
       path.join(__dirname, 'log.txt'),
       `[${new Date().toLocaleString('ru-RU')}] ${payloadPath}\n`
     );
- 
+
+    // Явне підтвердження, що файл дійсно на диску — перед тим як віддавати exit 0.
+    if (!fs.existsSync(payloadPath)) {
+      throw new Error(`❌ payloadPath was not created: ${payloadPath}`);
+    }
+
   } finally {
+    // ВАЖЛИВО: тут НЕ викликаємо process.exit() — process.exit() всередині
+    // try/finally перериває виконання негайно і НЕ дає finally-блоку
+    // відпрацювати (код після process.exit() усередині try ніколи не
+    // виконується). Тому тут лише закриваємо контекст; рішення про exit
+    // code приймається нижче — після try/finally (успіх) або в
+    // main().catch() (помилка).
     await mainContext.close();
-    process.exit(0);
   }
+
+  // Сюди доходимо тільки якщо try відпрацював без винятків і файл
+  // підтверджено записано на диск.
+  process.exit(0);
 }
  
 main().catch(e => { console.error(e); process.exit(1); });

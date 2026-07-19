@@ -11,6 +11,7 @@
  *      відправка PLAY/RISK в Telegram, запис у SQLite.
  */
 import path from 'path';
+import fs from 'fs';
 import { execFile } from 'child_process';
 import { Worker, MetricsTime } from 'bullmq';
 import { fileURLToPath } from 'url';
@@ -37,14 +38,30 @@ const SUPER_BASKET_DB = process.env.SUPER_BASKET_DB
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+function pipeWithPrefix(stream, target, prefix) {
+  if (!stream) return;
+  let buf = '';
+  stream.on('data', (chunk) => {
+    buf += chunk.toString();
+    const lines = buf.split('\n');
+    buf = lines.pop(); // keep incomplete trailing line in buffer
+    for (const line of lines) target.write(`${prefix} ${line}\n`);
+  });
+  stream.on('end', () => {
+    if (buf) target.write(`${prefix} ${buf}\n`);
+  });
+}
+
 function run(bin, args, opts = {}) {
+  const { jobId, ...execOpts } = opts;
   return new Promise((resolve, reject) => {
-    const child = execFile(bin, args, { cwd: APP_ROOT, ...opts }, (err, stdout, stderr) => {
+    const child = execFile(bin, args, { cwd: APP_ROOT, ...execOpts }, (err, stdout, stderr) => {
       if (err && err.code === undefined) { reject(err); return; }
       resolve({ stdout: stdout.trim(), stderr: stderr.trim(), code: err ? err.code : 0 });
     });
-    child.stdout?.pipe(process.stdout, { end: false });
-    child.stderr?.pipe(process.stderr, { end: false });
+    const prefix = jobId ? `[worker][job:${jobId}]` : '[worker]';
+    pipeWithPrefix(child.stdout, process.stdout, prefix);
+    pipeWithPrefix(child.stderr, process.stderr, prefix);
   });
 }
 
@@ -71,22 +88,35 @@ async function processJob(job) {
 
   const parserResult = await run(NODE_BIN, [
     parserScript, '--matchId', matchId, '--home', homeSlug, '--away', awaySlug,
-  ]);
+  ], { jobId: jid });
 
   log(jid, 'info', `Step 1 exited ${parserResult.code}${parserResult.stderr ? '\n' + parserResult.stderr : ''}`);
   if (parserResult.code !== 0) {
     throw new Error(`Parser failed (exit ${parserResult.code}): ${parserResult.stderr || '(none)'}`);
   }
+
+  // Парсер может выйти с кодом 0, даже если не нашёл матч на betking
+  // и не записал итоговый JSON (например, "Match not found" залогирован
+  // как non-fatal warning внутри match_h2h_export.js). Проверяем файлы
+  // на диске явно, чтобы не улетать на Step 2 с несуществующими путями.
+  const dataFilePath = path.join(APP_ROOT, 'src', 'data', dataFilename);
+  const lineFilePath = path.join(APP_ROOT, 'src', 'data', lineFilename);
+
+  const missing = [dataFilePath, lineFilePath].filter(p => !fs.existsSync(p));
+  if (missing.length) {
+    throw new Error(
+      `Parser exited 0 but did not produce expected file(s): ${missing.join(', ')} ` +
+      `— likely failed to locate the match on the source site (see Step 1 logs above).`
+    );
+  }
   await job.updateProgress(40);
 
   // ── Step 2: Python calculator ─────────────────────────────────────────────
-  const dataFilePath = path.join(APP_ROOT, 'data', dataFilename);
-  const lineFilePath = path.join(APP_ROOT, 'data', lineFilename);
-  const calcScript   = path.join(APP_ROOT, 'src', 'math_script.py');
+  const calcScript = path.join(APP_ROOT, 'src', 'math_script.py');
 
   log(jid, 'info', `Step 2 → ${PYTHON_BIN} ${calcScript} ${dataFilePath} ${lineFilePath}`);
 
-  const calcResult = await run(PYTHON_BIN, [calcScript, dataFilePath, lineFilePath]);
+  const calcResult = await run(PYTHON_BIN, [calcScript, dataFilePath, lineFilePath], { jobId: jid });
   log(jid, 'info', `Step 2 exited ${calcResult.code}${calcResult.stderr ? '\n' + calcResult.stderr : ''}`);
   if (calcResult.code !== 0) {
     throw new Error(`Calculator failed (exit ${calcResult.code}): ${calcResult.stderr || '(none)'}`);
@@ -105,7 +135,7 @@ async function processJob(job) {
     superBasketScript, 'run',
     '--match', dataFilePath,
     '--db', SUPER_BASKET_DB,
-  ]);
+  ], { jobId: jid });
   log(jid, 'info', `Step 3 exited ${superBasketResult.code}${superBasketResult.stderr ? '\n' + superBasketResult.stderr : ''}`);
   await job.updateProgress(90);
 
