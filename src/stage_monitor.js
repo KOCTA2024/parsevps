@@ -106,7 +106,11 @@ const NBA_PATTERN = /\bNBA\b|НБА|12[\s-]?min/i;
 const POLL_INTERVAL_MS   = Number(process.env.STAGE_POLL_INTERVAL_MS) || 60_000;      // 1 хв
 // Було 15 хв — зарано здавались, якщо матч стартував із запізненням щодо
 // kickoff у фіді (реальний Q1/пауза розтягувались довше вікна). Підняли дефолт.
-const CHECK_WINDOW_MS    = Number(process.env.STAGE_CHECK_WINDOW_MS)  || 25 * 60_000; // скільки чекати перерву в межах чекпоінта
+// Було 25 хв. Тепер, коли час у 'not_started' більше не витрачає це вікно
+// (див. NOT_STARTED_MAX_WAIT_MS нижче), цей таймаут рахується вже ВІД
+// реального старту матчу — тож підняли трохи вище як запас на лаг фіда
+// в детекції break/stall самого Q1↔Q2 чи Q3↔Q4 переходу.
+const CHECK_WINDOW_MS    = Number(process.env.STAGE_CHECK_WINDOW_MS)  || 35 * 60_000; // скільки чекати перерву в межах чекпоінта
 const RESCAN_INTERVAL_MS = Number(process.env.MATCHES_RESCAN_MS)      || 5 * 60_000;   // раз стільки перечитуємо matches.json
 
 // Скільки максимум чекати ЗАВЕРШЕННЯ Checkpoint #1 (у будь-якому вигляді —
@@ -138,6 +142,15 @@ const CHECKPOINT2_VERDICT_WAIT_MS = Number(process.env.CHECKPOINT2_VERDICT_WAIT_
 // пауза після Q1/Q3 ~2 хв (SHORT_BREAK_MIN), тому STAGE_STALL_CONFIRM_MS за
 // замовчуванням теж 2 хв.
 const STALL_CONFIRM_MS = Number(process.env.STAGE_STALL_CONFIRM_MS) || 2 * 60_000; // 2 хв
+
+// Матчі часто стартують із затримкою відносно kickoff у фіді (іноді майже
+// без затримки, іноді дуже суттєво) — тому CHECK_WINDOW_MS раніше "згоряв"
+// вхолосту, поки матч ще навіть не почався (status: 'not_started'), і
+// чекпоінт здавався, хоча реальний Q1/Q3 ще навіть не наступив. Тепер час,
+// проведений у 'not_started', НЕ витрачає CHECK_WINDOW_MS (див. watchCheckpoint) —
+// таймер вікна зсувається вперед, поки матч реально не стартував. Але щоб не
+// чекати вічно матч, який скасували/перенесли, обмежуємо це окремим стелею.
+const NOT_STARTED_MAX_WAIT_MS = Number(process.env.NOT_STARTED_MAX_WAIT_MS) || 3 * 60 * 60_000; // 3 год
 
 // Вердикти Checkpoint #2 (job.aiVerdict, див. worker.js / openai_analyst.js).
 // РАНІШЕ при цих вердиктах Checkpoint #3 повністю пропускався. Тепер
@@ -385,7 +398,8 @@ async function enqueueAnalysis(match, checkpointIndex) {
  */
 function watchCheckpoint(match, checkpointIndex, sportId, quarterMin) {
   const { id } = match;
-  const windowOpenedAt = Date.now();
+  let windowOpenedAt = Date.now();
+  const notStartedWaitStartedAt = Date.now(); // стеля для 'not_started' — див. NOT_STARTED_MAX_WAIT_MS
   let stopped = false;
 
   // Checkpoint #1 (після Q1) і Checkpoint #3 (після Q3) — фід ЧАСТО не
@@ -412,20 +426,43 @@ function watchCheckpoint(match, checkpointIndex, sportId, quarterMin) {
   const timer = setInterval(async () => {
     if (stopped) return;
 
+    let stage;
+    try {
+      stage = await matchStageChecker.checkStage(id, sportId);
+    } catch (e) {
+      log(id, `⚠ stage check failed (will retry next tick): ${e.message}`);
+      return;
+    }
+
+    // Матч ще фізично не почався (kickoff у фіді збрехав "у мінус" — реальна
+    // затримка старту). Час чекання тут НЕ має витрачати CHECK_WINDOW_MS —
+    // інакше вікно згорає вхолосту ще до того, як реально настане Q1/Q3.
+    // Зсуваємо windowOpenedAt вперед на кожному тіку, поки бачимо not_started;
+    // реальний відлік CHECK_WINDOW_MS почнеться лише коли матч дійсно піде.
+    // Обмежено окремою стелею (NOT_STARTED_MAX_WAIT_MS), щоб не висіти вічно
+    // на скасованому/перенесеному матчі.
+    if (stage.status === 'not_started') {
+      if (Date.now() - notStartedWaitStartedAt > NOT_STARTED_MAX_WAIT_MS) {
+        stopped = true;
+        clearInterval(timer);
+        log(id, `⏱ Checkpoint #${checkpointIndex + 1} — match still not_started after ` +
+                `${NOT_STARTED_MAX_WAIT_MS / 60_000} min of waiting → giving up (likely postponed/cancelled).`);
+        if (checkpointIndex === 0) settleCheckpoint1(id);
+        if (checkpointIndex === 1) settleCheckpoint2(id, null);
+        return;
+      }
+      log(id, `Checkpoint #${checkpointIndex + 1} — match hasn't started yet (delayed kickoff) — ` +
+              `window clock paused, not counting this wait against CHECK_WINDOW_MS.`);
+      windowOpenedAt = Date.now();
+      return;
+    }
+
     if (Date.now() - windowOpenedAt > CHECK_WINDOW_MS) {
       stopped = true;
       clearInterval(timer);
       log(id, `⏱ Checkpoint #${checkpointIndex + 1} window expired — no trigger detected. Giving up on this checkpoint.`);
       if (checkpointIndex === 0) settleCheckpoint1(id);
       if (checkpointIndex === 1) settleCheckpoint2(id, null);
-      return;
-    }
-
-    let stage;
-    try {
-      stage = await matchStageChecker.checkStage(id, sportId);
-    } catch (e) {
-      log(id, `⚠ stage check failed (will retry next tick): ${e.message}`);
       return;
     }
 
