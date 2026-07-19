@@ -1683,7 +1683,14 @@ def _router(market: dict[str, Any], canonical: dict[str, Any]) -> dict[str, Any]
     current = canonical.get('current_quarter')
     status, reason, cap = ('ALLOW', 'SUPPORTED_BY_STAGE_ROUTER', None)
     hard_block = False
-    if market_type == 'H1_TOTAL' or market_type == 'TEAM_IT_H1':
+    if market_type in {'MATCH_TOTAL', 'TEAM_IT_MATCH'} and current == 2:
+        # Checkpoint #1 (stage_monitor.js) opens the analysis window right after
+        # Q1 ends, i.e. during Q2 — the whole Q2 window, until half-time (which
+        # is Checkpoint #2). In that window a full-match total/team-IT signal is
+        # too early and noisy; only the half-scoped markets (H1_TOTAL/TEAM_IT_H1)
+        # are allowed to fire here.
+        status, reason, hard_block = ('BLOCK', 'MATCH_TOTAL_BLOCKED_DURING_Q2_AFTER_CHECKPOINT1_ONLY_HALF_MARKETS', True)
+    elif market_type == 'H1_TOTAL' or market_type == 'TEAM_IT_H1':
         if canonical['elapsed_game_seconds'] >= canonical['full_game_seconds'] / 2:
             status, reason, hard_block = ('BLOCK', 'H1_ALREADY_COMPLETE', True)
         elif current == 1:
