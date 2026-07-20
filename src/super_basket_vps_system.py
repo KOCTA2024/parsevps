@@ -607,6 +607,7 @@ def parse_markets(source: dict[str, Any], canonical: dict[str, Any], config: dic
     containers = source.get('lines') or source.get('bookmaker_lines') or source.get('bookmaker_markets') or source.get('markets') or {}
     aliases = config.get('aliases', {})
     odds_min = float(config.get('odds_min', 1.44))
+    odds_max = float(config.get('odds_max', 10.0))
     evaluations: list[dict[str, Any]] = []
     audit: list[dict[str, Any]] = []
     sequence = 0
@@ -651,6 +652,8 @@ def parse_markets(source: dict[str, Any], canonical: dict[str, Any], config: dic
                     reasons.append('NO_ODDS')
                 if odds is not None and odds < odds_min:
                     reasons.append('ODDS_BELOW_MINIMUM')
+                if odds is not None and odds > odds_max:
+                    reasons.append('ODDS_ABOVE_MAXIMUM')
                 sequence += 1
                 safe_line = 'na' if line is None else str(line).replace('.', '_')
                 market_id = str(row.get('id') or f'{bucket}_{segment}_{safe_line}_{sequence}')
@@ -1980,6 +1983,7 @@ DEFAULT_CONFIG = json.loads(r"""{
   "engine_version": "5.0",
   "calibration_status": "calibration_default_not_backtested",
   "odds_min": 1.44,
+  "odds_max": 10.0,
   "dispatch_threshold": 0.68,
   "smoothing": {"alpha": 1.0, "beta": 1.0},
   "credibility": {

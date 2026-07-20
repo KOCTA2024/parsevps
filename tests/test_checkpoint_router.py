@@ -45,3 +45,14 @@ for t in ['MATCH_TOTAL', 'TEAM_IT_MATCH', 'H2_TOTAL', 'TEAM_IT_H2']:
     print(f'PASS: checkpoint 2 does not apply Q1-only block to {t}')
 
 print('\nAll Python checkpoint-router tests passed.')
+
+source = {
+    'lines': {'match_total': [{'scope': 'Match', 'line': 145.5, 'overOdd': 21, 'underOdd': 1.83}]},
+}
+canonical = {'home_team': 'A', 'away_team': 'B', 'current_quarter': 3}
+markets, _ = mod.parse_markets(source, canonical, mod.DEFAULT_CONFIG)
+bad = next(item for item in markets if item['side'] == 'OVER')
+good = next(item for item in markets if item['side'] == 'UNDER')
+assert 'ODDS_ABOVE_MAXIMUM' in bad['parser_issues'], bad
+assert good['eligible_market'] is True, good
+print('PASS: malformed odds above configured maximum are blocked')
