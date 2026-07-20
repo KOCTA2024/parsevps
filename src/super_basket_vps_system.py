@@ -2878,6 +2878,24 @@ def process_vps_match_file(
         }
         core_result['super_basket_system'] = system
         snapshot = calculation['canonical_snapshot']
+        snapshot_quarters = snapshot.get('quarters') or []
+        completed_quarters = sum(
+            1 for quarter in snapshot_quarters
+            if isinstance(quarter, dict)
+            and quarter.get('home') is not None
+            and quarter.get('away') is not None
+        )
+        line_reason = next((
+            code for code in decision['reason_codes']
+            if code in {
+                'NO_SUPPORTED_REAL_LINES',
+                'NO_LINE',
+                'NO_ODDS',
+                'ODDS_BELOW_MINIMUM',
+                'SYNTHETIC_LINE',
+                'UNSUPPORTED_MARKET',
+            }
+        ), None)
         append_verdict_log({
             'timestamp':    system['processed_at'],          # utc_now(), напр. 2026-07-19T10:15:00+00:00
             'match_id':     snapshot['match_id'],
@@ -2896,6 +2914,35 @@ def process_vps_match_file(
             'input_hash':   calculation['input_snapshot_hash'],
             'gpt_status':   system['gpt_review']['status'],
             'telegram_status': system['telegram_delivery']['status'],
+            'stage_context': {
+                'current_quarter': snapshot.get('current_quarter'),
+                'completed_quarters': completed_quarters,
+                'clock': snapshot.get('clock'),
+                'elapsed_game_seconds': snapshot.get('elapsed_game_seconds'),
+                'remaining_game_seconds': snapshot.get('remaining_game_seconds'),
+                'score': snapshot.get('score'),
+                'quarters': snapshot_quarters,
+                'time_reliable': calculation.get('data_gate', {}).get('time_reliable'),
+            },
+            'line_diagnostics': {
+                'detected_market_sides': len(calculation.get('markets_detected') or []),
+                'evaluated_market_sides': len(calculation.get('market_evaluations') or []),
+                'eligible_candidates': len(calculation.get('candidates') or []),
+                'offers_before_deduplication': market_audit.get('offer_sides_before_deduplication'),
+                'unique_market_sides': market_audit.get('unique_market_sides'),
+                'duplicate_offers_removed': market_audit.get('duplicate_offers_removed'),
+                'selected_market_source': (decision.get('market') or {}).get('bookmaker'),
+                'empty_or_rejected_reason': line_reason,
+            },
+            'probabilities': deepcopy(decision.get('probabilities') or {}),
+            'gates': {
+                'caps': deepcopy(decision.get('caps') or []),
+                'blockers': deepcopy(decision.get('blockers') or []),
+            },
+            'files': {
+                'source': str(source_path),
+                'result': str(target),
+            },
         })
         save_json(target, core_result)
         store.mark_processed(calculation['input_snapshot_hash'], str(source_path), str(target), system['status'])

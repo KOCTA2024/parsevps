@@ -1,1710 +1,426 @@
 {
-  "fetchedAt": "2026-05-23T07:07:01.979Z",
+  "fetchedAt": "2026-07-16T16:44:25.058Z",
   "fsign": "SW9D1eZo",
-  "count": 158,
+  "count": 31,
   "matches": [
     {
-      "id": "I5lXBzl1",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Схід",
-      "status": "scheduled",
-      "timestamp": 1779521400,
-      "kickoff": "2026-05-23T07:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 10:30",
-      "home": "Канберра",
-      "away": "Хорнсбі Спайдерс"
-    },
-    {
-      "id": "QViuAEID",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Схід",
-      "status": "scheduled",
-      "timestamp": 1779521400,
-      "kickoff": "2026-05-23T07:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 10:30",
-      "home": "Сідней Кометс",
-      "away": "Олбері-Водонга Бендітс"
-    },
-    {
-      "id": "tvMPHQyK",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Схід",
-      "status": "scheduled",
-      "timestamp": 1779526800,
-      "kickoff": "2026-05-23T09:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:00",
-      "home": "Бенкстаун Брюїнз",
-      "away": "Іннер Вест Буллз"
-    },
-    {
-      "id": "xA7eC4as",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Схід",
-      "status": "scheduled",
-      "timestamp": 1779526800,
-      "kickoff": "2026-05-23T09:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:00",
-      "home": "Мейтленд",
-      "away": "Хіллс Хорнетс"
-    },
-    {
-      "id": "2HhL60TI",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Схід",
-      "status": "scheduled",
-      "timestamp": 1779526800,
-      "kickoff": "2026-05-23T09:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:00",
-      "home": "Нортс Берс",
-      "away": "БА СоЕ"
-    },
-    {
-      "id": "Yy14ArUg",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Схід",
-      "status": "scheduled",
-      "timestamp": 1779526800,
-      "kickoff": "2026-05-23T09:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:00",
-      "home": "Ньюкасл Фелконз",
-      "away": "Іллаварра Хокс 2"
-    },
-    {
-      "id": "t24C8Mb6",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Схід",
-      "status": "scheduled",
-      "timestamp": 1779526800,
-      "kickoff": "2026-05-23T09:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:00",
-      "home": "Сазерленд Шаркс",
-      "away": "Сентрал Коуст Крузейдерс"
-    },
-    {
-      "id": "vuwafzYI",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Схід (Жінки)",
-      "status": "live",
-      "timestamp": 1779519600,
-      "kickoff": "2026-05-23T07:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 10:00",
-      "home": "Бенкстаун Брюїнз Ж",
-      "away": "Іннер Вест Буллз Ж",
-      "liveStatus": "code(22)",
-      "score": {
-        "home": 6,
-        "away": 2
-      }
-    },
-    {
-      "id": "WEZjdd36",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Схід (Жінки)",
-      "status": "live",
-      "timestamp": 1779519600,
-      "kickoff": "2026-05-23T07:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 10:00",
-      "home": "Мейтленд Мустангс Ж",
-      "away": "Хіллс Хорнетс Ж",
-      "liveStatus": "code(22)",
-      "score": {
-        "home": 8,
-        "away": 4
-      }
-    },
-    {
-      "id": "KzGoIwQP",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Схід (Жінки)",
-      "status": "live",
-      "timestamp": 1779519600,
-      "kickoff": "2026-05-23T07:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 10:00",
-      "home": "Нортс Берс Ж",
-      "away": "БА СоЕ Ж",
-      "liveStatus": "code(22)",
-      "score": {
-        "home": 6,
-        "away": 4
-      }
-    },
-    {
-      "id": "CCJkbIYg",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Схід (Жінки)",
-      "status": "live",
-      "timestamp": 1779519600,
-      "kickoff": "2026-05-23T07:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 10:00",
-      "home": "Ньюкасл Фелконз Ж",
-      "away": "Іллаварра Хокс Ж",
-      "liveStatus": "code(22)",
-      "score": {
-        "home": 9,
-        "away": 2
-      }
-    },
-    {
-      "id": "vaLs0v4s",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Схід (Жінки)",
-      "status": "live",
-      "timestamp": 1779519600,
-      "kickoff": "2026-05-23T07:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 10:00",
-      "home": "Сазерленд Шаркс Ж",
-      "away": "Сентрал Коуст Ж",
-      "liveStatus": "code(22)",
-      "score": {
-        "home": 0,
-        "away": 0
-      }
-    },
-    {
-      "id": "pIaQAeIa",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Схід (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779528600,
-      "kickoff": "2026-05-23T09:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:30",
-      "home": "Канберра Ж",
-      "away": "Хорнсбі Спайдерс Ж"
-    },
-    {
-      "id": "jJ6HCHmm",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Схід (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779528600,
-      "kickoff": "2026-05-23T09:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:30",
-      "home": "Сідні Кометс Ж",
-      "away": "Олбері Ж"
-    },
-    {
-      "id": "r3GXzfDG",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Північ",
-      "status": "scheduled",
-      "timestamp": 1779526800,
-      "kickoff": "2026-05-23T09:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:00",
-      "home": "Голд Коуст Роллерс",
-      "away": "Рокгемптон Рокетс"
-    },
-    {
-      "id": "l0JuZXsT",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Північ",
-      "status": "scheduled",
-      "timestamp": 1779526800,
-      "kickoff": "2026-05-23T09:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:00",
-      "home": "Нортсайд Візардс",
-      "away": "Саутерн Дистріктс"
-    },
-    {
-      "id": "nyNOxGr4",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Північ",
-      "status": "scheduled",
-      "timestamp": 1779526800,
-      "kickoff": "2026-05-23T09:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:00",
-      "home": "Саут Вест Метро Пайретс",
-      "away": "Норт Голд Коуст Сіхокс"
-    },
-    {
-      "id": "YXfCTB5j",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Північ",
-      "status": "scheduled",
-      "timestamp": 1779530400,
-      "kickoff": "2026-05-23T10:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 13:00",
-      "home": "Кейрнс Марлінс",
-      "away": "Маккей Метеорс"
-    },
-    {
-      "id": "I7e85Zhl",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Північ (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779519600,
-      "kickoff": "2026-05-23T07:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 10:00",
-      "home": "Голд Коуст Роллерс Ж",
-      "away": "Рокгемптон Ж"
-    },
-    {
-      "id": "YHYzOs9F",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Північ (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779519600,
-      "kickoff": "2026-05-23T07:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 10:00",
-      "home": "Нортсайд Візардс Ж",
-      "away": "Саутерн Дистріктс Спартанс Ж"
-    },
-    {
-      "id": "C2pSP3v3",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Північ (Жінки)",
-      "status": "live",
-      "timestamp": 1779519600,
-      "kickoff": "2026-05-23T07:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 10:00",
-      "home": "Саут Вест Метро Пайретс Ж",
-      "away": "Норт Голд-Коуст Сіхокс Ж",
-      "liveStatus": "code(22)",
-      "score": {
-        "home": 1,
-        "away": 2
-      }
-    },
-    {
-      "id": "EZlH3DN0",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Північ (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779523200,
-      "kickoff": "2026-05-23T08:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 11:00",
-      "home": "Кейрнс Ж",
-      "away": "Маккей Метеореттс Ж"
-    },
-    {
-      "id": "tpLmTz3c",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Південь",
-      "status": "scheduled",
-      "timestamp": 1779526800,
-      "kickoff": "2026-05-23T09:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:00",
-      "home": "Джилонг",
-      "away": "Northern Tasmania"
-    },
-    {
-      "id": "xCEdREX9",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Південь",
-      "status": "scheduled",
-      "timestamp": 1779528600,
-      "kickoff": "2026-05-23T09:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:30",
-      "home": "Бендіго Брейвз",
-      "away": "Френкстон"
-    },
-    {
-      "id": "pxI4Ph2M",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Південь",
-      "status": "scheduled",
-      "timestamp": 1779528600,
-      "kickoff": "2026-05-23T09:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:30",
-      "home": "Данденонг",
-      "away": "Нокс"
-    },
-    {
-      "id": "2y7rIAfd",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Південь",
-      "status": "scheduled",
-      "timestamp": 1779528600,
-      "kickoff": "2026-05-23T09:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:30",
-      "home": "Кілсіт",
-      "away": "Мельбурн Тайгерс"
-    },
-    {
-      "id": "U9gyKWPq",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Південь",
-      "status": "scheduled",
-      "timestamp": 1779528600,
-      "kickoff": "2026-05-23T09:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:30",
-      "home": "Нанавадінг",
-      "away": "Сендрінгем Сейбрз"
-    },
-    {
-      "id": "jcmwvhHF",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Південь",
-      "status": "scheduled",
-      "timestamp": 1779530400,
-      "kickoff": "2026-05-23T10:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 13:00",
-      "home": "Елтем",
-      "away": "Хобарт"
-    },
-    {
-      "id": "IqkVuEn3",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Південь",
-      "status": "scheduled",
-      "timestamp": 1779530400,
-      "kickoff": "2026-05-23T10:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 13:00",
-      "home": "Рінгвуд",
-      "away": "Балларат"
-    },
-    {
-      "id": "nPtnxWoS",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Південь",
-      "status": "scheduled",
-      "timestamp": 1779532200,
-      "kickoff": "2026-05-23T10:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 13:30",
-      "home": "Маунт Гамб'єр",
-      "away": "Кейсі Кевалірс"
-    },
-    {
-      "id": "42AYOvOO",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Південь (Жінки)",
-      "status": "live",
-      "timestamp": 1779519600,
-      "kickoff": "2026-05-23T07:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 10:00",
-      "home": "Джилонг Ж",
-      "away": "Northern Tasmania Ж",
-      "liveStatus": "code(22)",
-      "score": {
-        "home": 0,
-        "away": 2
-      }
-    },
-    {
-      "id": "KEprqr9t",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Південь (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779521400,
-      "kickoff": "2026-05-23T07:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 10:30",
-      "home": "Бендіго Брейвз Ж",
-      "away": "Френкстон Ж"
-    },
-    {
-      "id": "ns4iu085",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Південь (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779521400,
-      "kickoff": "2026-05-23T07:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 10:30",
-      "home": "Данденонг Рейнджерс Ж",
-      "away": "Нокс Ж"
-    },
-    {
-      "id": "vH0qsMwg",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Південь (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779521400,
-      "kickoff": "2026-05-23T07:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 10:30",
-      "home": "Кілсіт Ж",
-      "away": "Мельбурн Тайгерс Ж"
-    },
-    {
-      "id": "8dh0wvwI",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Південь (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779521400,
-      "kickoff": "2026-05-23T07:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 10:30",
-      "home": "Нанавадінг Ж",
-      "away": "Сендрінгем Ж"
-    },
-    {
-      "id": "Sz2KrZEc",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Південь (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779523200,
-      "kickoff": "2026-05-23T08:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 11:00",
-      "home": "Елтем Ж",
-      "away": "Хобарт Ж"
-    },
-    {
-      "id": "EeKXKVMj",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Південь (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779523200,
-      "kickoff": "2026-05-23T08:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 11:00",
-      "home": "Рінгвуд Ж",
-      "away": "Балларат Ж"
-    },
-    {
-      "id": "0l0StDqA",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Південь (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779525000,
-      "kickoff": "2026-05-23T08:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 11:30",
-      "home": "Маунт Гамб'єр Ж",
-      "away": "Кейсі Кевалірс Ж"
-    },
-    {
-      "id": "EcalsQXF",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Центр",
-      "status": "scheduled",
-      "timestamp": 1779532200,
-      "kickoff": "2026-05-23T10:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 13:30",
-      "home": "Форествілл Іглз",
-      "away": "Істерн Маверікс"
-    },
-    {
-      "id": "0fXyYLf2",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Центр",
-      "status": "scheduled",
-      "timestamp": 1779533100,
-      "kickoff": "2026-05-23T10:45:00.000Z",
-      "kickoffLocal": "23.05.2026, 13:45",
-      "home": "Вест Аделейд Беркетс",
-      "away": "Норт-Аделейд Рокетс"
-    },
-    {
-      "id": "4SwTZsQk",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Центр",
-      "status": "scheduled",
-      "timestamp": 1779533100,
-      "kickoff": "2026-05-23T10:45:00.000Z",
-      "kickoffLocal": "23.05.2026, 13:45",
-      "home": "Вудвілл Ворріорз",
-      "away": "Норвуд Флеймз"
-    },
-    {
-      "id": "8dhcu42S",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Центр",
-      "status": "scheduled",
-      "timestamp": 1779533100,
-      "kickoff": "2026-05-23T10:45:00.000Z",
-      "kickoffLocal": "23.05.2026, 13:45",
-      "home": "Саут Аделейд Пантерз",
-      "away": "Стерт Сейбрз"
-    },
-    {
-      "id": "S0PNePn9",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Центр",
-      "status": "scheduled",
-      "timestamp": 1779534000,
-      "kickoff": "2026-05-23T11:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 14:00",
-      "home": "Сентрал Дистріктс Лайонс",
-      "away": "Саутерн Тайгерс"
-    },
-    {
-      "id": "COmDrUsA",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Центр (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779525900,
-      "kickoff": "2026-05-23T08:45:00.000Z",
-      "kickoffLocal": "23.05.2026, 11:45",
-      "home": "Форествілл Іглз Ж",
-      "away": "Істерн Маверікс Ж"
-    },
-    {
-      "id": "QRDncTd3",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Центр (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779526800,
-      "kickoff": "2026-05-23T09:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:00",
-      "home": "Вест Аделейд Беркетс Ж",
-      "away": "Норт-Аделейд Рокетс Ж"
-    },
-    {
-      "id": "bLL0ZP4d",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Центр (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779526800,
-      "kickoff": "2026-05-23T09:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:00",
-      "home": "Вудвілл Ворріорз Ж",
-      "away": "Норвуд Флеймз Ж"
-    },
-    {
-      "id": "6NtMt8CM",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Центр (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779526800,
-      "kickoff": "2026-05-23T09:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:00",
-      "home": "Саут Аделаїда Пантерз Ж",
-      "away": "Стерт Сейбрз Ж"
-    },
-    {
-      "id": "2gSiynzp",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Центр (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779526800,
-      "kickoff": "2026-05-23T09:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:00",
-      "home": "Сентрал Дистріктс Лайонс Ж",
-      "away": "Саутерн Тайгерс Ж"
-    },
-    {
-      "id": "fH6NECpB",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Захід",
-      "status": "scheduled",
-      "timestamp": 1779534000,
-      "kickoff": "2026-05-23T11:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 14:00",
-      "home": "Іст Перт Іглз",
-      "away": "Йондалуп Вулвз"
-    },
-    {
-      "id": "SU4VCjFN",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Захід",
-      "status": "scheduled",
-      "timestamp": 1779534000,
-      "kickoff": "2026-05-23T11:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 14:00",
-      "home": "Перт Редбекс",
-      "away": "Джералдтон Бакканірс"
-    },
-    {
-      "id": "0IDEGYFb",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Захід",
-      "status": "scheduled",
-      "timestamp": 1779534000,
-      "kickoff": "2026-05-23T11:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 14:00",
-      "home": "Саут-Вест Слеммерс",
-      "away": "Лейксайд Лайтнінг"
-    },
-    {
-      "id": "nFo27Uxo",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Захід",
-      "status": "scheduled",
-      "timestamp": 1779535800,
-      "kickoff": "2026-05-23T11:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 14:30",
-      "home": "Білаяр Буджар",
-      "away": "Перрі Лейкс Хокс"
-    },
-    {
-      "id": "ELwlVXUi",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Захід",
-      "status": "scheduled",
-      "timestamp": 1779537600,
-      "kickoff": "2026-05-23T12:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 15:00",
-      "home": "Голдфілдс Джаянтс",
-      "away": "Каламунда Істерн Санз"
-    },
-    {
-      "id": "zySdTBa4",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Захід",
-      "status": "scheduled",
-      "timestamp": 1779537600,
-      "kickoff": "2026-05-23T12:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 15:00",
-      "home": "Рокінгем Флеймз",
-      "away": "Ворвік Сенаторс"
-    },
-    {
-      "id": "86s7xgWs",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Захід (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779526800,
-      "kickoff": "2026-05-23T09:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:00",
-      "home": "Іст Перт Іглз Ж",
-      "away": "Йондалуп Вулвз Ж"
-    },
-    {
-      "id": "lM0zrF8K",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Захід (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779526800,
-      "kickoff": "2026-05-23T09:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:00",
-      "home": "Саут-Вест Слеммерс Ж",
-      "away": "Лейксайд Лайтнінг Ж"
-    },
-    {
-      "id": "tKuFzX0f",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Захід (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779528600,
-      "kickoff": "2026-05-23T09:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:30",
-      "home": "Кокберн Кугарс Ж",
-      "away": "Перрі Лейкс Хокс Ж"
-    },
-    {
-      "id": "0MeGYAV6",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Захід (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779530400,
-      "kickoff": "2026-05-23T10:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 13:00",
-      "home": "Голдфілдс Джаянтс Ж",
-      "away": "Каламунда Істерн Санз Ж"
-    },
-    {
-      "id": "8naOWl0J",
-      "league": "АВСТРАЛІЯ: НБЛ 1 Захід (Жінки)",
-      "status": "scheduled",
-      "timestamp": 1779530400,
-      "kickoff": "2026-05-23T10:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 13:00",
-      "home": "Рокінгем Флеймз Ж",
-      "away": "Ворвік Сенаторс Ж"
-    },
-    {
-      "id": "jwYiWC3k",
-      "league": "АВСТРІЯ: Суперліга - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779552000,
-      "kickoff": "2026-05-23T16:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 19:00",
-      "home": "Капфенберг Буллз",
-      "away": "Оберварт Ганнерс"
-    },
-    {
-      "id": "KfNVovqJ",
-      "league": "АЗІЯ: Ліга чемпіонів Азії - Кваліфікація - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779526800,
-      "kickoff": "2026-05-23T09:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:00",
-      "home": "СКАА",
-      "away": "Ксак Бронкос"
-    },
-    {
-      "id": "CUJNm0E6",
-      "league": "АЗІЯ: Ліга чемпіонів Азії - Кваліфікація - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779537600,
-      "kickoff": "2026-05-23T12:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 15:00",
-      "home": "Дева Юнайтед",
-      "away": "Таоюань Пауєнь Пайлотс"
-    },
-    {
-      "id": "6VLhySLF",
-      "league": "АРГЕНТИНА: Ліга А - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779546600,
-      "kickoff": "2026-05-23T14:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 17:30",
-      "home": "Кімса",
-      "away": "Бока Хуніорс"
-    },
-    {
-      "id": "UXQWilfl",
-      "league": "АРГЕНТИНА: Ліга Феменіна (Жінки) - Клаусура - плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779568200,
-      "kickoff": "2026-05-23T20:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 23:30",
-      "home": "Обрас Санітаріас Ж",
-      "away": "Ферро Ж"
-    },
-    {
-      "id": "pQjYNW4k",
-      "league": "АФРИКА: BAL - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779541200,
-      "kickoff": "2026-05-23T13:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 16:00",
-      "home": "Аль-Ахлі",
-      "away": "Клуб Афрікен"
-    },
-    {
-      "id": "tU1fVECF",
-      "league": "АФРИКА: BAL - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779552000,
-      "kickoff": "2026-05-23T16:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 19:00",
-      "home": "Dar City",
-      "away": "Петру Атлетіку"
-    },
-    {
-      "id": "f1DuhgAU",
-      "league": "БІЛОРУСЬ: Прем'єр-ліга - 5-8 місця",
-      "status": "scheduled",
-      "timestamp": 1779534000,
-      "kickoff": "2026-05-23T11:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 14:00",
-      "home": "Брест",
-      "away": "СДЮШОР Мінськ"
-    },
-    {
-      "id": "jVumtFVj",
-      "league": "БІЛОРУСЬ: Прем'єр-ліга - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779526800,
-      "kickoff": "2026-05-23T09:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:00",
-      "home": "Гродно",
-      "away": "БК Мінськ"
-    },
-    {
-      "id": "noJQC5IN",
-      "league": "БОЛГАРІЯ: НБЛ - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779552000,
-      "kickoff": "2026-05-23T16:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 19:00",
-      "home": "Рильскі Спортист",
-      "away": "Черно Море"
-    },
-    {
-      "id": "zNutRzVs",
-      "league": "БОСНІЯ ТА ГЕРЦЕГОВИНА: Першість БіГ - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779552000,
-      "kickoff": "2026-05-23T16:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 19:00",
-      "home": "Слобода",
-      "away": "КК Босна"
-    },
-    {
-      "id": "EXtdNhU6",
-      "league": "БОСНІЯ ТА ГЕРЦЕГОВИНА: Першість БіГ - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779555600,
-      "kickoff": "2026-05-23T17:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 20:00",
-      "home": "Широкі",
-      "away": "Ігокеа"
-    },
-    {
-      "id": "YapCZjyq",
-      "league": "БРАЗИЛІЯ: НББ - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779570600,
-      "kickoff": "2026-05-23T21:10:00.000Z",
-      "kickoffLocal": "24.05.2026, 00:10",
-      "home": "Корінтіанс Пауліста",
-      "away": "Піньєйруш"
-    },
-    {
-      "id": "zF3ug0fR",
+      "id": "GlLSJNFs",
       "league": "В’ЄТНАМ: ВБА",
-      "status": "scheduled",
-      "timestamp": 1779539400,
-      "kickoff": "2026-05-23T12:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 15:30",
-      "home": "Ханой Баффалос",
-      "away": "Нячанг Долфінс"
-    },
-    {
-      "id": "IyGOT7Ej",
-      "league": "ГРУЗІЯ: Суперліга - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779550200,
-      "kickoff": "2026-05-23T15:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 18:30",
-      "home": "ТСУ",
-      "away": "Батумі"
-    },
-    {
-      "id": "Qs1UKd8E",
-      "league": "ДОМІНІКАНСЬКА РЕСПУБЛІКА: ЛНБ",
       "status": "finished",
-      "timestamp": 1779494400,
-      "kickoff": "2026-05-23T00:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 03:00",
-      "home": "Каньєрос",
-      "away": "Тітанес Дель Лісей",
+      "timestamp": 1784205000,
+      "kickoff": "2026-07-16T12:30:00.000Z",
+      "kickoffLocal": "16.07.2026, 15:30",
+      "home": "Кантхо Кетфіш",
+      "away": "Дананг Дрегонс",
       "score": {
-        "home": 102,
+        "home": 95,
+        "away": 75
+      }
+    },
+    {
+      "id": "fsFMYgv8",
+      "league": "ДОМІНІКАНСЬКА РЕСПУБЛІКА: ЛНБ - Плей-оф",
+      "status": "finished",
+      "timestamp": 1784160000,
+      "kickoff": "2026-07-16T00:00:00.000Z",
+      "kickoffLocal": "16.07.2026, 03:00",
+      "home": "Хігантес Сан-Франциско",
+      "away": "Метрос де Сантьяго",
+      "score": {
+        "home": 95,
+        "away": 83
+      }
+    },
+    {
+      "id": "GzpJbkSs",
+      "league": "ЄВРОПА: Євробаскет U20 - 9-16 місця",
+      "status": "finished",
+      "timestamp": 1784199600,
+      "kickoff": "2026-07-16T11:00:00.000Z",
+      "kickoffLocal": "16.07.2026, 14:00",
+      "home": "Польща U20",
+      "away": "Чехія U20",
+      "score": {
+        "home": 90,
+        "away": 83
+      }
+    },
+    {
+      "id": "O0mRdTdf",
+      "league": "ЄВРОПА: Євробаскет U20 - 9-16 місця",
+      "status": "finished",
+      "timestamp": 1784208600,
+      "kickoff": "2026-07-16T13:30:00.000Z",
+      "kickoffLocal": "16.07.2026, 16:30",
+      "home": "Латвія U20",
+      "away": "Румунія U20",
+      "score": {
+        "home": 94,
+        "away": 60
+      }
+    },
+    {
+      "id": "KK0MRX0D",
+      "league": "ЄВРОПА: Євробаскет U20 - 9-16 місця",
+      "status": "live",
+      "timestamp": 1784217600,
+      "kickoff": "2026-07-16T16:00:00.000Z",
+      "kickoffLocal": "16.07.2026, 19:00",
+      "home": "Литва U20",
+      "away": "Бельгія U20",
+      "liveStatus": "code(23)",
+      "score": {
+        "home": 38,
+        "away": 37
+      }
+    },
+    {
+      "id": "hhDdLGLj",
+      "league": "ЄВРОПА: Євробаскет U20 - 9-16 місця",
+      "status": "scheduled",
+      "timestamp": 1784226600,
+      "kickoff": "2026-07-16T18:30:00.000Z",
+      "kickoffLocal": "16.07.2026, 21:30",
+      "home": "Італія U20",
+      "away": "Ізраїль U20"
+    },
+    {
+      "id": "n13grUs1",
+      "league": "ЄВРОПА: Євробаскет U20 - Плей-оф",
+      "status": "finished",
+      "timestamp": 1784201400,
+      "kickoff": "2026-07-16T11:30:00.000Z",
+      "kickoffLocal": "16.07.2026, 14:30",
+      "home": "Франція U20",
+      "away": "Хорватія U20",
+      "score": {
+        "home": 76,
+        "away": 66
+      }
+    },
+    {
+      "id": "Em5opjDl",
+      "league": "ЄВРОПА: Євробаскет U20 - Плей-оф",
+      "status": "finished",
+      "timestamp": 1784210400,
+      "kickoff": "2026-07-16T14:00:00.000Z",
+      "kickoffLocal": "16.07.2026, 17:00",
+      "home": "Німеччина U20",
+      "away": "Іспанія U20",
+      "score": {
+        "home": 69,
+        "away": 88
+      }
+    },
+    {
+      "id": "jNsnrgof",
+      "league": "ЄВРОПА: Євробаскет U20 - Плей-оф",
+      "status": "live",
+      "timestamp": 1784219400,
+      "kickoff": "2026-07-16T16:30:00.000Z",
+      "kickoffLocal": "16.07.2026, 19:30",
+      "home": "Туреччина U20",
+      "away": "Словенія U20",
+      "liveStatus": "code(22)",
+      "score": {
+        "home": 0,
+        "away": 2
+      }
+    },
+    {
+      "id": "I9qvpFGs",
+      "league": "ЄВРОПА: Євробаскет U20 - Плей-оф",
+      "status": "scheduled",
+      "timestamp": 1784228400,
+      "kickoff": "2026-07-16T19:00:00.000Z",
+      "kickoffLocal": "16.07.2026, 22:00",
+      "home": "Сербія U20",
+      "away": "Греція U20"
+    },
+    {
+      "id": "2wf0bD1s",
+      "league": "КАНАДА: КЕБЛ",
+      "status": "finished",
+      "timestamp": 1784165400,
+      "kickoff": "2026-07-16T01:30:00.000Z",
+      "kickoffLocal": "16.07.2026, 04:30",
+      "home": "Саскатун Мамба",
+      "away": "Вінніпег Сі Берз",
+      "score": {
+        "home": 83,
         "away": 96
       }
     },
     {
-      "id": "WtT12lhm",
-      "league": "ДОМІНІКАНСЬКА РЕСПУБЛІКА: ЛНБ",
+      "id": "x2XsCzdD",
+      "league": "НОВА ЗЕЛАНДІЯ: НБЛ",
       "status": "finished",
-      "timestamp": 1779496200,
-      "kickoff": "2026-05-23T00:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 03:30",
-      "home": "Леонес",
-      "away": "Марінерос",
+      "timestamp": 1784185200,
+      "kickoff": "2026-07-16T07:00:00.000Z",
+      "kickoffLocal": "16.07.2026, 10:00",
+      "home": "Отаго Наггетс",
+      "away": "Бей Хокс",
+      "score": {
+        "home": 92,
+        "away": 79
+      }
+    },
+    {
+      "id": "hQfQecFr",
+      "league": "ПІВНІЧНА ТА ЦЕНТРАЛЬНА АМЕРИКА: Центробаскет (Жінки)",
+      "status": "finished",
+      "timestamp": 1784147400,
+      "kickoff": "2026-07-15T20:30:00.000Z",
+      "kickoffLocal": "15.07.2026, 23:30",
+      "home": "Американські Віргінські Острови Ж",
+      "away": "Гаяна Ж",
+      "score": {
+        "home": 87,
+        "away": 71
+      }
+    },
+    {
+      "id": "df9f1JiL",
+      "league": "ПІВНІЧНА ТА ЦЕНТРАЛЬНА АМЕРИКА: Центробаскет (Жінки)",
+      "status": "finished",
+      "timestamp": 1784156400,
+      "kickoff": "2026-07-15T23:00:00.000Z",
+      "kickoffLocal": "16.07.2026, 02:00",
+      "home": "Сальвадор Ж",
+      "away": "Пуерто-Рико Ж",
+      "score": {
+        "home": 34,
+        "away": 99
+      }
+    },
+    {
+      "id": "MND0uxV1",
+      "league": "ПІВНІЧНА ТА ЦЕНТРАЛЬНА АМЕРИКА: Центробаскет (Жінки)",
+      "status": "finished",
+      "timestamp": 1784165400,
+      "kickoff": "2026-07-16T01:30:00.000Z",
+      "kickoffLocal": "16.07.2026, 04:30",
+      "home": "Нікарагуа Ж",
+      "away": "Домініканська Республіка Ж",
+      "score": {
+        "home": 54,
+        "away": 90
+      }
+    },
+    {
+      "id": "tz9yhKQQ",
+      "league": "ПУЕРТО-РИКО: БСН - Плей-оф",
+      "status": "finished",
+      "timestamp": 1784160000,
+      "kickoff": "2026-07-16T00:00:00.000Z",
+      "kickoffLocal": "16.07.2026, 03:00",
+      "home": "Агуада Сантерос",
+      "away": "Капітанес де Аресібо",
       "score": {
         "home": 93,
         "away": 100
       }
     },
     {
-      "id": "h8q59sMq",
-      "league": "ЕСТОНІЯ: КМЛ - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779552000,
-      "kickoff": "2026-05-23T16:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 19:00",
-      "home": "Тарту Улікоол",
-      "away": "БК Калев/Крамо"
-    },
-    {
-      "id": "nyRESNYp",
-      "league": "ІЗРАЇЛЬ: Суперліга",
-      "status": "scheduled",
-      "timestamp": 1779558300,
-      "kickoff": "2026-05-23T17:45:00.000Z",
-      "kickoffLocal": "23.05.2026, 20:45",
-      "home": "Маккабі Рішон-ле-Ціон",
-      "away": "Маккабі Раанана"
-    },
-    {
-      "id": "AJliPHPr",
-      "league": "ІНДОНЕЗІЯ: IБЛ - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779530400,
-      "kickoff": "2026-05-23T10:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 13:00",
-      "home": "Хангтуа",
-      "away": "Брітама"
-    },
-    {
-      "id": "Umo7LZO7",
-      "league": "ІНДОНЕЗІЯ: IБЛ - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779537600,
-      "kickoff": "2026-05-23T12:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 15:00",
-      "home": "Кесатрія Бенгаван Соло",
-      "away": "Борнео Горнбіллс"
-    },
-    {
-      "id": "02zjwhac",
-      "league": "ІРАН: Суперліга - Етап переможців",
-      "status": "scheduled",
-      "timestamp": 1779543000,
-      "kickoff": "2026-05-23T13:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 16:30",
-      "home": "Палаєш Нафт Абадан",
-      "away": "Нафт Загрос Джоноубі"
-    },
-    {
-      "id": "fy1udeof",
-      "league": "ІСПАНІЯ: АКБ",
-      "status": "scheduled",
-      "timestamp": 1779552000,
-      "kickoff": "2026-05-23T16:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 19:00",
-      "home": "Унікаха",
-      "away": "Ріо Бреоган"
-    },
-    {
-      "id": "EHu6sdW0",
-      "league": "ІСПАНІЯ: АКБ",
-      "status": "scheduled",
-      "timestamp": 1779559200,
-      "kickoff": "2026-05-23T18:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 21:00",
-      "home": "Гран Канарія",
-      "away": "Манреса"
-    },
-    {
-      "id": "M9NbqI1l",
-      "league": "ІСПАНІЯ: АКБ",
-      "status": "scheduled",
-      "timestamp": 1779562800,
-      "kickoff": "2026-05-23T19:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 22:00",
-      "home": "Гранада",
-      "away": "Тенеріфе"
-    },
-    {
-      "id": "hjIQik3t",
-      "league": "ІСПАНІЯ: Segunda FEB - Підвищення у класі - плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779559200,
-      "kickoff": "2026-05-23T18:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 21:00",
-      "home": "Каха 87",
-      "away": "Сант-Антоні"
-    },
-    {
-      "id": "AHRqs5bS",
-      "league": "ІТАЛІЯ: Ліга А - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779559200,
-      "kickoff": "2026-05-23T18:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 21:00",
-      "home": "Трієст",
-      "away": "Брешія"
-    },
-    {
-      "id": "AsDWqkp2",
-      "league": "ІТАЛІЯ: Серія А2 - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779544800,
-      "kickoff": "2026-05-23T14:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 17:00",
-      "home": "Чівідале",
-      "away": "Ріміні"
-    },
-    {
-      "id": "YNWuLtve",
-      "league": "КАЗАХСТАН: Національна ліга - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779537600,
-      "kickoff": "2026-05-23T12:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 15:00",
-      "home": "Астана",
-      "away": "Каспій Актау"
-    },
-    {
-      "id": "69zsu2VQ",
-      "league": "КАЗАХСТАН: Національна ліга - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779544800,
-      "kickoff": "2026-05-23T14:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 17:00",
-      "home": "Алмати",
-      "away": "Атирау"
-    },
-    {
-      "id": "MHVYAO44",
-      "league": "КАНАДА: КЕБЛ",
+      "id": "hd1NrGmD",
+      "league": "ПУЕРТО-РИКО: БСН - Плей-оф",
       "status": "finished",
-      "timestamp": 1779494400,
-      "kickoff": "2026-05-23T00:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 03:00",
-      "home": "Вінніпег Сі Берз",
-      "away": "Ніагара Рівер",
+      "timestamp": 1784160000,
+      "kickoff": "2026-07-16T00:00:00.000Z",
+      "kickoffLocal": "16.07.2026, 03:00",
+      "home": "Хігантес де Кароліна",
+      "away": "Вакерос де Баямон",
       "score": {
-        "home": 97,
-        "away": 71
+        "home": 68,
+        "away": 72
       }
     },
     {
-      "id": "rXJs92ZG",
-      "league": "КАНАДА: КЕБЛ",
+      "id": "xAdO5uSr",
+      "league": "США: Літня ліга НБА в Лас-Вегасі",
       "status": "finished",
-      "timestamp": 1779501600,
-      "kickoff": "2026-05-23T02:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 05:00",
-      "home": "Ванкувер Бендітс",
-      "away": "Едмонтон Стінгерс",
+      "timestamp": 1784145600,
+      "kickoff": "2026-07-15T20:00:00.000Z",
+      "kickoffLocal": "15.07.2026, 23:00",
+      "home": "Філадельфія",
+      "away": "Орландо",
       "score": {
-        "home": 111,
-        "away": 88
+        "home": 92,
+        "away": 99
       }
     },
     {
-      "id": "nBf1qaDi",
-      "league": "КИТАЙ: КБА - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779536100,
-      "kickoff": "2026-05-23T11:35:00.000Z",
-      "kickoffLocal": "23.05.2026, 14:35",
-      "home": "Дунгуань",
-      "away": "Чжецзян Гуанша"
+      "id": "ANfW3Jde",
+      "league": "США: Літня ліга НБА в Лас-Вегасі",
+      "status": "finished",
+      "timestamp": 1784151000,
+      "kickoff": "2026-07-15T21:30:00.000Z",
+      "kickoffLocal": "16.07.2026, 00:30",
+      "home": "Клівленд",
+      "away": "Нью-Орлеан",
+      "score": {
+        "home": 82,
+        "away": 77
+      }
     },
     {
-      "id": "0037EoaU",
-      "league": "КОЛУМБІЯ: ЛБП - Апертура - плей-оф",
+      "id": "Imbv2cR7",
+      "league": "США: Літня ліга НБА в Лас-Вегасі",
       "status": "finished",
-      "timestamp": 1779487200,
-      "kickoff": "2026-05-22T22:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 01:00",
-      "home": "Пайсас",
-      "away": "Кайманес дель Льяно",
+      "timestamp": 1784152800,
+      "kickoff": "2026-07-15T22:00:00.000Z",
+      "kickoffLocal": "16.07.2026, 01:00",
+      "home": "Детройт",
+      "away": "Фінікс",
       "score": {
         "home": 88,
-        "away": 81
+        "away": 100
       }
     },
     {
-      "id": "noFYXyIt",
-      "league": "ЛИТВА: ЛКЛ - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779544200,
-      "kickoff": "2026-05-23T13:50:00.000Z",
-      "kickoffLocal": "23.05.2026, 16:50",
-      "home": "Рітас",
-      "away": "Ювентус"
-    },
-    {
-      "id": "4Mqmy0zh",
-      "league": "ЛИТВА: ЛКЛ - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779552600,
-      "kickoff": "2026-05-23T16:10:00.000Z",
-      "kickoffLocal": "23.05.2026, 19:10",
-      "home": "Гаргждай",
-      "away": "Нептунас"
-    },
-    {
-      "id": "UTzY2mmQ",
-      "league": "ЛІВАН: Дивізіон 1",
-      "status": "scheduled",
-      "timestamp": 1779555600,
-      "kickoff": "2026-05-23T17:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 20:00",
-      "home": "Шабеб Батрун",
-      "away": "Шампвіль"
-    },
-    {
-      "id": "0GvQvXgK",
-      "league": "ЛІВАН: Дивізіон 1",
-      "status": "scheduled",
-      "timestamp": 1779561900,
-      "kickoff": "2026-05-23T18:45:00.000Z",
-      "kickoffLocal": "23.05.2026, 21:45",
-      "home": "Аль-Хекмех Бейрут",
-      "away": "Аль-Марказія"
-    },
-    {
-      "id": "EXCR9JiB",
-      "league": "ЛЮКСЕМБУРГ: ЛББЛ - Вибування",
-      "status": "scheduled",
-      "timestamp": 1779559200,
-      "kickoff": "2026-05-23T18:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 21:00",
-      "home": "Геффінген",
-      "away": "Мусел Пайкс"
-    },
-    {
-      "id": "xhsi6wPh",
-      "league": "МЕКСИКА: CIBACOPA - Плей-оф",
+      "id": "rRkQP0JE",
+      "league": "США: Літня ліга НБА в Лас-Вегасі",
       "status": "finished",
-      "timestamp": 1779502500,
-      "kickoff": "2026-05-23T02:15:00.000Z",
-      "kickoffLocal": "23.05.2026, 05:15",
-      "home": "Анхелес КДМХ",
-      "away": "Тіхуана",
+      "timestamp": 1784158200,
+      "kickoff": "2026-07-15T23:30:00.000Z",
+      "kickoffLocal": "16.07.2026, 02:30",
+      "home": "Шарлот",
+      "away": "Мілуокі",
       "score": {
-        "home": 110,
-        "away": 88
+        "home": 91,
+        "away": 110
       }
     },
     {
-      "id": "OSoF0ZhU",
-      "league": "МЕКСИКА: CIBACOPA - Плей-оф",
+      "id": "EDCc7h3m",
+      "league": "США: Літня ліга НБА в Лас-Вегасі",
       "status": "finished",
-      "timestamp": 1779502500,
-      "kickoff": "2026-05-23T02:15:00.000Z",
-      "kickoffLocal": "23.05.2026, 05:15",
-      "home": "Астрос",
-      "away": "Кабальєрос де Куліакан",
+      "timestamp": 1784160000,
+      "kickoff": "2026-07-16T00:00:00.000Z",
+      "kickoffLocal": "16.07.2026, 03:00",
+      "home": "Сакраменто",
+      "away": "Бостон",
       "score": {
-        "home": 86,
+        "home": 76,
+        "away": 82
+      }
+    },
+    {
+      "id": "MwG55WXa",
+      "league": "США: Літня ліга НБА в Лас-Вегасі",
+      "status": "finished",
+      "timestamp": 1784165400,
+      "kickoff": "2026-07-16T01:30:00.000Z",
+      "kickoffLocal": "16.07.2026, 04:30",
+      "home": "Сан-Антоніо",
+      "away": "Юта",
+      "score": {
+        "home": 94,
+        "away": 82
+      }
+    },
+    {
+      "id": "U3JD3A2C",
+      "league": "США: Літня ліга НБА в Лас-Вегасі",
+      "status": "finished",
+      "timestamp": 1784169000,
+      "kickoff": "2026-07-16T02:30:00.000Z",
+      "kickoffLocal": "16.07.2026, 05:30",
+      "home": "Кліпперс",
+      "away": "Вашингтон",
+      "score": {
+        "home": 108,
         "away": 94
       }
     },
     {
-      "id": "tnRnFY7N",
-      "league": "МЕКСИКА: CIBACOPA - Плей-оф",
-      "status": "finished",
-      "timestamp": 1779504300,
-      "kickoff": "2026-05-23T02:45:00.000Z",
-      "kickoffLocal": "23.05.2026, 05:45",
-      "home": "Фраілес де Гуасаве",
-      "away": "Піонерос де Лос Мочіс",
-      "score": {
-        "home": 103,
-        "away": 83
-      }
+      "id": "2HHL1lXO",
+      "league": "США: Літня ліга НБА в Лас-Вегасі",
+      "status": "scheduled",
+      "timestamp": 1784232000,
+      "kickoff": "2026-07-16T20:00:00.000Z",
+      "kickoffLocal": "16.07.2026, 23:00",
+      "home": "Оклахома-Сіті",
+      "away": "Даллас"
     },
     {
-      "id": "4dQJTXMG",
-      "league": "МЕКСИКА: CIBACOPA - Плей-оф",
+      "id": "Is7ULiIt",
+      "league": "США: Літня ліга НБА в Лас-Вегасі",
+      "status": "scheduled",
+      "timestamp": 1784233800,
+      "kickoff": "2026-07-16T20:30:00.000Z",
+      "kickoffLocal": "16.07.2026, 23:30",
+      "home": "Х'юстон",
+      "away": "Бруклін"
+    },
+    {
+      "id": "O47IPlqH",
+      "league": "США: WNBA",
       "status": "finished",
-      "timestamp": 1779506100,
-      "kickoff": "2026-05-23T03:15:00.000Z",
-      "kickoffLocal": "23.05.2026, 06:15",
-      "home": "Альконес де Обрегон",
-      "away": "Toros Laguna",
+      "timestamp": 1784160000,
+      "kickoff": "2026-07-16T00:00:00.000Z",
+      "kickoffLocal": "16.07.2026, 03:00",
+      "home": "Індіана Фівер Ж",
+      "away": "Голден Стейт Валькіріс Ж",
       "score": {
-        "home": 90,
+        "home": 75,
         "away": 88
       }
     },
     {
-      "id": "pvv5o6Fl",
-      "league": "НІМЕЧЧИНА: ББЛ - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779539400,
-      "kickoff": "2026-05-23T12:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 15:30",
-      "home": "Трір",
-      "away": "Баварія"
-    },
-    {
-      "id": "t2e6Vvdo",
-      "league": "НІМЕЧЧИНА: ББЛ - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779546600,
-      "kickoff": "2026-05-23T14:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 17:30",
-      "home": "Ульм",
-      "away": "Бамберг"
-    },
-    {
-      "id": "zXI5aEJ6",
-      "league": "НІМЕЧЧИНА: Про А - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779552000,
-      "kickoff": "2026-05-23T16:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 19:00",
-      "home": "Айсберен",
-      "away": "Фенікс Хаген"
-    },
-    {
-      "id": "zVZJ3yZO",
-      "league": "НІМЕЧЧИНА: Про А - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779555600,
-      "kickoff": "2026-05-23T17:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 20:00",
-      "home": "Гіссен",
-      "away": "Кірхгайм"
-    },
-    {
-      "id": "WQFczVLs",
-      "league": "НОВА ЗЕЛАНДІЯ: НБЛ",
+      "id": "dlG7JTOi",
+      "league": "ФІЛІППІНИ: МФБЛ",
       "status": "finished",
-      "timestamp": 1779508800,
-      "kickoff": "2026-05-23T04:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 07:00",
-      "home": "Франклін Буллз",
-      "away": "Бей Хокс",
+      "timestamp": 1784188800,
+      "kickoff": "2026-07-16T08:00:00.000Z",
+      "kickoffLocal": "16.07.2026, 11:00",
+      "home": "Батангас Сіті",
+      "away": "Басілан Стіл",
       "score": {
-        "home": 98,
-        "away": 82
+        "home": 87,
+        "away": 71
       }
     },
     {
-      "id": "IgWl2gTs",
-      "league": "НОВА ЗЕЛАНДІЯ: НБЛ",
-      "status": "scheduled",
-      "timestamp": 1779521400,
-      "kickoff": "2026-05-23T07:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 10:30",
-      "home": "Окленд Туатара",
-      "away": "Тауранга Ваї"
-    },
-    {
-      "id": "0Ab3YYWa",
-      "league": "ПАРАГВАЙ: ЛНБ - Апертура",
+      "id": "4EJFH7g4",
+      "league": "ФІЛІППІНИ: МФБЛ",
       "status": "finished",
-      "timestamp": 1779490800,
-      "kickoff": "2026-05-22T23:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 02:00",
-      "home": "Депортіво Амамбай",
-      "away": "Сьюдад Нуева",
-      "score": {
-        "home": 102,
-        "away": 51
-      }
-    },
-    {
-      "id": "IJ2S6Mr4",
-      "league": "ПІВНІЧНА МАКЕДОНІЯ: Суперліга - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779530400,
-      "kickoff": "2026-05-23T10:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 13:00",
-      "home": "ТФТ Скоп'є",
-      "away": "Пелістер"
-    },
-    {
-      "id": "AwqtfjDc",
-      "league": "ПОЛЬЩА: Баскет Ліга - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779555600,
-      "kickoff": "2026-05-23T17:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 20:00",
-      "home": "Шльонск Вроцлав",
-      "away": "Гдиня"
-    },
-    {
-      "id": "URFi0W2D",
-      "league": "ПОЛЬЩА: 1. Ліга - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779544800,
-      "kickoff": "2026-05-23T14:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 17:00",
-      "home": "Спуйня",
-      "away": "Староград Гданськ"
-    },
-    {
-      "id": "YFtKQPTa",
-      "league": "ПОЛЬЩА: 1. Ліга - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779555600,
-      "kickoff": "2026-05-23T17:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 20:00",
-      "home": "Лодзь",
-      "away": "Бидгощ"
-    },
-    {
-      "id": "6Hj2I9DD",
-      "league": "ПОРТУГАЛІЯ: ЛПБ - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779544800,
-      "kickoff": "2026-05-23T14:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 17:00",
-      "home": "Бенфіка",
-      "away": "Олівейренсе"
-    },
-    {
-      "id": "lbe8TZLE",
-      "league": "ПОРТУГАЛІЯ: ЛПБ - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779568200,
-      "kickoff": "2026-05-23T20:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 23:30",
-      "home": "Спортінг КП",
-      "away": "ФК Порту"
-    },
-    {
-      "id": "pt773LBr",
-      "league": "ПУЕРТО-РИКО: БСН",
-      "status": "finished",
-      "timestamp": 1779494400,
-      "kickoff": "2026-05-23T00:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 03:00",
-      "home": "Кріольйос Кагуас",
-      "away": "Метс де Гвайнабо",
-      "score": {
-        "home": 109,
-        "away": 92
-      }
-    },
-    {
-      "id": "d2qmBCDi",
-      "league": "ПУЕРТО-РИКО: БСН",
-      "status": "finished",
-      "timestamp": 1779494400,
-      "kickoff": "2026-05-23T00:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 03:00",
-      "home": "Сан-Херман",
-      "away": "Леонес де Понсе",
-      "score": {
-        "home": 84,
-        "away": 68
-      }
-    },
-    {
-      "id": "dU1Y0HM8",
-      "league": "РУМУНІЯ: Дивізіон А - 13-16 місця",
-      "status": "scheduled",
-      "timestamp": 1779552000,
-      "kickoff": "2026-05-23T16:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 19:00",
-      "home": "КСМ Тиргу-Жіу",
-      "away": "Мунічіпал Галац"
-    },
-    {
-      "id": "8WwjXqcR",
-      "league": "РУМУНІЯ: Дивізіон А - 13-16 місця",
-      "status": "scheduled",
-      "timestamp": 1779557400,
-      "kickoff": "2026-05-23T17:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 20:30",
-      "home": "Корона Брашов",
-      "away": "КСМ Тиргу-Муреш"
-    },
-    {
-      "id": "UH0aLWuh",
-      "league": "РУМУНІЯ: Дивізіон А - 5-8 місця",
-      "status": "scheduled",
-      "timestamp": 1779548400,
-      "kickoff": "2026-05-23T15:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 18:00",
-      "home": "Рапід Бухарест",
-      "away": "Волунтарі"
-    },
-    {
-      "id": "8MxlJ1GL",
-      "league": "РУМУНІЯ: Дивізіон А - 9-16 місця",
-      "status": "scheduled",
-      "timestamp": 1779556500,
-      "kickoff": "2026-05-23T17:15:00.000Z",
-      "kickoffLocal": "23.05.2026, 20:15",
-      "home": "Вилча",
-      "away": "СКМ Тімішоара"
-    },
-    {
-      "id": "421wDpNO",
-      "league": "СВІТ: Світовий тур 3x3 Шанхай",
-      "status": "scheduled",
-      "timestamp": 1779516000,
-      "kickoff": "2026-05-23T06:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 09:00",
-      "home": "Бонн 3x3",
-      "away": "Сінгапур 3x3"
-    },
-    {
-      "id": "8v4b07wJ",
-      "league": "СВІТ: Світовий тур 3x3 Шанхай",
-      "status": "scheduled",
-      "timestamp": 1779517500,
-      "kickoff": "2026-05-23T06:25:00.000Z",
-      "kickoffLocal": "23.05.2026, 09:25",
-      "home": "Улан-Батор 3x3",
-      "away": "Каунас 3x3"
-    },
-    {
-      "id": "0E0j2T86",
-      "league": "СВІТ: Світовий тур 3x3 Шанхай",
-      "status": "scheduled",
-      "timestamp": 1779519000,
-      "kickoff": "2026-05-23T06:50:00.000Z",
-      "kickoffLocal": "23.05.2026, 09:50",
-      "home": "Ханчжоу 3x3",
-      "away": "Сансар 3x3"
-    },
-    {
-      "id": "A1D4BXoK",
-      "league": "СВІТ: Світовий тур 3x3 Шанхай",
-      "status": "scheduled",
-      "timestamp": 1779520500,
-      "kickoff": "2026-05-23T07:15:00.000Z",
-      "kickoffLocal": "23.05.2026, 10:15",
-      "home": "DeQing 3x3",
-      "away": "Црвена Звезда Н. С. 3x3"
-    },
-    {
-      "id": "OOaNGSNa",
-      "league": "СВІТ: Світовий тур 3x3 Шанхай",
-      "status": "scheduled",
-      "timestamp": 1779522600,
-      "kickoff": "2026-05-23T07:50:00.000Z",
-      "kickoffLocal": "23.05.2026, 10:50",
-      "home": "Шанхай 3x3",
-      "away": "Сінгапур 3x3"
-    },
-    {
-      "id": "KSAqOAVP",
-      "league": "СВІТ: Світовий тур 3x3 Шанхай",
-      "status": "scheduled",
-      "timestamp": 1779524100,
-      "kickoff": "2026-05-23T08:15:00.000Z",
-      "kickoffLocal": "23.05.2026, 11:15",
-      "home": "Антверпен ТОПдеск 3x3",
-      "away": "Каунас 3x3"
-    },
-    {
-      "id": "Kzaz6B9s",
-      "league": "СВІТ: Світовий тур 3x3 Шанхай",
-      "status": "scheduled",
-      "timestamp": 1779525600,
-      "kickoff": "2026-05-23T08:40:00.000Z",
-      "kickoffLocal": "23.05.2026, 11:40",
-      "home": "Скайлайнерс 3x3",
-      "away": "Сансар 3x3"
-    },
-    {
-      "id": "AsNAkjP0",
-      "league": "СВІТ: Світовий тур 3x3 Шанхай",
-      "status": "scheduled",
-      "timestamp": 1779527100,
-      "kickoff": "2026-05-23T09:05:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:05",
-      "home": "Ліман 3x3",
-      "away": "Црвена Звезда Н. С. 3x3"
-    },
-    {
-      "id": "Wl3VE6hC",
-      "league": "СВІТ: Світовий тур 3x3 Шанхай",
-      "status": "scheduled",
-      "timestamp": 1779534000,
-      "kickoff": "2026-05-23T11:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 14:00",
-      "home": "Шанхай 3x3",
-      "away": "Бонн 3x3"
-    },
-    {
-      "id": "GbdFIlgm",
-      "league": "СВІТ: Світовий тур 3x3 Шанхай",
-      "status": "scheduled",
-      "timestamp": 1779535500,
-      "kickoff": "2026-05-23T11:25:00.000Z",
-      "kickoffLocal": "23.05.2026, 14:25",
-      "home": "Антверпен ТОПдеск 3x3",
-      "away": "Улан-Батор 3x3"
-    },
-    {
-      "id": "S02r4kvf",
-      "league": "СВІТ: Світовий тур 3x3 Шанхай",
-      "status": "scheduled",
-      "timestamp": 1779537000,
-      "kickoff": "2026-05-23T11:50:00.000Z",
-      "kickoffLocal": "23.05.2026, 14:50",
-      "home": "Скайлайнерс 3x3",
-      "away": "Ханчжоу 3x3"
-    },
-    {
-      "id": "I7QImUgD",
-      "league": "СВІТ: Світовий тур 3x3 Шанхай",
-      "status": "scheduled",
-      "timestamp": 1779538500,
-      "kickoff": "2026-05-23T12:15:00.000Z",
-      "kickoffLocal": "23.05.2026, 15:15",
-      "home": "Ліман 3x3",
-      "away": "DeQing 3x3"
-    },
-    {
-      "id": "tl4SdgKP",
-      "league": "СЛОВЕНІЯ: Ліга ОТР - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779550200,
-      "kickoff": "2026-05-23T15:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 18:30",
-      "home": "Цедевіта Олімпія",
-      "away": "Шенчур"
-    },
-    {
-      "id": "lQDWzRGd",
-      "league": "СЛОВЕНІЯ: Ліга ОТР - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779559200,
-      "kickoff": "2026-05-23T18:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 21:00",
-      "home": "Крка",
-      "away": "Ілірія"
-    },
-    {
-      "id": "2ynvU7MH",
-      "league": "США: НБА - Плей-оф",
-      "status": "finished",
-      "timestamp": 1779496200,
-      "kickoff": "2026-05-23T00:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 03:30",
-      "home": "Сан-Антоніо",
-      "away": "Оклахома-Сіті",
-      "score": {
-        "home": 108,
-        "away": 123
-      }
-    },
-    {
-      "id": "UwfaJOpB",
-      "league": "США: WNBA",
-      "status": "finished",
-      "timestamp": 1779492600,
-      "kickoff": "2026-05-22T23:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 02:30",
-      "home": "Атланта Дрім Ж",
-      "away": "Даллас Вінгз Ж",
-      "score": {
-        "home": 86,
-        "away": 69
-      }
-    },
-    {
-      "id": "2ih7H2FN",
-      "league": "США: WNBA",
-      "status": "finished",
-      "timestamp": 1779492600,
-      "kickoff": "2026-05-22T23:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 02:30",
-      "home": "Індіана Фівер Ж",
-      "away": "Голден Стейт Валькіріс Ж",
-      "score": {
-        "home": 90,
-        "away": 82
-      }
-    },
-    {
-      "id": "bygxCtwo",
-      "league": "США: WNBA",
-      "status": "finished",
-      "timestamp": 1779501600,
-      "kickoff": "2026-05-23T02:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 05:00",
-      "home": "Сіетл Сторм Ж",
-      "away": "Коннектикут Сан Ж",
+      "timestamp": 1784196000,
+      "kickoff": "2026-07-16T10:00:00.000Z",
+      "kickoffLocal": "16.07.2026, 13:00",
+      "home": "Себу Грейтс",
+      "away": "Бінан Татак Джел",
       "score": {
         "home": 77,
-        "away": 59
+        "away": 78
       }
     },
     {
-      "id": "QsoOZqVi",
-      "league": "США: WNBA",
-      "status": "scheduled",
-      "timestamp": 1779555600,
-      "kickoff": "2026-05-23T17:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 20:00",
-      "home": "Чикаго Скай Ж",
-      "away": "Міннесота Лінкс Ж"
-    },
-    {
-      "id": "EXt3FDlC",
-      "league": "ТАЙВАНЬ: П. Ліга+ - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779526800,
-      "kickoff": "2026-05-23T09:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 12:00",
-      "home": "Фубон Брейвз",
-      "away": "Тайнань ТСГ ГоустХокс"
-    },
-    {
-      "id": "6iasnXel",
-      "league": "УГОРЩИНА: НБ І. А - Плей-аут",
-      "status": "scheduled",
-      "timestamp": 1779552000,
-      "kickoff": "2026-05-23T16:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 19:00",
-      "home": "Керменд",
-      "away": "НКА Печ"
-    },
-    {
-      "id": "Ms6crkeD",
-      "league": "УГОРЩИНА: НБ І. А - Плей-аут",
-      "status": "scheduled",
-      "timestamp": 1779552000,
-      "kickoff": "2026-05-23T16:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 19:00",
-      "home": "ОСЕ Лайонс",
-      "away": "Кечкемет ТЕ"
-    },
-    {
-      "id": "EH2kpBQ0",
-      "league": "УГОРЩИНА: НБ І. А - Плей-аут",
-      "status": "scheduled",
-      "timestamp": 1779552000,
-      "kickoff": "2026-05-23T16:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 19:00",
-      "home": "Седеак",
-      "away": "Залакерамія"
-    },
-    {
-      "id": "ELG2jxu3",
-      "league": "УГОРЩИНА: НБ І. А - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779552000,
-      "kickoff": "2026-05-23T16:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 19:00",
-      "home": "Атомерому Пакш",
-      "away": "Капошвар"
-    },
-    {
-      "id": "dfBqc6j4",
-      "league": "УРУГВАЙ: Ліга Уругваю - Плей-оф",
+      "id": "SC8AtvPi",
+      "league": "ЧИЛІ: ЛНБ - Клаусура",
       "status": "finished",
-      "timestamp": 1779495300,
-      "kickoff": "2026-05-23T00:15:00.000Z",
-      "kickoffLocal": "23.05.2026, 03:15",
-      "home": "Дефенсор",
-      "away": "Пеньяроль",
-      "score": {
-        "home": 61,
-        "away": 81
-      }
-    },
-    {
-      "id": "ro0lEV9U",
-      "league": "ФІЛІППІНИ: МФБЛ",
-      "status": "scheduled",
-      "timestamp": 1779523200,
-      "kickoff": "2026-05-23T08:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 11:00",
-      "home": "Батанг Канкалу",
-      "away": "Ілаган Ізабела Ковбойс"
-    },
-    {
-      "id": "Y9ubYYfn",
-      "league": "ФІЛІППІНИ: МФБЛ",
-      "status": "scheduled",
-      "timestamp": 1779530400,
-      "kickoff": "2026-05-23T10:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 13:00",
-      "home": "Самбоанга Сікат",
-      "away": "Абра Віверс"
-    },
-    {
-      "id": "6Nw6WCPb",
-      "league": "ФІЛІППІНИ: МФБЛ",
-      "status": "scheduled",
-      "timestamp": 1779537600,
-      "kickoff": "2026-05-23T12:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 15:00",
-      "home": "Вал Сіті Меджик",
-      "away": "Кесон Гаскерс"
-    },
-    {
-      "id": "GWPz1Wfo",
-      "league": "ФРАНЦІЯ: ЛНБ - Play-in",
-      "status": "scheduled",
-      "timestamp": 1779552000,
-      "kickoff": "2026-05-23T16:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 19:00",
-      "home": "Страсбур",
-      "away": "Шалон/Сон"
-    },
-    {
-      "id": "jZPSCBcT",
-      "league": "ЧЕХІЯ: 1. Ліга - Вибування",
-      "status": "scheduled",
-      "timestamp": 1779544800,
-      "kickoff": "2026-05-23T14:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 17:00",
-      "home": "Сокол Празький",
-      "away": "Карвіна"
-    },
-    {
-      "id": "ELzhP2hL",
-      "league": "ЧИЛІ: ЛНБ - Апертура - плей-оф",
-      "status": "finished",
-      "timestamp": 1779492600,
-      "kickoff": "2026-05-22T23:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 02:30",
+      "timestamp": 1784163600,
+      "kickoff": "2026-07-16T01:00:00.000Z",
+      "kickoffLocal": "16.07.2026, 04:00",
       "home": "Леонес де Кільпе",
-      "away": "Пуенте-Альто",
+      "away": "Коло-Коло",
       "score": {
-        "home": 64,
-        "away": 73
+        "home": 87,
+        "away": 77
       }
     },
     {
-      "id": "6eXqRON8",
-      "league": "ЧИЛІ: ЛНБ - Апертура - плей-оф",
+      "id": "E7m7t5hd",
+      "league": "ЧИЛІ: ЛНБ - Клаусура",
       "status": "finished",
-      "timestamp": 1779494400,
-      "kickoff": "2026-05-23T00:00:00.000Z",
-      "kickoffLocal": "23.05.2026, 03:00",
-      "home": "Бостон Коледж Чилі",
-      "away": "У. Де Консепсьйон",
+      "timestamp": 1784165400,
+      "kickoff": "2026-07-16T01:30:00.000Z",
+      "kickoffLocal": "16.07.2026, 04:30",
+      "home": "Вальдівія",
+      "away": "Еспаньйол Осорно",
       "score": {
-        "home": 83,
-        "away": 92
-      }
-    },
-    {
-      "id": "AiMNJtGr",
-      "league": "ЧИЛІ: ЛНБ - Апертура - плей-оф",
-      "status": "finished",
-      "timestamp": 1779496200,
-      "kickoff": "2026-05-23T00:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 03:30",
-      "home": "КД Пуерто-Варас",
-      "away": "Лас Анімас",
-      "score": {
-        "home": 94,
-        "away": 76
-      }
-    },
-    {
-      "id": "MNJqikMG",
-      "league": "ЧИЛІ: ЛНБ 2",
-      "status": "scheduled",
-      "timestamp": 1779570000,
-      "kickoff": "2026-05-23T21:00:00.000Z",
-      "kickoffLocal": "24.05.2026, 00:00",
-      "home": "Лісео Куріко",
-      "away": "Вілья-Алемана"
-    },
-    {
-      "id": "OMjRKZb4",
-      "league": "ЧИЛІ: ЛНБ 2",
-      "status": "scheduled",
-      "timestamp": 1779570000,
-      "kickoff": "2026-05-23T21:00:00.000Z",
-      "kickoffLocal": "24.05.2026, 00:00",
-      "home": "Сан-Луїс",
-      "away": "Серхіо Сеппі"
-    },
-    {
-      "id": "Kfe2mIO0",
-      "league": "ШВЕЙЦАРІЯ: СБ-Ліга - Плей-оф",
-      "status": "scheduled",
-      "timestamp": 1779550200,
-      "kickoff": "2026-05-23T15:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 18:30",
-      "home": "Женева Лайонс",
-      "away": "Фрібур Олімпік"
-    },
-    {
-      "id": "OCFQhFmJ",
-      "league": "ЯПОНІЯ: B-ліга - Плей-оф",
-      "status": "live",
-      "timestamp": 1779514200,
-      "kickoff": "2026-05-23T05:30:00.000Z",
-      "kickoffLocal": "23.05.2026, 08:30",
-      "home": "Нагасакі",
-      "away": "Окінава",
-      "liveStatus": "code(24)",
-      "score": {
-        "home": 46,
-        "away": 53
+        "home": 108,
+        "away": 82
       }
     }
   ]

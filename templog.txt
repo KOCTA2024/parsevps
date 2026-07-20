@@ -1,0 +1,1469 @@
+fileserver-1  | /docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+fileserver-1  | /docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+fileserver-1  | /docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+fileserver-1  | 10-listen-on-ipv6-by-default.sh: info: can not modify /etc/nginx/conf.d/default.conf (read-only file system?)
+fileserver-1  | /docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+fileserver-1  | /docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+fileserver-1  | /docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+fileserver-1  | /docker-entrypoint.sh: Configuration complete; ready for start up
+fileserver-1  | 2026/07/19 17:19:18 [notice] 1#1: using the "epoll" event method
+fileserver-1  | 2026/07/19 17:19:18 [notice] 1#1: nginx/1.31.3
+fileserver-1  | 2026/07/19 17:19:18 [notice] 1#1: built by gcc 15.2.0 (Alpine 15.2.0) 
+fileserver-1  | 2026/07/19 17:19:18 [notice] 1#1: OS: Linux 6.12.88+deb13-amd64
+fileserver-1  | 2026/07/19 17:19:18 [notice] 1#1: getrlimit(RLIMIT_NOFILE): 1024:524288
+fileserver-1  | 2026/07/19 17:19:18 [notice] 1#1: start worker processes
+fileserver-1  | 2026/07/19 17:19:18 [notice] 1#1: start worker process 21
+fileserver-1  | 2026/07/19 17:19:18 [notice] 1#1: start worker process 22
+fileserver-1  | 2026/07/19 17:30:28 [error] 21#21: *1 open() "/usr/share/nginx/html/goform/set_LimitClient_cfg" failed (2: No such file or directory), client: 45.198.224.5, server: , request: "POST /goform/set_LimitClient_cfg HTTP/1.1", host: "130.0.235.172:8080"
+fileserver-1  | 45.198.224.5 - - [19/Jul/2026:17:30:28 +0000] "POST /goform/set_LimitClient_cfg HTTP/1.1" 404 153 "-" "Go-http-client/1.1" "-"
+fileserver-1  | 199.45.155.90 - - [19/Jul/2026:17:32:58 +0000] "GET / HTTP/1.1" 200 792 "-" "-" "-"
+fileserver-1  | 199.45.155.90 - - [19/Jul/2026:17:33:03 +0000] "GET / HTTP/1.1" 200 792 "-" "Mozilla/5.0 (compatible; CensysInspect/1.1; +https://about.censys.io/)" "-"
+fileserver-1  | 199.45.155.90 - - [19/Jul/2026:17:33:04 +0000] "PRI * HTTP/2.0" 400 157 "-" "-" "-"
+fileserver-1  | 2026/07/19 17:33:04 [error] 21#21: *7 open() "/usr/share/nginx/html/favicon.ico" failed (2: No such file or directory), client: 199.45.155.90, server: , request: "GET /favicon.ico HTTP/1.1", host: "130.0.235.172:8080"
+fileserver-1  | 199.45.155.90 - - [19/Jul/2026:17:33:04 +0000] "GET /favicon.ico HTTP/1.1" 404 153 "-" "Mozilla/5.0 (compatible; CensysInspect/1.1; +https://about.censys.io/)" "-"
+fileserver-1  | 199.45.155.90 - - [19/Jul/2026:17:33:07 +0000] "\x16\x03\x01\x00\xEE\x01\x00\x00\xEA\x03\x03'\x0E\x00U\xF9\x9F~G\xE9\x96\xEAl\xC7\xD9d\xEB\x89\xA8\xAFzNe\x93+\xED\xBA\x97 \xCD\x15\x84e \xAC\xD7W*b\xAB\xF5\xC1\x06QX\xE2\xD4a\xE1v\x04y\xF8\xAEW{\x9A\xD3\xE1\xA8\x9A\xB8.\xCF\xD6|\x00&\xCC\xA8\xCC\xA9\xC0/\xC00\xC0+\xC0,\xC0\x13\xC0\x09\xC0\x14\xC0" 400 157 "-" "-" "-"
+fileserver-1  | 199.45.155.90 - - [19/Jul/2026:17:33:08 +0000] "GET / HTTP/1.1" 200 792 "-" "Mozilla/5.0 (compatible; CensysInspect/1.1; +https://about.censys.io/)" "-"
+fileserver-1  | 199.45.155.90 - - [19/Jul/2026:17:33:15 +0000] "GET /login HTTP/1.1" 404 153 "-" "Mozilla/5.0 (compatible; CensysInspect/1.1; +https://about.censys.io/)" "-"
+fileserver-1  | 2026/07/19 17:33:15 [error] 21#21: *10 open() "/usr/share/nginx/html/login" failed (2: No such file or directory), client: 199.45.155.90, server: , request: "GET /login HTTP/1.1", host: "130.0.235.172:8080"
+fileserver-1  | 199.45.155.90 - - [19/Jul/2026:17:33:19 +0000] "\x16\x03\x01\x00\xEE\x01\x00\x00\xEA\x03\x03:\xF5Q\x82\xCAT\xB0;\xD6X\xBBmyj\xFB\xF6\xBAi\xB3\x17\x1B\xD6\xFE\x9F\x05\x88lO\x1B\xF1\xA0\x95 \x04\x87(_-\xB5\x09\x19\xEA\x1F^\x9A\x07m1\x97\xA8s\xC3\xCEW\xF6\xE3C\x0B\x1D" 400 157 "-" "-" "-"
+fileserver-1  | 204.76.203.30 - - [19/Jul/2026:17:58:02 +0000] "GET http://ip-api.com/json/ HTTP/1.1" 404 153 "-" "Go-http-client/1.1" "-"
+fileserver-1  | 2026/07/19 17:58:02 [error] 21#21: *11 "/usr/share/nginx/html/json/index.html" is not found (2: No such file or directory), client: 204.76.203.30, server: , request: "GET http://ip-api.com/json/ HTTP/1.1", host: "ip-api.com"
+fileserver-1  | 2026/07/19 17:59:38 [error] 21#21: *12 open() "/usr/share/nginx/html/SDK/webLanguage" failed (2: No such file or directory), client: 5.61.209.92, server: , request: "GET /SDK/webLanguage HTTP/1.1", host: "130.0.235.172:8080"
+fileserver-1  | 5.61.209.92 - - [19/Jul/2026:17:59:38 +0000] "GET /SDK/webLanguage HTTP/1.1" 404 555 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.85 Safari/537.36 Edg/90.0.818.46" "-"
+fileserver-1  | 103.190.81.180 - - [19/Jul/2026:18:06:58 +0000] "\x05\x01\x00" 400 157 "-" "-" "-"
+fileserver-1  | 103.190.81.180 - - [19/Jul/2026:18:06:59 +0000] "\x04\x01\x00P\x01\x01\x01\x01\x00" 400 157 "-" "-" "-"
+fileserver-1  | 103.190.81.180 - - [19/Jul/2026:18:06:59 +0000] "CONNECT 1.1.1.1:80 HTTP/1.1" 405 157 "-" "-" "-"
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Scheduled checkpoint #1 (+10 min) → opens in 0.0 min
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Scheduled checkpoint #2 (+22 min) → opens in 2.6 min
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Scheduled checkpoint #3 (+47 min) → opens in 27.6 min
+stage-monitor-1  | [stage-monitor][match:fHwTfePh] Scheduled checkpoint #1 (+10 min) → opens in 50.6 min
+stage-monitor-1  | [stage-monitor][match:fHwTfePh] Scheduled checkpoint #2 (+22 min) → opens in 62.6 min
+stage-monitor-1  | [stage-monitor][match:fHwTfePh] Scheduled checkpoint #3 (+47 min) → opens in 87.6 min
+stage-monitor-1  | [stage-monitor][match:QHTHqAaf] Scheduled checkpoint #3 (+47 min) → opens in 0.0 min
+stage-monitor-1  | [stage-monitor][match:IiQ9oWUs] Scheduled checkpoint #1 (+10 min) → opens in 80.6 min
+stage-monitor-1  | [stage-monitor][match:IiQ9oWUs] Scheduled checkpoint #2 (+22 min) → opens in 92.6 min
+stage-monitor-1  | [stage-monitor][match:IiQ9oWUs] Scheduled checkpoint #3 (+47 min) → opens in 117.6 min
+stage-monitor-1  | [stage-monitor][match:2ZOScdQs] Scheduled checkpoint #3 (+47 min) → opens in 0.0 min
+stage-monitor-1  | [stage-monitor][match:zeuqiDOH] Scheduled checkpoint #1 (+10 min) → opens in 65.6 min
+stage-monitor-1  | [stage-monitor][match:zeuqiDOH] Scheduled checkpoint #2 (+22 min) → opens in 77.6 min
+stage-monitor-1  | [stage-monitor][match:zeuqiDOH] Scheduled checkpoint #3 (+47 min) → opens in 102.6 min
+stage-monitor-1  | [stage-monitor][match:vsJliJuB] Scheduled checkpoint #1 (+10 min) → opens in 200.6 min
+stage-monitor-1  | [stage-monitor][match:vsJliJuB] Scheduled checkpoint #2 (+22 min) → opens in 212.6 min
+stage-monitor-1  | [stage-monitor][match:vsJliJuB] Scheduled checkpoint #3 (+47 min) → opens in 237.6 min
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Scheduled checkpoint #1 (+10 min) → opens in 0.0 min
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Scheduled checkpoint #2 (+22 min) → opens in 2.6 min
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Scheduled checkpoint #3 (+47 min) → opens in 27.6 min
+stage-monitor-1  | [stage-monitor][match:b3q1IRhl] Scheduled checkpoint #1 (+10 min) → opens in 170.6 min
+stage-monitor-1  | [stage-monitor][match:b3q1IRhl] Scheduled checkpoint #2 (+22 min) → opens in 182.6 min
+stage-monitor-1  | [stage-monitor][match:b3q1IRhl] Scheduled checkpoint #3 (+47 min) → opens in 207.6 min
+stage-monitor-1  | [stage-monitor][match:rgK2oev9] Scheduled checkpoint #1 (+10 min) → opens in 50.6 min
+stage-monitor-1  | [stage-monitor][match:rgK2oev9] Scheduled checkpoint #2 (+22 min) → opens in 62.6 min
+stage-monitor-1  | [stage-monitor][match:rgK2oev9] Scheduled checkpoint #3 (+47 min) → opens in 87.6 min
+stage-monitor-1  | [stage-monitor][match:SrszTnOs] Scheduled checkpoint #1 (+10 min) → opens in 110.6 min
+stage-monitor-1  | [stage-monitor][match:SrszTnOs] Scheduled checkpoint #2 (+22 min) → opens in 122.6 min
+stage-monitor-1  | [stage-monitor][match:SrszTnOs] Scheduled checkpoint #3 (+47 min) → opens in 147.6 min
+stage-monitor-1  | [stage-monitor][match:z9prRQhf] Scheduled checkpoint #1 (+10 min) → opens in 170.6 min
+stage-monitor-1  | [stage-monitor][match:z9prRQhf] Scheduled checkpoint #2 (+22 min) → opens in 182.6 min
+stage-monitor-1  | [stage-monitor][match:z9prRQhf] Scheduled checkpoint #3 (+47 min) → opens in 207.6 min
+stage-monitor-1  | [stage-monitor][match:8MrjP4N6] Scheduled checkpoint #1 (+10 min) → opens in 230.6 min
+stage-monitor-1  | [stage-monitor][match:8MrjP4N6] Scheduled checkpoint #2 (+22 min) → opens in 242.6 min
+stage-monitor-1  | [stage-monitor][match:8MrjP4N6] Scheduled checkpoint #3 (+47 min) → opens in 267.6 min
+stage-monitor-1  | [stage-monitor] Started. Watching "/app/state/matches.json" | poll every 60s | check window 35 min | stall-confirm (Checkpoints #1/#3 fallback) 2 min | rescanning matches.json every 5 min | Checkpoint #2 waits up to 40 min for Checkpoint #1 to finish | Checkpoint #3 always runs (no skip on verdict) once Checkpoint #2 is done | stale catch-up checkpoints (real time already past the next one) are skipped, not fired (#3 stale buffer 20 min)
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] ▶ Checkpoint #1 window opened — polling every 60s (break — основна ознака; якщо фід її не дасть, фолбек — скидання/зависання liveMinute; giving up after 35 min)
+stage-monitor-1  | [stage-monitor][match:QHTHqAaf] ⏳ Checkpoint #3 reached scheduled time — waiting for Checkpoint #2 to finish before opening the window…
+stage-monitor-1  | [stage-monitor][match:2ZOScdQs] ⏳ Checkpoint #3 reached scheduled time — waiting for Checkpoint #2 to finish before opening the window…
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] ▶ Checkpoint #1 window opened — polling every 60s (break — основна ознака; якщо фід її не дасть, фолбек — скидання/зависання liveMinute; giving up after 35 min)
+stage-monitor-1  | [stage-monitor][match:x2gNHZf3] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:x2gNHZf3] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:x2gNHZf3] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:radVFDPF] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:radVFDPF] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:radVFDPF] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:YZ9dfqi2] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:YZ9dfqi2] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:YZ9dfqi2] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:nJBld5Mk] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:nJBld5Mk] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:nJBld5Mk] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:SIOjHHZ9] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:SIOjHHZ9] ⚠ Live status check failed for stale Checkpoint #2 (page.goto: Page crashed
+stage-monitor-1  | Call log:
+stage-monitor-1  |   - navigating to "https://www.flashscore.ua/match/SIOjHHZ9/#/h2h/overall", waiting until "domcontentloaded"
+stage-monitor-1  | ) — falling back to matches.json status + kickoff-time staleness check.
+stage-monitor-1  | [stage-monitor][match:SIOjHHZ9] ⏰ Checkpoint #2 (+22 min) is too stale to catch up safely — real time already passed the start of the next checkpoint / estimated match window (2026-07-19T04:47:00.000Z), and the match is confirmed live/already had a break → match is likely on a later quarter already. Skipping WITHOUT opening a window, to avoid sending a signal under the wrong checkpoint label.
+stage-monitor-1  | [stage-monitor][match:KG3V9ZRq] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:KG3V9ZRq] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:bgFwvTBs] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:bgFwvTBs] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:bgFwvTBs] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:SY6fzoB6] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:SY6fzoB6] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:SY6fzoB6] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:bwpAwPiI] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:bwpAwPiI] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:bwpAwPiI] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:QPo2uoN5] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:QPo2uoN5] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:QPo2uoN5] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:UgzjEJqJ] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:UgzjEJqJ] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:UgzjEJqJ] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:4hl6CnMi] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:4hl6CnMi] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:4hl6CnMi] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:d06DAQj4] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:d06DAQj4] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:d06DAQj4] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:IB0ycMve] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:IB0ycMve] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:IB0ycMve] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:AocTbrAr] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:AocTbrAr] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:AocTbrAr] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:MmZpVAp1] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:MmZpVAp1] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:MmZpVAp1] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:UDxgTlFD] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:UDxgTlFD] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:UDxgTlFD] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:hSZMLOT8] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:hSZMLOT8] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:hSZMLOT8] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:END6gSG5] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:END6gSG5] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:END6gSG5] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:6cAbelng] ⏰ Checkpoint #1 (+10 min) is too stale to catch up safely — real time already passed the start of the next checkpoint / estimated match window (2026-07-19T15:52:00.000Z), and the match is confirmed live/already had a break → match is likely on a later quarter already. Skipping WITHOUT opening a window, to avoid sending a signal under the wrong checkpoint label.
+stage-monitor-1  | [stage-monitor][match:6cAbelng] ⏰ Checkpoint #2 (+22 min) is too stale to catch up safely — real time already passed the start of the next checkpoint / estimated match window (2026-07-19T16:17:00.000Z), and the match is confirmed live/already had a break → match is likely on a later quarter already. Skipping WITHOUT opening a window, to avoid sending a signal under the wrong checkpoint label.
+stage-monitor-1  | [stage-monitor][match:6cAbelng] ⏰ Checkpoint #3 (+47 min) is too stale to catch up safely — real time already passed the start of the next checkpoint / estimated match window (2026-07-19T16:47:00.000Z), and the match is confirmed live/already had a break → match is likely on a later quarter already. Skipping WITHOUT opening a window, to avoid sending a signal under the wrong checkpoint label.
+stage-monitor-1  | [stage-monitor][match:jcOFVFhl] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:jcOFVFhl] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:jcOFVFhl] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:r5tNTgN0] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:r5tNTgN0] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:r5tNTgN0] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:xv8T6rjT] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:xv8T6rjT] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:xv8T6rjT] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:UD4L84LG] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:UD4L84LG] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:UD4L84LG] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:nizLdHft] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:nizLdHft] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:nizLdHft] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:QHTHqAaf] ⏰ Checkpoint #1 (+10 min) is too stale to catch up safely — real time already passed the start of the next checkpoint / estimated match window (2026-07-19T16:22:00.000Z), and the match is confirmed live/already had a break → match is likely on a later quarter already. Skipping WITHOUT opening a window, to avoid sending a signal under the wrong checkpoint label.
+stage-monitor-1  | [stage-monitor][match:QHTHqAaf] ⏰ Checkpoint #2 (+22 min) is too stale to catch up safely — real time already passed the start of the next checkpoint / estimated match window (2026-07-19T16:47:00.000Z), and the match is confirmed live/already had a break → match is likely on a later quarter already. Skipping WITHOUT opening a window, to avoid sending a signal under the wrong checkpoint label.
+stage-monitor-1  | [stage-monitor][match:QHTHqAaf] ▶ Checkpoint #2 verdict was "(none/unresolved)" → proceeding with Checkpoint #3.
+stage-monitor-1  | [stage-monitor][match:QHTHqAaf] ▶ Checkpoint #3 window opened — polling every 60s (break — основна ознака; якщо фід її не дасть, фолбек — скидання/зависання liveMinute; giving up after 35 min)
+stage-monitor-1  | [stage-monitor][match:Qu7j9UFa] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:Qu7j9UFa] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:Qu7j9UFa] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:j5cHQZA6] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:j5cHQZA6] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:j5cHQZA6] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:OIePODuJ] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:OIePODuJ] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:OIePODuJ] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:tru2Kdbn] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:tru2Kdbn] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:tru2Kdbn] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:SxILA1mB] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:SxILA1mB] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:SxILA1mB] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:KCEDCNIb] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:KCEDCNIb] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:KCEDCNIb] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:C8QJhSpK] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:C8QJhSpK] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:C8QJhSpK] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:G4Fcopwf] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:G4Fcopwf] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:G4Fcopwf] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:WjYd3I2K] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:WjYd3I2K] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:WjYd3I2K] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:2ZOScdQs] ⏰ Checkpoint #1 (+10 min) is too stale to catch up safely — real time already passed the start of the next checkpoint / estimated match window (2026-07-19T16:22:00.000Z), and the match is confirmed live/already had a break → match is likely on a later quarter already. Skipping WITHOUT opening a window, to avoid sending a signal under the wrong checkpoint label.
+stage-monitor-1  | [stage-monitor][match:2ZOScdQs] ⏰ Checkpoint #2 (+22 min) is too stale to catch up safely — real time already passed the start of the next checkpoint / estimated match window (2026-07-19T16:47:00.000Z), and the match is confirmed live/already had a break → match is likely on a later quarter already. Skipping WITHOUT opening a window, to avoid sending a signal under the wrong checkpoint label.
+stage-monitor-1  | [stage-monitor][match:2ZOScdQs] ▶ Checkpoint #2 verdict was "(none/unresolved)" → proceeding with Checkpoint #3.
+stage-monitor-1  | [stage-monitor][match:2ZOScdQs] ▶ Checkpoint #3 window opened — polling every 60s (break — основна ознака; якщо фід її не дасть, фолбек — скидання/зависання liveMinute; giving up after 35 min)
+stage-monitor-1  | [stage-monitor][match:WxoJmOXF] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:WxoJmOXF] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:WxoJmOXF] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:OCsBkp33] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:OCsBkp33] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] ⏳ Checkpoint #2 reached scheduled time — waiting for Checkpoint #1 to finish (avoids polling both in parallel)…
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] ⏳ Checkpoint #2 reached scheduled time — waiting for Checkpoint #1 to finish (avoids polling both in parallel)…
+stage-monitor-1  | [stage-monitor][match:OCsBkp33] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:2N8ucQYH] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:2N8ucQYH] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:2N8ucQYH] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:zy7me43U] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:zy7me43U] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:zy7me43U] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:SUyygZg5] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:SUyygZg5] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:SUyygZg5] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:bNNYamOr] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:QHTHqAaf] Checkpoint #3 — stage: live (6')
+stage-monitor-1  | [stage-monitor][match:bNNYamOr] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:bNNYamOr] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:hOe1IevA] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:hOe1IevA] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:hOe1IevA] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:4Q1U3dPG] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:4Q1U3dPG] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:4Q1U3dPG] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:IkDSqyYp] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:IkDSqyYp] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:IkDSqyYp] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:d0bM5If4] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:d0bM5If4] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:d0bM5If4] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:n7MdkcAN] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:n7MdkcAN] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:n7MdkcAN] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:Aq0E7vQi] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:Aq0E7vQi] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:Aq0E7vQi] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:nmORGEHq] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:nmORGEHq] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:nmORGEHq] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:hpRZEhnd] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:hpRZEhnd] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:hpRZEhnd] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:pvELxdv3] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:pvELxdv3] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:2ZOScdQs] Checkpoint #3 — stage: live (9')
+stage-monitor-1  | [stage-monitor][match:pvELxdv3] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:GjUnO5mJ] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:GjUnO5mJ] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:GjUnO5mJ] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:vVlyRhoA] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:vVlyRhoA] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:vVlyRhoA] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:fVlZ8pkB] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:fVlZ8pkB] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:fVlZ8pkB] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:CjgnbTzg] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:CjgnbTzg] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:CjgnbTzg] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:bPfHj3V1] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:bPfHj3V1] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:bPfHj3V1] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:QHTHqAaf] Checkpoint #3 — stage: live (7')
+stage-monitor-1  | [stage-monitor][match:YBC0DorB] Checkpoint #1 (+10 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:YBC0DorB] Checkpoint #2 (+22 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:YBC0DorB] Checkpoint #3 (+47 min) window long expired and match is finished → skipping.
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (2')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #1 — stage: live (10')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (2')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #1 — stage: live (10')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (2')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #1 — stage: live (10')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (2')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #1 — stage: live (10')
+stage-monitor-1  | [stage-monitor][match:2ZOScdQs] Checkpoint #3 — stage: live (10')
+stage-monitor-1  | [stage-monitor][match:QHTHqAaf] Checkpoint #3 — stage: live (7')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (3')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #1 — stage: live (10')
+stage-monitor-1  | [stage-monitor][match:2ZOScdQs] Checkpoint #3 — stage: live (10')
+stage-monitor-1  | [stage-monitor][match:QHTHqAaf] Checkpoint #3 — stage: live (7')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (3')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #1 — stage: live (10')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] ✓ Checkpoint #1 тригер (фолбек): liveMinute завис на 10' ≥2 хв — queueing analysis.
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] ✓ Q2 start detected → queued analysis (jobId=h4HTzz9F_break1)
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] ▶ Checkpoint #1 finished — proceeding with Checkpoint #2.
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] ▶ Checkpoint #2 window opened — polling every 60s (break — основна ознака; якщо фід її не дасть, фолбек — скидання/зависання liveMinute; giving up after 35 min)
+stage-monitor-1  | [stage-monitor][match:2ZOScdQs] Checkpoint #3 — stage: live (1')
+stage-monitor-1  | [stage-monitor][match:2ZOScdQs] ✓ Checkpoint #3 тригер (фолбек): скидання liveMinute (10' → 1') — queueing analysis.
+stage-monitor-1  | [stage-monitor][match:2ZOScdQs] ✓ Break #3 detected → queued analysis (jobId=2ZOScdQs_break3)
+stage-monitor-1  | [stage-monitor][match:QHTHqAaf] Checkpoint #3 — stage: live (8')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (3')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (1')
+stage-monitor-1  | [stage-monitor][match:QHTHqAaf] Checkpoint #3 — stage: live (8')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (3')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (1')
+stage-monitor-1  | [stage-monitor][match:QHTHqAaf] Checkpoint #3 — stage: live (9')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (4')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (1')
+stage-monitor-1  | [stage-monitor][match:QHTHqAaf] Checkpoint #3 — stage: live (9')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (4')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (1')
+stage-monitor-1  | [stage-monitor][match:QHTHqAaf] Checkpoint #3 — stage: live (9')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (5')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (1')
+stage-monitor-1  | [stage-monitor][match:QHTHqAaf] Checkpoint #3 — stage: live (10')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (5')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (2')
+stage-monitor-1  | [stage-monitor][match:QHTHqAaf] Checkpoint #3 — stage: live (1')
+stage-monitor-1  | [stage-monitor][match:QHTHqAaf] ✓ Checkpoint #3 тригер (фолбек): скидання liveMinute (10' → 1') — queueing analysis.
+stage-monitor-1  | [stage-monitor][match:QHTHqAaf] ✓ Break #3 detected → queued analysis (jobId=QHTHqAaf_break3)
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (5')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (2')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (5')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (3')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (6')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (3')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (6')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (3')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (7')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (4')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (7')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (5')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (8')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (5')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (8')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (5')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (8')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (5')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (9')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (5')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (9')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (6')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (9')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (6')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (10')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (6')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (10')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (6')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (10')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (7')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] ⏳ Checkpoint #3 reached scheduled time — waiting for Checkpoint #2 to finish before opening the window…
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] ⏳ Checkpoint #3 reached scheduled time — waiting for Checkpoint #2 to finish before opening the window…
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #1 — stage: live (10')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] ✓ Checkpoint #1 тригер (фолбек): liveMinute завис на 10' ≥2 хв — queueing analysis.
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] ✓ Q2 start detected → queued analysis (jobId=QLsybLy2_break1)
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] ▶ Checkpoint #1 finished — proceeding with Checkpoint #2.
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] ▶ Checkpoint #2 window opened — polling every 60s (break — основна ознака; якщо фід її не дасть, фолбек — скидання/зависання liveMinute; giving up after 35 min)
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (7')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (7')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #2 — stage: break
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] ✓ Checkpoint #2 тригер: явний break-статус — queueing analysis.
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] ✓ Break #2 detected → queued analysis (jobId=QLsybLy2_break2)
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (8')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #2 job finished — aiVerdict: (none)
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] ▶ Checkpoint #2 verdict was "(none/unresolved)" → proceeding with Checkpoint #3.
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] ▶ Checkpoint #3 window opened — polling every 60s (break — основна ознака; якщо фід її не дасть, фолбек — скидання/зависання liveMinute; giving up after 35 min)
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (8')
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] Checkpoint #3 — stage: break
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] ✓ Checkpoint #3 тригер: явний break-статус — queueing analysis.
+stage-monitor-1  | [stage-monitor][match:QLsybLy2] ✓ Break #3 detected → queued analysis (jobId=QLsybLy2_break3)
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (8')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (8')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (8')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (9')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (9')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: live (10')
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 — stage: break
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] ✓ Checkpoint #2 тригер: явний break-статус — queueing analysis.
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] ✓ Break #2 detected → queued analysis (jobId=h4HTzz9F_break2)
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #2 job finished — aiVerdict: (none)
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] ▶ Checkpoint #2 verdict was "(none/unresolved)" → proceeding with Checkpoint #3.
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] ▶ Checkpoint #3 window opened — polling every 60s (break — основна ознака; якщо фід її не дасть, фолбек — скидання/зависання liveMinute; giving up after 35 min)
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] Checkpoint #3 — stage: break
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] ✓ Checkpoint #3 тригер: явний break-статус — queueing analysis.
+stage-monitor-1  | [stage-monitor][match:h4HTzz9F] ✓ Break #3 detected → queued analysis (jobId=h4HTzz9F_break3)
+redis-1          | 1:C 19 Jul 2026 17:19:18.535 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+redis-1          | 1:C 19 Jul 2026 17:19:18.535 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+redis-1          | 1:C 19 Jul 2026 17:19:18.535 * Redis version=7.4.9, bits=64, commit=00000000, modified=0, pid=1, just started
+redis-1          | 1:C 19 Jul 2026 17:19:18.535 # Warning: no config file specified, using the default config. In order to specify a config file use redis-server /path/to/redis.conf
+redis-1          | 1:M 19 Jul 2026 17:19:18.536 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+redis-1          | 1:M 19 Jul 2026 17:19:18.536 * monotonic clock: POSIX clock_gettime
+redis-1          | 1:M 19 Jul 2026 17:19:18.538 * Running mode=standalone, port=6379.
+redis-1          | 1:M 19 Jul 2026 17:19:18.539 * Server initialized
+redis-1          | 1:M 19 Jul 2026 17:19:18.541 * Ready to accept connections tcp
+redis-1          | 1:M 19 Jul 2026 17:27:23.784 * 100 changes in 300 seconds. Saving...
+redis-1          | 1:M 19 Jul 2026 17:27:23.787 * Background saving started by pid 593
+redis-1          | 593:C 19 Jul 2026 17:27:23.798 * DB saved on disk
+redis-1          | 593:C 19 Jul 2026 17:27:23.799 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+redis-1          | 1:M 19 Jul 2026 17:27:23.888 * Background saving terminated with success
+redis-1          | 1:M 19 Jul 2026 17:34:55.295 * 100 changes in 300 seconds. Saving...
+redis-1          | 1:M 19 Jul 2026 17:34:55.296 * Background saving started by pid 1144
+redis-1          | 1144:C 19 Jul 2026 17:34:55.301 * DB saved on disk
+redis-1          | 1144:C 19 Jul 2026 17:34:55.302 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+redis-1          | 1:M 19 Jul 2026 17:34:55.398 * Background saving terminated with success
+redis-1          | 1:M 19 Jul 2026 17:48:54.100 * 100 changes in 300 seconds. Saving...
+redis-1          | 1:M 19 Jul 2026 17:48:54.106 * Background saving started by pid 2158
+redis-1          | 2158:C 19 Jul 2026 17:48:54.109 * DB saved on disk
+redis-1          | 2158:C 19 Jul 2026 17:48:54.110 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+redis-1          | 1:M 19 Jul 2026 17:48:54.208 * Background saving terminated with success
+redis-1          | 1:M 19 Jul 2026 17:55:55.487 * 100 changes in 300 seconds. Saving...
+redis-1          | 1:M 19 Jul 2026 17:55:55.488 * Background saving started by pid 2663
+redis-1          | 2663:C 19 Jul 2026 17:55:55.493 * DB saved on disk
+redis-1          | 2663:C 19 Jul 2026 17:55:55.494 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+redis-1          | 1:M 19 Jul 2026 17:55:55.589 * Background saving terminated with success
+redis-1          | 1:M 19 Jul 2026 18:00:56.098 * 100 changes in 300 seconds. Saving...
+redis-1          | 1:M 19 Jul 2026 18:00:56.100 * Background saving started by pid 3022
+redis-1          | 3022:C 19 Jul 2026 18:00:56.109 * DB saved on disk
+redis-1          | 3022:C 19 Jul 2026 18:00:56.110 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+redis-1          | 1:M 19 Jul 2026 18:00:56.202 * Background saving terminated with success
+worker-1         | [worker] Started. Queue "match-analysis" | Redis redis:6379 | Concurrency: 2
+worker-1         | [worker][job:h4HTzz9F_break1] Starting analysis — Даллас Вінгз Ж vs Лос-Анджелес Спаркс Ж [США: WNBA] (scheduled fire: 2026-07-19T17:25:26.227Z)
+worker-1         | [worker][job:h4HTzz9F_break1] Step 1 → node /src/match_h2h_export.js --matchId h4HTzz9F --home Dallas_Vingz_Zh --away Los-Andzheles_Sparks_Zh
+worker-1         | [worker][job:h4HTzz9F_break1] --- Формат виводу: json ---
+worker-1         | [worker][job:h4HTzz9F_break1] --- Отримання fsign через Playwright... ---
+worker-1         | [worker][job:2ZOScdQs_break3] Starting analysis — Чехія U17 W vs Німеччина U17 W [СВІТ: Чемпіонат світу U17 (Жінки) - 13-16 місця] (scheduled fire: 2026-07-19T17:25:52.679Z)
+worker-1         | [worker][job:2ZOScdQs_break3] Step 1 → node /src/match_h2h_export.js --matchId 2ZOScdQs --home Chekhiya_U17_W --away Nimechchyna_U17_W
+worker-1         | [worker][job:2ZOScdQs_break3] --- Формат виводу: json ---
+worker-1         | [worker][job:2ZOScdQs_break3] --- Отримання fsign через Playwright... ---
+worker-1         | [worker][job:h4HTzz9F_break1] seasons: [{"text":"WNBA 2026","url":"https://www.flashscore.ua/basketball/usa/wnba/"},{"text":"WNBA 2025","url":"https://www.flashscore.ua/basketball/usa/wnba-2025/"},{"text":"WNBA 2024","url":"https://www.flashscore.ua/basketball/usa/wnba-2024/"}]
+worker-1         | [worker][job:h4HTzz9F_break1] ✔ current_season_start_date: 02.07. 23:30
+worker-1         | [worker][job:2ZOScdQs_break3] seasons: [{"text":"Чемпіонат світу U17 (Жінки) 2026","url":"https://www.flashscore.ua/basketball/world/world-championship-u17-women/"},{"text":"Чемпіонат світу U17 (Жінки) 2024","url":"https://www.flashscore.ua/basketball/world/world-championship-u17-women-2024/"},{"text":"Чемпіонат світу U17 (Жінки) 2022","url":"https://www.flashscore.ua/basketball/world/world-championship-u17-women-2022/"}]
+worker-1         | [worker][job:h4HTzz9F_break1] 
+worker-1         | [worker][job:h4HTzz9F_break1] --- Завантаження ліній (betking.com.ua)… ---
+worker-1         | [worker][job:h4HTzz9F_break1]   Match: "Даллас Вінгз Ж" vs "Лос-Анджелес Спаркс Ж"
+worker-1         | [worker][job:h4HTzz9F_break1]   liveStatus: "2-а чверть"
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] homeVariants: ["даллас вінгз ж","dallas vingz zh"]
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] awayVariants: ["лос-анджелес спаркс ж","los-andzheles sparks zh"]
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] Navigating to lobby…
+worker-1         | [worker][job:2ZOScdQs_break3] ✔ current_season_start_date: 19.07. 15:15
+worker-1         | [worker][job:2ZOScdQs_break3] 
+worker-1         | [worker][job:2ZOScdQs_break3] --- Завантаження ліній (betking.com.ua)… ---
+worker-1         | [worker][job:2ZOScdQs_break3]   Match: "Чехія U17 W" vs "Німеччина U17 W"
+worker-1         | [worker][job:2ZOScdQs_break3]   liveStatus: "4-а чверть"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking] homeVariants: ["чехія u17 w","chekhiya u17 w"]
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking] awayVariants: ["німеччина u17 w","nimechchina u17 w"]
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking] Navigating to lobby…
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] Cards count poll 1: 13
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] Cards count poll 2: 37
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] Cards count poll 3: 37
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] Cards count poll 4: 37
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] Card list stable at 37 cards
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] Looking for match card (with scroll)…
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] homeWords: ["dallas vingz zh","даллас вінгз ж","даллас","dallas","вінгз","vingz"]
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] awayWords: ["los-andzheles sparks zh","лос-анджелес спаркс ж","andzheles","анджелес","спаркс","sparks"]
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] homeQualifiers: []
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] awayQualifiers: []
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] Looking for match card (with scroll)…
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] ✅ Match card clicked after 0 scrolls — found: ["Даллас Вінгз Ж","Лос-Анджелес Спаркс Ж"] (strategy: full-variants)
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] Waiting for detail page…
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] Match detail loaded — scraping markets…
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] Tab poll 1: 11 tab(s)
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] Tabs found: Усі, Головні, Конструктор ставок, Мульти ставки, 1-а половина, 2-а половина, 2-га чверть, 3-тя чверть, 4-та чверть, Пропозиції на команду, Цифрові маркети
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] Specific tabs: Мульти ставки, 1-а половина, 2-а половина, 2-га чверть, 3-тя чверть, 4-та чверть, Пропозиції на команду, Цифрові маркети
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] Generic  tabs: Усі, Головні
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking] Cards count poll 1: 13
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking] Cards count poll 2: 37
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking] Cards count poll 3: 37
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking] Cards count poll 4: 37
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking] Card list stable at 37 cards
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking] Looking for match card (with scroll)…
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking] homeWords: ["chekhiya u17 w","чехія u17 w","chekhiya","чехія"]
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking] awayWords: ["nimechchina u17 w","німеччина u17 w","nimechchina","німеччина"]
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking] homeQualifiers: ["u17","w"]
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking] awayQualifiers: ["u17","w"]
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking] Looking for match card (with scroll)…
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] Total unique markets after all tabs: 33
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] Unclassified market: "SGP - У Q2 Даллас Вінгз Ж набере більше очок + Jessica Shepard більше 4.5 очок + Jessica Shepard більше 2.5 підбирань"
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] Unclassified market: "SGP - У Q2 Даллас Вінгз Ж набере більше очок + Paige Bueckers більше 5.5 очок + Paige Bueckers більше 1.5 підбирань"
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] Unclassified market: "SGP - У Q2  Лос-Анджелес Спаркс Ж набере більше очок + Nneka Ogwumike більше 4.5 очок + Nneka Ogwumike більше 1.5 підбирань"
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] тотал market: "1 половина - тотал" → cat="half_total_h1"
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] тотал market: "1 половина - Даллас Вінгз Ж індивідуальний тотал" → cat="ind_total"
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] тотал market: "1 половина -  Лос-Анджелес Спаркс Ж індивідуальний тотал" → cat="ind_total"
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] фора  market: "1 половина - фора" → cat="half_handicap_h1"
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "1 половина - результат без нічиї"
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "2-а половина - Останні цифри рахунку"
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Третя чверть - Сума останньої цифри рахунку обох команд"
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Четверта чверть - Сума останньої цифри рахунку обох команд"
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] тотал market: "Тотал (вкл. овертайм)" → cat="match_total"
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] фора  market: "Фора (вкл. овертайм)" → cat="match_handicap"
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] тотал market: "Даллас Вінгз Ж Тотал очків (вкл. овертайм)" → cat="ind_total"
+worker-1         | [worker][job:h4HTzz9F_break1]   [betking] тотал market: "Лос-Анджелес Спаркс Ж Тотал очків (вкл. овертайм)" → cat="ind_total"
+worker-1         | [worker][job:h4HTzz9F_break1] ✅ Лінії збережено: /src/data/line_result_h4HTzz9F.json
+worker-1         | [worker][job:h4HTzz9F_break1]   match_1x2: 1 рядків
+worker-1         | [worker][job:h4HTzz9F_break1]   match_handicap: 1 рядків
+worker-1         | [worker][job:h4HTzz9F_break1]   half_handicap: 3 рядків
+worker-1         | [worker][job:h4HTzz9F_break1]   match_total: 1 рядків
+worker-1         | [worker][job:h4HTzz9F_break1]   half_total: 3 рядків
+worker-1         | [worker][job:h4HTzz9F_break1]   quarter_dnb: 1 рядків
+worker-1         | [worker][job:h4HTzz9F_break1]   quarter_1x2: 1 рядків
+worker-1         | [worker][job:h4HTzz9F_break1]   quarter_btts: 1 рядків
+worker-1         | [worker][job:h4HTzz9F_break1]   quarter_race: 2 рядків
+worker-1         | [worker][job:h4HTzz9F_break1]   last_digit: 151 рядків
+worker-1         | [worker][job:h4HTzz9F_break1]   home_ind_total: 4 рядків
+worker-1         | [worker][job:h4HTzz9F_break1]   away_ind_total: 4 рядків
+worker-1         | [worker][job:h4HTzz9F_break1] Step 1 exited 0
+worker-1         | [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "1 половина - результат без нічиї"
+worker-1         |   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "2-а половина - Останні цифри рахунку"
+worker-1         |   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Третя чверть - Сума останньої цифри рахунку обох команд"
+worker-1         |   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Четверта чверть - Сума останньої цифри рахунку обох команд"
+worker-1         | [worker][job:h4HTzz9F_break1] Step 2 → python3 /src/math_script.py /src/data/Dallas_Vingz_Zh_vs_Los-Andzheles_Sparks_Zh_h4HTzz9F.json /src/data/line_result_h4HTzz9F.json
+worker-1         | [worker][job:h4HTzz9F_break1] [idle_debug] rows_a_raw=35 last_ts_a=1783897200 rows_b_raw=35 last_ts_b=1784331000
+worker-1         | [worker][job:h4HTzz9F_break1] [idle_debug] a[0] mid='Ya8NGg0n' dt='12.07.2026 23:00:00'
+worker-1         | [worker][job:h4HTzz9F_break1] [stat_zones] WARNING: no data found for team 'Даллас Вінгз Ж' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [worker][job:h4HTzz9F_break1] [stat_zones] WARNING: no data found for team 'Лос-Анджелес Спаркс Ж' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [worker][job:h4HTzz9F_break1] [stat_zones] WARNING: no data found for team 'Даллас Вінгз Ж' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [worker][job:h4HTzz9F_break1] [stat_zones] WARNING: no data found for team 'Лос-Анджелес Спаркс Ж' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [worker][job:h4HTzz9F_break1] [stat_zones] WARNING: no data found for team 'Даллас Вінгз Ж' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [worker][job:h4HTzz9F_break1] [stat_zones] WARNING: no data found for team 'Лос-Анджелес Спаркс Ж' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [worker][job:h4HTzz9F_break1] __OUTPUT_FILE__:Dallas_Vingz_Zh_vs_Los-Andzheles_Sparks_Zh_h4HTzz9F.json
+worker-1         | [worker][job:h4HTzz9F_break1] [math_script] Processing match h4HTzz9F
+worker-1         | [worker][job:h4HTzz9F_break1] [math_script] ✓ Result written to /src/data/Dallas_Vingz_Zh_vs_Los-Andzheles_Sparks_Zh_h4HTzz9F.json
+worker-1         | [worker][job:h4HTzz9F_break1] Step 2 exited 0
+worker-1         | [idle_debug] rows_a_raw=35 last_ts_a=1783897200 rows_b_raw=35 last_ts_b=1784331000
+worker-1         | [idle_debug] a[0] mid='Ya8NGg0n' dt='12.07.2026 23:00:00'
+worker-1         | [stat_zones] WARNING: no data found for team 'Даллас Вінгз Ж' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Лос-Анджелес Спаркс Ж' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Даллас Вінгз Ж' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Лос-Анджелес Спаркс Ж' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Даллас Вінгз Ж' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Лос-Анджелес Спаркс Ж' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | __OUTPUT_FILE__:Dallas_Vingz_Zh_vs_Los-Andzheles_Sparks_Zh_h4HTzz9F.json
+worker-1         | [worker][job:h4HTzz9F_break1] Step 3 → python3 /src/super_basket_vps_system.py run --match /src/data/Dallas_Vingz_Zh_vs_Los-Andzheles_Sparks_Zh_h4HTzz9F.json
+worker-1         | [worker][job:h4HTzz9F_break1] {
+worker-1         | [worker][job:h4HTzz9F_break1]   "output_status": "OK",
+worker-1         | [worker][job:h4HTzz9F_break1]   "match_id": "h4HTzz9F",
+worker-1         | [worker][job:h4HTzz9F_break1]   "stage": "EARLY_LIVE",
+worker-1         | [worker][job:h4HTzz9F_break1]   "format": "GENERIC_4x12",
+worker-1         | [worker][job:h4HTzz9F_break1]   "decision": {
+worker-1         | [worker][job:h4HTzz9F_break1]     "action": "PASS",
+worker-1         | [worker][job:h4HTzz9F_break1]     "deterministic_action": "PASS",
+worker-1         | [worker][job:h4HTzz9F_break1]     "status": "PASS",
+worker-1         | [worker][job:h4HTzz9F_break1]     "signal_id": null,
+worker-1         | [worker][job:h4HTzz9F_break1]     "market": {
+worker-1         | [worker][job:h4HTzz9F_break1]       "market_type": "H1_TOTAL",
+worker-1         | [worker][job:h4HTzz9F_break1]       "team": null,
+worker-1         | [worker][job:h4HTzz9F_break1]       "segment": "H1",
+worker-1         | [worker][job:h4HTzz9F_break1]       "side": "UNDER",
+worker-1         | [worker][job:h4HTzz9F_break1]       "line": 90.5,
+worker-1         | [worker][job:h4HTzz9F_break1]       "odds": 1.57,
+worker-1         | [worker][job:h4HTzz9F_break1]       "bookmaker": "unknown",
+worker-1         | [worker][job:h4HTzz9F_break1]       "offers": [
+worker-1         | [worker][job:h4HTzz9F_break1]         {
+worker-1         | [worker][job:h4HTzz9F_break1]           "market_id": "half_total_H1_90_5_8_under_8",
+worker-1         | [worker][job:h4HTzz9F_break1]           "bookmaker": "unknown",
+worker-1         | [worker][job:h4HTzz9F_break1]           "odds": 1.57,
+worker-1         | [worker][job:h4HTzz9F_break1]           "source_market_id": null
+worker-1         | [worker][job:h4HTzz9F_break1]         }
+worker-1         | [worker][job:h4HTzz9F_break1]       ]
+worker-1         | [worker][job:h4HTzz9F_break1]     },
+worker-1         | [worker][job:h4HTzz9F_break1]     "probabilities": {
+worker-1         | [worker][job:h4HTzz9F_break1]       "p_hist": 0.5,
+worker-1         | [worker][job:h4HTzz9F_break1]       "p_scenario": 0.5,
+worker-1         | [worker][job:h4HTzz9F_break1]       "p_live": 0.730252851251857,
+worker-1         | [worker][job:h4HTzz9F_break1]       "p_raw": 0.6036137830633357,
+worker-1         | [worker][job:h4HTzz9F_break1]       "p_rule": 0.6036137830633357,
+worker-1         | [worker][job:h4HTzz9F_break1]       "p_calibrated": 0.6036137830633357,
+worker-1         | [worker][job:h4HTzz9F_break1]       "p_final": 0.6036137830633357
+worker-1         | [worker][job:h4HTzz9F_break1]     },
+worker-1         | [worker][job:h4HTzz9F_break1]     "stake": "0%",
+worker-1         | [worker][job:h4HTzz9F_break1]     "explanation_uk": "Найкращий доступний варіант має P_final 60.4%; рішення PASS через NO_SAME_FORMAT_HISTORY.",
+worker-1         | [worker][job:h4HTzz9F_break1]     "main_risk_uk": "Наявні дані або гейти не дозволяють безпечно перетворити цей варіант на активну ставку.",
+worker-1         | [worker][job:h4HTzz9F_break1]     "trigger_uk": "Потрібні P_final не нижче 65%, відсутність hard blocker та stat-gate не проти.",
+worker-1         | [worker][job:h4HTzz9F_break1]     "reason_codes": [
+worker-1         | [worker][job:h4HTzz9F_break1]       "NO_SAME_FORMAT_HISTORY"
+worker-1         | [worker][job:h4HTzz9F_break1]     ],
+worker-1         | [worker][job:h4HTzz9F_break1]     "gpt_status": "SKIPPED_DETERMINISTIC_PASS",
+worker-1         | [worker][job:h4HTzz9F_break1]     "telegram_status": "NOT_ATTEMPTED"
+worker-1         | [worker][job:h4HTzz9F_break1]   },
+worker-1         | [worker][job:h4HTzz9F_break1]   "gpt_status": "SKIPPED_DETERMINISTIC_PASS",
+worker-1         | [worker][job:h4HTzz9F_break1]   "telegram_status": "SKIPPED_PASS"
+worker-1         | [worker][job:h4HTzz9F_break1] }
+worker-1         | [worker][job:h4HTzz9F_break1] Step 3 exited 0
+worker-1         | [worker][job:h4HTzz9F_break1] Step 3 completed — decision: PASS/PASS | gpt: SKIPPED_DETERMINISTIC_PASS | telegram: SKIPPED_PASS
+worker-1         | [worker][job:h4HTzz9F_break1] ✓ Full chain completed for match h4HTzz9F
+worker-1         | [worker] ✓ Job h4HTzz9F_break1 completed. Match: h4HTzz9F | decision: PASS/PASS
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking] Reached bottom of list after 12 scrolls
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking] ⚠ Match not found: "Чехія U17 W" vs "Німеччина U17 W" (scrolled 12 times)
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking] 🔍 Dumping all lobby cards for diagnosis:
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[0]: "Даллас Вінгз Ж" vs "Лос-Анджелес Спаркс Ж"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[1]: "Кіпр U20" vs "Швейцарія U20"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[2]: "Швеція U20" vs "Португалія U20"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[3]: "Словенія U20" vs "Сербія U20"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[4]: "Атланта Дрім Ж" vs "Чикаго Скай Ж"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[5]: "Даллас Вінгз Ж" vs "Нью-Йорк Ліберті Ж"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[6]: "Оклахома-Сіті Тандер" vs "Бруклін Нетс"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[7]: "Торонто Репторз" vs "Денвер Наггетс"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[8]: "Фінікс Мерк'юрі Ж" vs "Коннектикут Сан Ж"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[9]: "Мемфіс Ґріззліс" vs "Голден-Стейт Ворріорс"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[10]: "Ісландія U20" vs "Україна U20"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[11]: "Нідерланди U20" vs "Азербайджан U20"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[12]: "УГБ" vs "Тайгерс"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[13]: "Даллас Вінгз Ж" vs "Лос-Анджелес Спаркс Ж"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[14]: "Словенія U20" vs "Сербія U20"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[15]: "Кіпр U20" vs "Швейцарія U20"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[16]: "Швеція U20" vs "Португалія U20"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[17]: "Нідерланди U20" vs "Азербайджан U20"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[18]: "УГБ" vs "Тайгерс"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[19]: "Ісландія U20" vs "Україна U20"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[20]: "Атланта Дрім Ж" vs "Чикаго Скай Ж"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[21]: "Оклахома-Сіті Тандер" vs "Бруклін Нетс"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[22]: "Фундеспорт / Араракуара U20" vs "Сорокaба U20"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[23]: "Торонто Репторз" vs "Денвер Наггетс"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[24]: "Фінікс Мерк'юрі Ж" vs "Коннектикут Сан Ж"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[25]: "Еспаньйол Осорно" vs "Пуерте Монтт"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[26]: "Індіос" vs "Метрос де Сантьяго"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[27]: "Еспаньйол Осорно" vs "Пуерто-Монтт"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[28]: "Кастро" vs "Пуерто Варас"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[29]: "Універсідад де Консепсьон" vs "Католика"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[30]: "Анкуд" vs "Лас Анімас"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[31]: "Мемфіс Ґріззліс" vs "Голден-Стейт Ворріорс"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[32]: "Мінаш U22" vs "ІВВ/СЕТАФ U22"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[33]: "Уніфакіса U22" vs "Васку да Гама РЖ U22"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[34]: "Нафт Міссан" vs "Закхо"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[35]: "КТО/Кайшас ду Сул U22" vs "БРБ Бразіліа U22"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking]   card[36]: "Аль Діфаа Альджаві" vs "Аль Хашд Аль Шаабі"
+worker-1         | [worker][job:2ZOScdQs_break3]   [betking] 💡 Check if the match is listed above. homeVariants=["чехія u17 w","chekhiya u17 w"] awayVariants=["німеччина u17 w","nimechchina u17 w"]
+worker-1         | [worker][job:2ZOScdQs_break3] Step 1 exited 0
+worker-1         | [betking] ⚠ Match not found: "Чехія U17 W" vs "Німеччина U17 W" (scrolled 12 times)
+worker-1         |   [betking] 🔍 Dumping all lobby cards for diagnosis:
+worker-1         |   [betking]   card[0]: "Даллас Вінгз Ж" vs "Лос-Анджелес Спаркс Ж"
+worker-1         |   [betking]   card[1]: "Кіпр U20" vs "Швейцарія U20"
+worker-1         |   [betking]   card[2]: "Швеція U20" vs "Португалія U20"
+worker-1         |   [betking]   card[3]: "Словенія U20" vs "Сербія U20"
+worker-1         |   [betking]   card[4]: "Атланта Дрім Ж" vs "Чикаго Скай Ж"
+worker-1         |   [betking]   card[5]: "Даллас Вінгз Ж" vs "Нью-Йорк Ліберті Ж"
+worker-1         |   [betking]   card[6]: "Оклахома-Сіті Тандер" vs "Бруклін Нетс"
+worker-1         |   [betking]   card[7]: "Торонто Репторз" vs "Денвер Наггетс"
+worker-1         |   [betking]   card[8]: "Фінікс Мерк'юрі Ж" vs "Коннектикут Сан Ж"
+worker-1         |   [betking]   card[9]: "Мемфіс Ґріззліс" vs "Голден-Стейт Ворріорс"
+worker-1         |   [betking]   card[10]: "Ісландія U20" vs "Україна U20"
+worker-1         |   [betking]   card[11]: "Нідерланди U20" vs "Азербайджан U20"
+worker-1         |   [betking]   card[12]: "УГБ" vs "Тайгерс"
+worker-1         |   [betking]   card[13]: "Даллас Вінгз Ж" vs "Лос-Анджелес Спаркс Ж"
+worker-1         |   [betking]   card[14]: "Словенія U20" vs "Сербія U20"
+worker-1         |   [betking]   card[15]: "Кіпр U20" vs "Швейцарія U20"
+worker-1         |   [betking]   card[16]: "Швеція U20" vs "Португалія U20"
+worker-1         |   [betking]   card[17]: "Нідерланди U20" vs "Азербайджан U20"
+worker-1         |   [betking]   card[18]: "УГБ" vs "Тайгерс"
+worker-1         |   [betking]   card[19]: "Ісландія U20" vs "Україна U20"
+worker-1         |   [betking]   card[20]: "Атланта Дрім Ж" vs "Чикаго Скай Ж"
+worker-1         |   [betking]   card[21]: "Оклахома-Сіті Тандер" vs "Бруклін Нетс"
+worker-1         |   [betking]   card[22]: "Фундеспорт / Араракуара U20" vs "Сорокaба U20"
+worker-1         |   [betking]   card[23]: "Торонто Репторз" vs "Денвер Наггетс"
+worker-1         |   [betking]   card[24]: "Фінікс Мерк'юрі Ж" vs "Коннектикут Сан Ж"
+worker-1         |   [betking]   card[25]: "Еспаньйол Осорно" vs "Пуерте Монтт"
+worker-1         |   [betking]   card[26]: "Індіос" vs "Метрос де Сантьяго"
+worker-1         |   [betking]   card[27]: "Еспаньйол Осорно" vs "Пуерто-Монтт"
+worker-1         |   [betking]   card[28]: "Кастро" vs "Пуерто Варас"
+worker-1         |   [betking]   card[29]: "Універсідад де Консепсьон" vs "Католика"
+worker-1         |   [betking]   card[30]: "Анкуд" vs "Лас Анімас"
+worker-1         |   [betking]   card[31]: "Мемфіс Ґріззліс" vs "Голден-Стейт Ворріорс"
+worker-1         |   [betking]   card[32]: "Мінаш U22" vs "ІВВ/СЕТАФ U22"
+worker-1         |   [betking]   card[33]: "Уніфакіса U22" vs "Васку да Гама РЖ U22"
+worker-1         |   [betking]   card[34]: "Нафт Міссан" vs "Закхо"
+worker-1         |   [betking]   card[35]: "КТО/Кайшас ду Сул U22" vs "БРБ Бразіліа U22"
+worker-1         |   [betking]   card[36]: "Аль Діфаа Альджаві" vs "Аль Хашд Аль Шаабі"
+worker-1         |   [betking] 💡 Check if the match is listed above. homeVariants=["чехія u17 w","chekhiya u17 w"] awayVariants=["німеччина u17 w","nimechchina u17 w"]
+worker-1         | [worker][job:2ZOScdQs_break3] Step 2 → python3 /src/math_script.py /src/data/Chekhiya_U17_W_vs_Nimechchyna_U17_W_2ZOScdQs.json /src/data/line_result_2ZOScdQs.json
+worker-1         | [worker][job:2ZOScdQs_break3] [idle_debug] rows_a_raw=20 last_ts_a=1784386800 rows_b_raw=13 last_ts_b=1784367000
+worker-1         | [worker][job:2ZOScdQs_break3] [idle_debug] a[0] mid='CM33rZAl' dt='18.07.2026 15:00:00'
+worker-1         | [worker][job:2ZOScdQs_break3] [stat_zones] WARNING: no data found for team 'Чехія U17 W' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [worker][job:2ZOScdQs_break3] [stat_zones] WARNING: no data found for team 'Німеччина U17 W' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [worker][job:2ZOScdQs_break3] [stat_zones] WARNING: no data found for team 'Чехія U17 W' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [worker][job:2ZOScdQs_break3] [stat_zones] WARNING: no data found for team 'Німеччина U17 W' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [worker][job:2ZOScdQs_break3] [stat_zones] WARNING: no data found for team 'Чехія U17 W' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [worker][job:2ZOScdQs_break3] [stat_zones] WARNING: no data found for team 'Німеччина U17 W' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [worker][job:2ZOScdQs_break3] __OUTPUT_FILE__:Chekhiya_U17_W_vs_Nimechchyna_U17_W_2ZOScdQs.json
+worker-1         | [worker][job:2ZOScdQs_break3] [math_script] Processing match 2ZOScdQs
+worker-1         | [worker][job:2ZOScdQs_break3] [math_script] ✓ Result written to /src/data/Chekhiya_U17_W_vs_Nimechchyna_U17_W_2ZOScdQs.json
+worker-1         | [worker][job:2ZOScdQs_break3] Step 2 exited 0
+worker-1         | [idle_debug] rows_a_raw=20 last_ts_a=1784386800 rows_b_raw=13 last_ts_b=1784367000
+worker-1         | [idle_debug] a[0] mid='CM33rZAl' dt='18.07.2026 15:00:00'
+worker-1         | [stat_zones] WARNING: no data found for team 'Чехія U17 W' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Німеччина U17 W' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Чехія U17 W' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Німеччина U17 W' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Чехія U17 W' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Німеччина U17 W' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | __OUTPUT_FILE__:Chekhiya_U17_W_vs_Nimechchyna_U17_W_2ZOScdQs.json
+worker-1         | [worker][job:2ZOScdQs_break3] Step 3 → python3 /src/super_basket_vps_system.py run --match /src/data/Chekhiya_U17_W_vs_Nimechchyna_U17_W_2ZOScdQs.json
+worker-1         | [worker][job:2ZOScdQs_break3] {
+worker-1         | [worker][job:2ZOScdQs_break3]   "output_status": "OK",
+worker-1         | [worker][job:2ZOScdQs_break3]   "match_id": "2ZOScdQs",
+worker-1         | [worker][job:2ZOScdQs_break3]   "stage": "Q4_CONFIRMATION",
+worker-1         | [worker][job:2ZOScdQs_break3]   "format": "GENERIC_4x10",
+worker-1         | [worker][job:2ZOScdQs_break3]   "decision": {
+worker-1         | [worker][job:2ZOScdQs_break3]     "action": "PASS",
+worker-1         | [worker][job:2ZOScdQs_break3]     "deterministic_action": "PASS",
+worker-1         | [worker][job:2ZOScdQs_break3]     "status": "PASS",
+worker-1         | [worker][job:2ZOScdQs_break3]     "signal_id": null,
+worker-1         | [worker][job:2ZOScdQs_break3]     "market": null,
+worker-1         | [worker][job:2ZOScdQs_break3]     "probabilities": {
+worker-1         | [worker][job:2ZOScdQs_break3]       "p_hist": null,
+worker-1         | [worker][job:2ZOScdQs_break3]       "p_scenario": null,
+worker-1         | [worker][job:2ZOScdQs_break3]       "p_live": null,
+worker-1         | [worker][job:2ZOScdQs_break3]       "p_raw": null,
+worker-1         | [worker][job:2ZOScdQs_break3]       "p_rule": null,
+worker-1         | [worker][job:2ZOScdQs_break3]       "p_calibrated": null,
+worker-1         | [worker][job:2ZOScdQs_break3]       "p_final": null
+worker-1         | [worker][job:2ZOScdQs_break3]     },
+worker-1         | [worker][job:2ZOScdQs_break3]     "stake": "0%",
+worker-1         | [worker][job:2ZOScdQs_break3]     "explanation_uk": "У JSON немає підтримуваної актуальної лінії букмекера з коефіцієнтом не нижче 1.44.",
+worker-1         | [worker][job:2ZOScdQs_break3]     "main_risk_uk": "Без реальної лінії система не створює ставку.",
+worker-1         | [worker][job:2ZOScdQs_break3]     "trigger_uk": "Додати актуальну Match/H1/H2/Quarter Total або Team IT лінію з часом і рахунком.",
+worker-1         | [worker][job:2ZOScdQs_break3]     "reason_codes": [
+worker-1         | [worker][job:2ZOScdQs_break3]       "NO_SUPPORTED_REAL_LINES"
+worker-1         | [worker][job:2ZOScdQs_break3]     ],
+worker-1         | [worker][job:2ZOScdQs_break3]     "gpt_status": "SKIPPED_DETERMINISTIC_PASS",
+worker-1         | [worker][job:2ZOScdQs_break3]     "telegram_status": "NOT_ATTEMPTED"
+worker-1         | [worker][job:2ZOScdQs_break3]   },
+worker-1         | [worker][job:2ZOScdQs_break3]   "gpt_status": "SKIPPED_DETERMINISTIC_PASS",
+worker-1         | [worker][job:2ZOScdQs_break3]   "telegram_status": "SKIPPED_PASS"
+worker-1         | [worker][job:2ZOScdQs_break3] }
+worker-1         | [worker][job:2ZOScdQs_break3] Step 3 exited 0
+worker-1         | [worker][job:2ZOScdQs_break3] Step 3 completed — decision: PASS/PASS | gpt: SKIPPED_DETERMINISTIC_PASS | telegram: SKIPPED_PASS
+worker-1         | [worker][job:2ZOScdQs_break3] ✓ Full chain completed for match 2ZOScdQs
+worker-1         | [worker] ✓ Job 2ZOScdQs_break3 completed. Match: 2ZOScdQs | decision: PASS/PASS
+worker-1         | [worker][job:QHTHqAaf_break3] Starting analysis — Швеція U20 vs Португалія U20 [ЄВРОПА: Євробаскет U20 В - Плей-оф] (scheduled fire: 2026-07-19T17:32:15.615Z)
+worker-1         | [worker][job:QHTHqAaf_break3] Step 1 → node /src/match_h2h_export.js --matchId QHTHqAaf --home Shvetsiya_U20 --away Portugaliya_U20
+worker-1         | [worker][job:QHTHqAaf_break3] --- Формат виводу: json ---
+worker-1         | [worker][job:QHTHqAaf_break3] --- Отримання fsign через Playwright... ---
+worker-1         | [worker][job:QHTHqAaf_break3] seasons: [{"text":"Євробаскет U20 В 2026","url":"https://www.flashscore.ua/basketball/europe/eurobasket-u20-b/"},{"text":"Євробаскет U20 В 2025","url":"https://www.flashscore.ua/basketball/europe/eurobasket-u20-b-2025/"},{"text":"Євробаскет U20 В 2024","url":"https://www.flashscore.ua/basketball/europe/eurobasket-u20-b-2024/"}]
+worker-1         | [worker][job:QHTHqAaf_break3] ✔ current_season_start_date: 19.07. 13:30
+worker-1         | [worker][job:QHTHqAaf_break3] 
+worker-1         | [worker][job:QHTHqAaf_break3] --- Завантаження ліній (betking.com.ua)… ---
+worker-1         | [worker][job:QHTHqAaf_break3]   Match: "Швеція U20" vs "Португалія U20"
+worker-1         | [worker][job:QHTHqAaf_break3]   liveStatus: "4-а чверть"
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] homeVariants: ["швеція u20","shvetsiya u20"]
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] awayVariants: ["португалія u20","portugaliya u20"]
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] Navigating to lobby…
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] Cards count poll 1: 13
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] Cards count poll 2: 37
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] Cards count poll 3: 37
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] Cards count poll 4: 37
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] Card list stable at 37 cards
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] Looking for match card (with scroll)…
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] homeWords: ["shvetsiya u20","швеція u20","shvetsiya","швеція"]
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] awayWords: ["portugaliya u20","португалія u20","portugaliya","португалія"]
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] homeQualifiers: ["u20"]
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] awayQualifiers: ["u20"]
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] Looking for match card (with scroll)…
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] ✅ Match card clicked after 0 scrolls — found: ["Швеція U20","Португалія U20"] (strategy: full-variants)
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] Waiting for detail page…
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] Match detail loaded — scraping markets…
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] Tab poll 1: 7 tab(s)
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] Tabs found: Усі, Головні, Конструктор ставок, 2-а половина, 4-та чверть, Пропозиції на команду, Цифрові маркети
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] Specific tabs: 2-а половина, 4-та чверть, Пропозиції на команду, Цифрові маркети
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] Generic  tabs: Усі, Головні
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] Total unique markets after all tabs: 14
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "2-а половина - Останні цифри рахунку"
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Четверта чверть - Сума останньої цифри рахунку обох команд"
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] тотал market: "Тотал (вкл. овертайм)" → cat="match_total"
+worker-1         | [worker][job:QHTHqAaf_break3]   [betking] фора  market: "Фора (вкл. овертайм)" → cat="match_handicap"
+worker-1         | [worker][job:QHTHqAaf_break3] ✅ Лінії збережено: /src/data/line_result_QHTHqAaf.json
+worker-1         | [worker][job:QHTHqAaf_break3]   match_1x2: 1 рядків
+worker-1         | [worker][job:QHTHqAaf_break3]   match_handicap: 1 рядків
+worker-1         | [worker][job:QHTHqAaf_break3]   match_total: 1 рядків
+worker-1         | [worker][job:QHTHqAaf_break3]   win_margin: 3 рядків
+worker-1         | [worker][job:QHTHqAaf_break3]   last_digit: 101 рядків
+worker-1         | [worker][job:QHTHqAaf_break3] Step 1 exited 0
+worker-1         | [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "2-а половина - Останні цифри рахунку"
+worker-1         |   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Четверта чверть - Сума останньої цифри рахунку обох команд"
+worker-1         | [worker][job:QHTHqAaf_break3] Step 2 → python3 /src/math_script.py /src/data/Shvetsiya_U20_vs_Portugaliya_U20_QHTHqAaf.json /src/data/line_result_QHTHqAaf.json
+worker-1         | [worker][job:QHTHqAaf_break3] [idle_debug] rows_a_raw=35 last_ts_a=1784390400 rows_b_raw=35 last_ts_b=1784399400
+worker-1         | [worker][job:QHTHqAaf_break3] [idle_debug] a[0] mid='hbv89S3k' dt='18.07.2026 16:00:00'
+worker-1         | [worker][job:QHTHqAaf_break3] [stat_zones] WARNING: no data found for team 'Швеція U20' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QHTHqAaf_break3] [stat_zones] WARNING: no data found for team 'Португалія U20' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QHTHqAaf_break3] [stat_zones] WARNING: no data found for team 'Швеція U20' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QHTHqAaf_break3] [stat_zones] WARNING: no data found for team 'Португалія U20' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QHTHqAaf_break3] [stat_zones] WARNING: no data found for team 'Швеція U20' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QHTHqAaf_break3] [stat_zones] WARNING: no data found for team 'Португалія U20' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QHTHqAaf_break3] __OUTPUT_FILE__:Shvetsiya_U20_vs_Portugaliya_U20_QHTHqAaf.json
+worker-1         | [worker][job:QHTHqAaf_break3] [math_script] Processing match QHTHqAaf
+worker-1         | [worker][job:QHTHqAaf_break3] [math_script] ✓ Result written to /src/data/Shvetsiya_U20_vs_Portugaliya_U20_QHTHqAaf.json
+worker-1         | [worker][job:QHTHqAaf_break3] Step 2 exited 0
+worker-1         | [idle_debug] rows_a_raw=35 last_ts_a=1784390400 rows_b_raw=35 last_ts_b=1784399400
+worker-1         | [idle_debug] a[0] mid='hbv89S3k' dt='18.07.2026 16:00:00'
+worker-1         | [stat_zones] WARNING: no data found for team 'Швеція U20' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Португалія U20' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Швеція U20' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Португалія U20' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Швеція U20' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Португалія U20' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | __OUTPUT_FILE__:Shvetsiya_U20_vs_Portugaliya_U20_QHTHqAaf.json
+worker-1         | [worker][job:QHTHqAaf_break3] Step 3 → python3 /src/super_basket_vps_system.py run --match /src/data/Shvetsiya_U20_vs_Portugaliya_U20_QHTHqAaf.json
+worker-1         | [worker][job:QHTHqAaf_break3] {
+worker-1         | [worker][job:QHTHqAaf_break3]   "output_status": "OK",
+worker-1         | [worker][job:QHTHqAaf_break3]   "match_id": "QHTHqAaf",
+worker-1         | [worker][job:QHTHqAaf_break3]   "stage": "Q4_CONFIRMATION",
+worker-1         | [worker][job:QHTHqAaf_break3]   "format": "GENERIC_4x10",
+worker-1         | [worker][job:QHTHqAaf_break3]   "decision": {
+worker-1         | [worker][job:QHTHqAaf_break3]     "action": "PASS",
+worker-1         | [worker][job:QHTHqAaf_break3]     "deterministic_action": "PASS",
+worker-1         | [worker][job:QHTHqAaf_break3]     "status": "PASS",
+worker-1         | [worker][job:QHTHqAaf_break3]     "signal_id": null,
+worker-1         | [worker][job:QHTHqAaf_break3]     "market": {
+worker-1         | [worker][job:QHTHqAaf_break3]       "market_type": "MATCH_TOTAL",
+worker-1         | [worker][job:QHTHqAaf_break3]       "team": null,
+worker-1         | [worker][job:QHTHqAaf_break3]       "segment": "MATCH",
+worker-1         | [worker][job:QHTHqAaf_break3]       "side": "OVER",
+worker-1         | [worker][job:QHTHqAaf_break3]       "line": 128.5,
+worker-1         | [worker][job:QHTHqAaf_break3]       "odds": 1.84,
+worker-1         | [worker][job:QHTHqAaf_break3]       "bookmaker": "unknown",
+worker-1         | [worker][job:QHTHqAaf_break3]       "offers": [
+worker-1         | [worker][job:QHTHqAaf_break3]         {
+worker-1         | [worker][job:QHTHqAaf_break3]           "market_id": "mt_128_5_0_over_1",
+worker-1         | [worker][job:QHTHqAaf_break3]           "bookmaker": "unknown",
+worker-1         | [worker][job:QHTHqAaf_break3]           "odds": 1.84,
+worker-1         | [worker][job:QHTHqAaf_break3]           "source_market_id": "mt_128_5_0"
+worker-1         | [worker][job:QHTHqAaf_break3]         }
+worker-1         | [worker][job:QHTHqAaf_break3]       ]
+worker-1         | [worker][job:QHTHqAaf_break3]     },
+worker-1         | [worker][job:QHTHqAaf_break3]     "probabilities": {
+worker-1         | [worker][job:QHTHqAaf_break3]       "p_hist": 0.797876449203232,
+worker-1         | [worker][job:QHTHqAaf_break3]       "p_scenario": 0.8025626183611334,
+worker-1         | [worker][job:QHTHqAaf_break3]       "p_live": 0.25835101126381776,
+worker-1         | [worker][job:QHTHqAaf_break3]       "p_raw": 0.39393529612235656,
+worker-1         | [worker][job:QHTHqAaf_break3]       "p_rule": 0.3492947927472906,
+worker-1         | [worker][job:QHTHqAaf_break3]       "p_calibrated": 0.3492947927472906,
+worker-1         | [worker][job:QHTHqAaf_break3]       "p_final": 0.3492947927472906
+worker-1         | [worker][job:QHTHqAaf_break3]     },
+worker-1         | [worker][job:QHTHqAaf_break3]     "stake": "0%",
+worker-1         | [worker][job:QHTHqAaf_break3]     "explanation_uk": "Найкращий доступний варіант має P_final 34.9%; рішення PASS через Q4_OVER_CONFIRMATION_FAILED.",
+worker-1         | [worker][job:QHTHqAaf_break3]     "main_risk_uk": "Наявні дані або гейти не дозволяють безпечно перетворити цей варіант на активну ставку.",
+worker-1         | [worker][job:QHTHqAaf_break3]     "trigger_uk": "Потрібні P_final не нижче 65%, відсутність hard blocker та stat-gate не проти.",
+worker-1         | [worker][job:QHTHqAaf_break3]     "reason_codes": [
+worker-1         | [worker][job:QHTHqAaf_break3]       "Q4_OVER_CONFIRMATION_FAILED"
+worker-1         | [worker][job:QHTHqAaf_break3]     ],
+worker-1         | [worker][job:QHTHqAaf_break3]     "gpt_status": "SKIPPED_DETERMINISTIC_PASS",
+worker-1         | [worker][job:QHTHqAaf_break3]     "telegram_status": "NOT_ATTEMPTED"
+worker-1         | [worker][job:QHTHqAaf_break3]   },
+worker-1         | [worker][job:QHTHqAaf_break3]   "gpt_status": "SKIPPED_DETERMINISTIC_PASS",
+worker-1         | [worker][job:QHTHqAaf_break3]   "telegram_status": "SKIPPED_PASS"
+worker-1         | [worker][job:QHTHqAaf_break3] }
+worker-1         | [worker][job:QHTHqAaf_break3] Step 3 exited 0
+worker-1         | [worker][job:QHTHqAaf_break3] Step 3 completed — decision: PASS/PASS | gpt: SKIPPED_DETERMINISTIC_PASS | telegram: SKIPPED_PASS
+worker-1         | [worker][job:QHTHqAaf_break3] ✓ Full chain completed for match QHTHqAaf
+worker-1         | [worker] ✓ Job QHTHqAaf_break3 completed. Match: QHTHqAaf | decision: PASS/PASS
+worker-1         | [worker][job:QLsybLy2_break1] Starting analysis — Словенія U20 vs Сербія U20 [ЄВРОПА: Євробаскет U20 - Плей-оф] (scheduled fire: 2026-07-19T17:47:26.266Z)
+worker-1         | [worker][job:QLsybLy2_break1] Step 1 → node /src/match_h2h_export.js --matchId QLsybLy2 --home Sloveniya_U20 --away Serbiya_U20
+worker-1         | [worker][job:QLsybLy2_break1] --- Формат виводу: json ---
+worker-1         | [worker][job:QLsybLy2_break1] --- Отримання fsign через Playwright... ---
+worker-1         | [worker][job:QLsybLy2_break1] seasons: [{"text":"Євробаскет U20 2026","url":"https://www.flashscore.ua/basketball/europe/eurobasket-u20/"},{"text":"Євробаскет U20 2025","url":"https://www.flashscore.ua/basketball/europe/eurobasket-u20-2025/"},{"text":"Євробаскет U20 2024","url":"https://www.flashscore.ua/basketball/europe/eurobasket-u20-2024/"}]
+worker-1         | [worker][job:QLsybLy2_break1] ✔ current_season_start_date: 19.07. 15:30
+worker-1         | [worker][job:QLsybLy2_break1] 
+worker-1         | [worker][job:QLsybLy2_break1] --- Завантаження ліній (betking.com.ua)… ---
+worker-1         | [worker][job:QLsybLy2_break1]   Match: "Словенія U20" vs "Сербія U20"
+worker-1         | [worker][job:QLsybLy2_break1]   liveStatus: "2-а чверть"
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] homeVariants: ["словенія u20","sloveniya u20"]
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] awayVariants: ["сербія u20","serbiya u20"]
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] Navigating to lobby…
+worker-1         | [worker][job:QLsybLy2_break2] Starting analysis — Словенія U20 vs Сербія U20 [ЄВРОПА: Євробаскет U20 - Плей-оф] (scheduled fire: 2026-07-19T17:48:26.420Z)
+worker-1         | [worker][job:QLsybLy2_break2] Step 1 → node /src/match_h2h_export.js --matchId QLsybLy2 --home Sloveniya_U20 --away Serbiya_U20
+worker-1         | [worker][job:QLsybLy2_break2] --- Формат виводу: json ---
+worker-1         | [worker][job:QLsybLy2_break2] --- Отримання fsign через Playwright... ---
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] Cards count poll 1: 11
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] Cards count poll 2: 11
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] Cards count poll 3: 34
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] Cards count poll 4: 34
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] Cards count poll 5: 34
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] Card list stable at 34 cards
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] Looking for match card (with scroll)…
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] homeWords: ["sloveniya u20","словенія u20","sloveniya","словенія"]
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] awayWords: ["serbiya u20","сербія u20","serbiya","сербія"]
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] homeQualifiers: ["u20"]
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] awayQualifiers: ["u20"]
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] Looking for match card (with scroll)…
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] ✅ Match card clicked after 0 scrolls — found: ["Словенія U20","Сербія U20"] (strategy: full-variants)
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] Waiting for detail page…
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] Match detail loaded — scraping markets…
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] Tab poll 1: 8 tab(s)
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] Tabs found: Усі, Головні, Конструктор ставок, 2-а половина, 3-тя чверть, 4-та чверть, Пропозиції на команду, Цифрові маркети
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] Specific tabs: 2-а половина, 3-тя чверть, 4-та чверть, Пропозиції на команду, Цифрові маркети
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] Generic  tabs: Усі, Головні
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] Total unique markets after all tabs: 17
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "2-а половина - Останні цифри рахунку"
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Третя чверть - Сума останньої цифри рахунку обох команд"
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Четверта чверть - Сума останньої цифри рахунку обох команд"
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] тотал market: "Тотал (вкл. овертайм)" → cat="match_total"
+worker-1         | [worker][job:QLsybLy2_break1]   [betking] фора  market: "Фора (вкл. овертайм)" → cat="match_handicap"
+worker-1         | [worker][job:QLsybLy2_break1] ✅ Лінії збережено: /src/data/line_result_QLsybLy2.json
+worker-1         | [worker][job:QLsybLy2_break1]   match_1x2: 1 рядків
+worker-1         | [worker][job:QLsybLy2_break1]   match_handicap: 1 рядків
+worker-1         | [worker][job:QLsybLy2_break1]   match_total: 1 рядків
+worker-1         | [worker][job:QLsybLy2_break1]   win_margin: 3 рядків
+worker-1         | [worker][job:QLsybLy2_break1]   last_digit: 121 рядків
+worker-1         | [worker][job:QLsybLy2_break1] Step 1 exited 0
+worker-1         | [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "2-а половина - Останні цифри рахунку"
+worker-1         |   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Третя чверть - Сума останньої цифри рахунку обох команд"
+worker-1         |   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Четверта чверть - Сума останньої цифри рахунку обох команд"
+worker-1         | [worker][job:QLsybLy2_break1] Step 2 → python3 /src/math_script.py /src/data/Sloveniya_U20_vs_Serbiya_U20_QLsybLy2.json /src/data/line_result_QLsybLy2.json
+worker-1         | [worker][job:QLsybLy2_break1] [idle_debug] rows_a_raw=35 last_ts_a=1784392200 rows_b_raw=35 last_ts_b=1784401200
+worker-1         | [worker][job:QLsybLy2_break1] [idle_debug] a[0] mid='j7mzZrP0' dt='18.07.2026 16:30:00'
+worker-1         | [worker][job:QLsybLy2_break1] [stat_zones] WARNING: no data found for team 'Словенія U20' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QLsybLy2_break1] [stat_zones] WARNING: no data found for team 'Сербія U20' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QLsybLy2_break1] [stat_zones] WARNING: no data found for team 'Словенія U20' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QLsybLy2_break1] [stat_zones] WARNING: no data found for team 'Сербія U20' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QLsybLy2_break1] [stat_zones] WARNING: no data found for team 'Словенія U20' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QLsybLy2_break1] [stat_zones] WARNING: no data found for team 'Сербія U20' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QLsybLy2_break1] __OUTPUT_FILE__:Sloveniya_U20_vs_Serbiya_U20_QLsybLy2.json
+worker-1         | [worker][job:QLsybLy2_break1] [math_script] Processing match QLsybLy2
+worker-1         | [worker][job:QLsybLy2_break1] [math_script] ✓ Result written to /src/data/Sloveniya_U20_vs_Serbiya_U20_QLsybLy2.json
+worker-1         | [worker][job:QLsybLy2_break1] Step 2 exited 0
+worker-1         | [idle_debug] rows_a_raw=35 last_ts_a=1784392200 rows_b_raw=35 last_ts_b=1784401200
+worker-1         | [idle_debug] a[0] mid='j7mzZrP0' dt='18.07.2026 16:30:00'
+worker-1         | [stat_zones] WARNING: no data found for team 'Словенія U20' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Сербія U20' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Словенія U20' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Сербія U20' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Словенія U20' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Сербія U20' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | __OUTPUT_FILE__:Sloveniya_U20_vs_Serbiya_U20_QLsybLy2.json
+worker-1         | [worker][job:QLsybLy2_break1] Step 3 → python3 /src/super_basket_vps_system.py run --match /src/data/Sloveniya_U20_vs_Serbiya_U20_QLsybLy2.json
+worker-1         | [worker][job:QLsybLy2_break1] {
+worker-1         | [worker][job:QLsybLy2_break1]   "output_status": "OK",
+worker-1         | [worker][job:QLsybLy2_break1]   "match_id": "QLsybLy2",
+worker-1         | [worker][job:QLsybLy2_break1]   "stage": "HT",
+worker-1         | [worker][job:QLsybLy2_break1]   "format": "GENERIC_4x10",
+worker-1         | [worker][job:QLsybLy2_break1]   "decision": {
+worker-1         | [worker][job:QLsybLy2_break1]     "action": "PASS",
+worker-1         | [worker][job:QLsybLy2_break1]     "deterministic_action": "PASS",
+worker-1         | [worker][job:QLsybLy2_break1]     "status": "PASS",
+worker-1         | [worker][job:QLsybLy2_break1]     "signal_id": null,
+worker-1         | [worker][job:QLsybLy2_break1]     "market": {
+worker-1         | [worker][job:QLsybLy2_break1]       "market_type": "MATCH_TOTAL",
+worker-1         | [worker][job:QLsybLy2_break1]       "team": null,
+worker-1         | [worker][job:QLsybLy2_break1]       "segment": "MATCH",
+worker-1         | [worker][job:QLsybLy2_break1]       "side": "UNDER",
+worker-1         | [worker][job:QLsybLy2_break1]       "line": 148.5,
+worker-1         | [worker][job:QLsybLy2_break1]       "odds": 1.82,
+worker-1         | [worker][job:QLsybLy2_break1]       "bookmaker": "unknown",
+worker-1         | [worker][job:QLsybLy2_break1]       "offers": [
+worker-1         | [worker][job:QLsybLy2_break1]         {
+worker-1         | [worker][job:QLsybLy2_break1]           "market_id": "mt_148_5_0_under_2",
+worker-1         | [worker][job:QLsybLy2_break1]           "bookmaker": "unknown",
+worker-1         | [worker][job:QLsybLy2_break1]           "odds": 1.82,
+worker-1         | [worker][job:QLsybLy2_break1]           "source_market_id": "mt_148_5_0"
+worker-1         | [worker][job:QLsybLy2_break1]         }
+worker-1         | [worker][job:QLsybLy2_break1]       ]
+worker-1         | [worker][job:QLsybLy2_break1]     },
+worker-1         | [worker][job:QLsybLy2_break1]     "probabilities": {
+worker-1         | [worker][job:QLsybLy2_break1]       "p_hist": 0.4528182891024414,
+worker-1         | [worker][job:QLsybLy2_break1]       "p_scenario": 0.4523723809341066,
+worker-1         | [worker][job:QLsybLy2_break1]       "p_live": 0.5853799867184314,
+worker-1         | [worker][job:QLsybLy2_break1]       "p_raw": 0.5229868072052491,
+worker-1         | [worker][job:QLsybLy2_break1]       "p_rule": 0.5229868072052491,
+worker-1         | [worker][job:QLsybLy2_break1]       "p_calibrated": 0.5229868072052491,
+worker-1         | [worker][job:QLsybLy2_break1]       "p_final": 0.5229868072052491
+worker-1         | [worker][job:QLsybLy2_break1]     },
+worker-1         | [worker][job:QLsybLy2_break1]     "stake": "0%",
+worker-1         | [worker][job:QLsybLy2_break1]     "explanation_uk": "Найкращий доступний варіант має P_final 52.3%; рішення PASS через PRODUCTION_ROUTER_BLOCK.",
+worker-1         | [worker][job:QLsybLy2_break1]     "main_risk_uk": "Наявні дані або гейти не дозволяють безпечно перетворити цей варіант на активну ставку.",
+worker-1         | [worker][job:QLsybLy2_break1]     "trigger_uk": "Потрібні P_final не нижче 65%, відсутність hard blocker та stat-gate не проти.",
+worker-1         | [worker][job:QLsybLy2_break1]     "reason_codes": [
+worker-1         | [worker][job:QLsybLy2_break1]       "PRODUCTION_ROUTER_BLOCK"
+worker-1         | [worker][job:QLsybLy2_break1]     ],
+worker-1         | [worker][job:QLsybLy2_break1]     "gpt_status": "SKIPPED_DETERMINISTIC_PASS",
+worker-1         | [worker][job:QLsybLy2_break1]     "telegram_status": "NOT_ATTEMPTED"
+worker-1         | [worker][job:QLsybLy2_break1]   },
+worker-1         | [worker][job:QLsybLy2_break1]   "gpt_status": "SKIPPED_DETERMINISTIC_PASS",
+worker-1         | [worker][job:QLsybLy2_break1]   "telegram_status": "SKIPPED_PASS"
+worker-1         | [worker][job:QLsybLy2_break1] }
+worker-1         | [worker][job:QLsybLy2_break1] Step 3 exited 0
+worker-1         | [worker][job:QLsybLy2_break1] Step 3 completed — decision: PASS/PASS | gpt: SKIPPED_DETERMINISTIC_PASS | telegram: SKIPPED_PASS
+worker-1         | [worker][job:QLsybLy2_break1] ✓ Full chain completed for match QLsybLy2
+worker-1         | [worker] ✓ Job QLsybLy2_break1 completed. Match: QLsybLy2 | decision: PASS/PASS
+worker-1         | [worker][job:QLsybLy2_break2] seasons: [{"text":"Євробаскет U20 2026","url":"https://www.flashscore.ua/basketball/europe/eurobasket-u20/"},{"text":"Євробаскет U20 2025","url":"https://www.flashscore.ua/basketball/europe/eurobasket-u20-2025/"},{"text":"Євробаскет U20 2024","url":"https://www.flashscore.ua/basketball/europe/eurobasket-u20-2024/"}]
+worker-1         | [worker][job:QLsybLy2_break2] ✔ current_season_start_date: 19.07. 15:30
+worker-1         | [worker][job:QLsybLy2_break2] 
+worker-1         | [worker][job:QLsybLy2_break2] --- Завантаження ліній (betking.com.ua)… ---
+worker-1         | [worker][job:QLsybLy2_break2]   Match: "Словенія U20" vs "Сербія U20"
+worker-1         | [worker][job:QLsybLy2_break2]   liveStatus: "Перерва"
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] homeVariants: ["словенія u20","sloveniya u20"]
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] awayVariants: ["сербія u20","serbiya u20"]
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] Navigating to lobby…
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] Cards count poll 1: 11
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] Cards count poll 2: 34
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] Cards count poll 3: 34
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] Cards count poll 4: 34
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] Card list stable at 34 cards
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] Looking for match card (with scroll)…
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] homeWords: ["sloveniya u20","словенія u20","sloveniya","словенія"]
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] awayWords: ["serbiya u20","сербія u20","serbiya","сербія"]
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] homeQualifiers: ["u20"]
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] awayQualifiers: ["u20"]
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] Looking for match card (with scroll)…
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] ✅ Match card clicked after 0 scrolls — found: ["Словенія U20","Сербія U20"] (strategy: full-variants)
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] Waiting for detail page…
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] Match detail loaded — scraping markets…
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] Tab poll 1: 8 tab(s)
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] Tabs found: Усі, Головні, Конструктор ставок, 2-а половина, 3-тя чверть, 4-та чверть, Пропозиції на команду, Цифрові маркети
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] Specific tabs: 2-а половина, 3-тя чверть, 4-та чверть, Пропозиції на команду, Цифрові маркети
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] Generic  tabs: Усі, Головні
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] Total unique markets after all tabs: 17
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "2-а половина - Останні цифри рахунку"
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Третя чверть - Сума останньої цифри рахунку обох команд"
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Четверта чверть - Сума останньої цифри рахунку обох команд"
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] тотал market: "Тотал (вкл. овертайм)" → cat="match_total"
+worker-1         | [worker][job:QLsybLy2_break2]   [betking] фора  market: "Фора (вкл. овертайм)" → cat="match_handicap"
+worker-1         | [worker][job:QLsybLy2_break2] ✅ Лінії збережено: /src/data/line_result_QLsybLy2.json
+worker-1         | [worker][job:QLsybLy2_break2]   match_1x2: 1 рядків
+worker-1         | [worker][job:QLsybLy2_break2]   match_handicap: 1 рядків
+worker-1         | [worker][job:QLsybLy2_break2]   match_total: 1 рядків
+worker-1         | [worker][job:QLsybLy2_break2]   win_margin: 3 рядків
+worker-1         | [worker][job:QLsybLy2_break2]   last_digit: 121 рядків
+worker-1         | [worker][job:QLsybLy2_break2] Step 1 exited 0
+worker-1         | [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "2-а половина - Останні цифри рахунку"
+worker-1         |   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Третя чверть - Сума останньої цифри рахунку обох команд"
+worker-1         |   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Четверта чверть - Сума останньої цифри рахунку обох команд"
+worker-1         | [worker][job:QLsybLy2_break2] Step 2 → python3 /src/math_script.py /src/data/Sloveniya_U20_vs_Serbiya_U20_QLsybLy2.json /src/data/line_result_QLsybLy2.json
+worker-1         | [worker][job:QLsybLy2_break2] [idle_debug] rows_a_raw=35 last_ts_a=1784392200 rows_b_raw=35 last_ts_b=1784401200
+worker-1         | [worker][job:QLsybLy2_break2] [idle_debug] a[0] mid='j7mzZrP0' dt='18.07.2026 16:30:00'
+worker-1         | [worker][job:QLsybLy2_break2] [stat_zones] WARNING: no data found for team 'Словенія U20' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QLsybLy2_break2] [stat_zones] WARNING: no data found for team 'Сербія U20' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QLsybLy2_break2] [stat_zones] WARNING: no data found for team 'Словенія U20' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QLsybLy2_break2] [stat_zones] WARNING: no data found for team 'Сербія U20' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QLsybLy2_break2] [stat_zones] WARNING: no data found for team 'Словенія U20' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QLsybLy2_break2] [stat_zones] WARNING: no data found for team 'Сербія U20' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QLsybLy2_break2] __OUTPUT_FILE__:Sloveniya_U20_vs_Serbiya_U20_QLsybLy2.json
+worker-1         | [worker][job:QLsybLy2_break2] [math_script] Processing match QLsybLy2
+worker-1         | [worker][job:QLsybLy2_break2] [math_script] ✓ Result written to /src/data/Sloveniya_U20_vs_Serbiya_U20_QLsybLy2.json
+worker-1         | [worker][job:QLsybLy2_break2] Step 2 exited 0
+worker-1         | [idle_debug] rows_a_raw=35 last_ts_a=1784392200 rows_b_raw=35 last_ts_b=1784401200
+worker-1         | [idle_debug] a[0] mid='j7mzZrP0' dt='18.07.2026 16:30:00'
+worker-1         | [stat_zones] WARNING: no data found for team 'Словенія U20' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Сербія U20' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Словенія U20' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Сербія U20' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Словенія U20' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Сербія U20' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | __OUTPUT_FILE__:Sloveniya_U20_vs_Serbiya_U20_QLsybLy2.json
+worker-1         | [worker][job:QLsybLy2_break2] Step 3 → python3 /src/super_basket_vps_system.py run --match /src/data/Sloveniya_U20_vs_Serbiya_U20_QLsybLy2.json
+worker-1         | [worker][job:QLsybLy2_break2] {
+worker-1         | [worker][job:QLsybLy2_break2]   "output_status": "OK",
+worker-1         | [worker][job:QLsybLy2_break2]   "match_id": "QLsybLy2",
+worker-1         | [worker][job:QLsybLy2_break2]   "stage": "HT",
+worker-1         | [worker][job:QLsybLy2_break2]   "format": "GENERIC_4x10",
+worker-1         | [worker][job:QLsybLy2_break2]   "decision": {
+worker-1         | [worker][job:QLsybLy2_break2]     "action": "PASS",
+worker-1         | [worker][job:QLsybLy2_break2]     "deterministic_action": "PASS",
+worker-1         | [worker][job:QLsybLy2_break2]     "status": "PASS",
+worker-1         | [worker][job:QLsybLy2_break2]     "signal_id": null,
+worker-1         | [worker][job:QLsybLy2_break2]     "market": {
+worker-1         | [worker][job:QLsybLy2_break2]       "market_type": "MATCH_TOTAL",
+worker-1         | [worker][job:QLsybLy2_break2]       "team": null,
+worker-1         | [worker][job:QLsybLy2_break2]       "segment": "MATCH",
+worker-1         | [worker][job:QLsybLy2_break2]       "side": "UNDER",
+worker-1         | [worker][job:QLsybLy2_break2]       "line": 148.5,
+worker-1         | [worker][job:QLsybLy2_break2]       "odds": 1.82,
+worker-1         | [worker][job:QLsybLy2_break2]       "bookmaker": "unknown",
+worker-1         | [worker][job:QLsybLy2_break2]       "offers": [
+worker-1         | [worker][job:QLsybLy2_break2]         {
+worker-1         | [worker][job:QLsybLy2_break2]           "market_id": "mt_148_5_0_under_2",
+worker-1         | [worker][job:QLsybLy2_break2]           "bookmaker": "unknown",
+worker-1         | [worker][job:QLsybLy2_break2]           "odds": 1.82,
+worker-1         | [worker][job:QLsybLy2_break2]           "source_market_id": "mt_148_5_0"
+worker-1         | [worker][job:QLsybLy2_break2]         }
+worker-1         | [worker][job:QLsybLy2_break2]       ]
+worker-1         | [worker][job:QLsybLy2_break2]     },
+worker-1         | [worker][job:QLsybLy2_break2]     "probabilities": {
+worker-1         | [worker][job:QLsybLy2_break2]       "p_hist": 0.4528182891024414,
+worker-1         | [worker][job:QLsybLy2_break2]       "p_scenario": 0.4523723809341066,
+worker-1         | [worker][job:QLsybLy2_break2]       "p_live": 0.5682066101816816,
+worker-1         | [worker][job:QLsybLy2_break2]       "p_raw": 0.5138849176407718,
+worker-1         | [worker][job:QLsybLy2_break2]       "p_rule": 0.5138849176407718,
+worker-1         | [worker][job:QLsybLy2_break2]       "p_calibrated": 0.5138849176407718,
+worker-1         | [worker][job:QLsybLy2_break2]       "p_final": 0.5138849176407718
+worker-1         | [worker][job:QLsybLy2_break2]     },
+worker-1         | [worker][job:QLsybLy2_break2]     "stake": "0%",
+worker-1         | [worker][job:QLsybLy2_break2]     "explanation_uk": "Найкращий доступний варіант має P_final 51.4%; рішення PASS через NO_HARD_CONFLICT.",
+worker-1         | [worker][job:QLsybLy2_break2]     "main_risk_uk": "Наявні дані або гейти не дозволяють безпечно перетворити цей варіант на активну ставку.",
+worker-1         | [worker][job:QLsybLy2_break2]     "trigger_uk": "Потрібні P_final не нижче 65%, відсутність hard blocker та stat-gate не проти.",
+worker-1         | [worker][job:QLsybLy2_break2]     "reason_codes": [
+worker-1         | [worker][job:QLsybLy2_break2]       "NO_HARD_CONFLICT"
+worker-1         | [worker][job:QLsybLy2_break2]     ],
+worker-1         | [worker][job:QLsybLy2_break2]     "gpt_status": "SKIPPED_DETERMINISTIC_PASS",
+worker-1         | [worker][job:QLsybLy2_break2]     "telegram_status": "NOT_ATTEMPTED"
+worker-1         | [worker][job:QLsybLy2_break2]   },
+worker-1         | [worker][job:QLsybLy2_break2]   "gpt_status": "SKIPPED_DETERMINISTIC_PASS",
+worker-1         | [worker][job:QLsybLy2_break2]   "telegram_status": "SKIPPED_PASS"
+worker-1         | [worker][job:QLsybLy2_break2] }
+worker-1         | [worker][job:QLsybLy2_break2] Step 3 exited 0
+worker-1         | [worker][job:QLsybLy2_break2] Step 3 completed — decision: PASS/PASS | gpt: SKIPPED_DETERMINISTIC_PASS | telegram: SKIPPED_PASS
+worker-1         | [worker][job:QLsybLy2_break2] ✓ Full chain completed for match QLsybLy2
+worker-1         | [worker] ✓ Job QLsybLy2_break2 completed. Match: QLsybLy2 | decision: PASS/PASS
+worker-1         | [worker][job:QLsybLy2_break3] Starting analysis — Словенія U20 vs Сербія U20 [ЄВРОПА: Євробаскет U20 - Плей-оф] (scheduled fire: 2026-07-19T17:50:49.253Z)
+worker-1         | [worker][job:QLsybLy2_break3] Step 1 → node /src/match_h2h_export.js --matchId QLsybLy2 --home Sloveniya_U20 --away Serbiya_U20
+worker-1         | [worker][job:QLsybLy2_break3] --- Формат виводу: json ---
+worker-1         | [worker][job:QLsybLy2_break3] --- Отримання fsign через Playwright... ---
+worker-1         | [worker][job:QLsybLy2_break3] seasons: [{"text":"Євробаскет U20 2026","url":"https://www.flashscore.ua/basketball/europe/eurobasket-u20/"},{"text":"Євробаскет U20 2025","url":"https://www.flashscore.ua/basketball/europe/eurobasket-u20-2025/"},{"text":"Євробаскет U20 2024","url":"https://www.flashscore.ua/basketball/europe/eurobasket-u20-2024/"}]
+worker-1         | [worker][job:QLsybLy2_break3] ✔ current_season_start_date: 19.07. 15:30
+worker-1         | [worker][job:QLsybLy2_break3] 
+worker-1         | [worker][job:QLsybLy2_break3] --- Завантаження ліній (betking.com.ua)… ---
+worker-1         | [worker][job:QLsybLy2_break3]   Match: "Словенія U20" vs "Сербія U20"
+worker-1         | [worker][job:QLsybLy2_break3]   liveStatus: "Перерва"
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] homeVariants: ["словенія u20","sloveniya u20"]
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] awayVariants: ["сербія u20","serbiya u20"]
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] Navigating to lobby…
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] Cards count poll 1: 11
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] Cards count poll 2: 34
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] Cards count poll 3: 34
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] Cards count poll 4: 34
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] Card list stable at 34 cards
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] Looking for match card (with scroll)…
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] homeWords: ["sloveniya u20","словенія u20","sloveniya","словенія"]
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] awayWords: ["serbiya u20","сербія u20","serbiya","сербія"]
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] homeQualifiers: ["u20"]
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] awayQualifiers: ["u20"]
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] Looking for match card (with scroll)…
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] ✅ Match card clicked after 0 scrolls — found: ["Словенія U20","Сербія U20"] (strategy: full-variants)
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] Waiting for detail page…
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] Match detail loaded — scraping markets…
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] Tab poll 1: 8 tab(s)
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] Tabs found: Усі, Головні, Конструктор ставок, 2-а половина, 3-тя чверть, 4-та чверть, Пропозиції на команду, Цифрові маркети
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] Specific tabs: 2-а половина, 3-тя чверть, 4-та чверть, Пропозиції на команду, Цифрові маркети
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] Generic  tabs: Усі, Головні
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] Total unique markets after all tabs: 17
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "2-а половина - Останні цифри рахунку"
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Третя чверть - Сума останньої цифри рахунку обох команд"
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Четверта чверть - Сума останньої цифри рахунку обох команд"
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] тотал market: "Тотал (вкл. овертайм)" → cat="match_total"
+worker-1         | [worker][job:QLsybLy2_break3]   [betking] фора  market: "Фора (вкл. овертайм)" → cat="match_handicap"
+worker-1         | [worker][job:QLsybLy2_break3] ✅ Лінії збережено: /src/data/line_result_QLsybLy2.json
+worker-1         | [worker][job:QLsybLy2_break3]   match_1x2: 1 рядків
+worker-1         | [worker][job:QLsybLy2_break3]   match_handicap: 1 рядків
+worker-1         | [worker][job:QLsybLy2_break3]   match_total: 1 рядків
+worker-1         | [worker][job:QLsybLy2_break3]   win_margin: 3 рядків
+worker-1         | [worker][job:QLsybLy2_break3]   last_digit: 121 рядків
+worker-1         | [worker][job:QLsybLy2_break3] Step 1 exited 0
+worker-1         | [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "2-а половина - Останні цифри рахунку"
+worker-1         |   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Третя чверть - Сума останньої цифри рахунку обох команд"
+worker-1         |   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Четверта чверть - Сума останньої цифри рахунку обох команд"
+worker-1         | [worker][job:QLsybLy2_break3] Step 2 → python3 /src/math_script.py /src/data/Sloveniya_U20_vs_Serbiya_U20_QLsybLy2.json /src/data/line_result_QLsybLy2.json
+worker-1         | [worker][job:QLsybLy2_break3] [idle_debug] rows_a_raw=35 last_ts_a=1784392200 rows_b_raw=35 last_ts_b=1784401200
+worker-1         | [worker][job:QLsybLy2_break3] [idle_debug] a[0] mid='j7mzZrP0' dt='18.07.2026 16:30:00'
+worker-1         | [worker][job:QLsybLy2_break3] [stat_zones] WARNING: no data found for team 'Словенія U20' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QLsybLy2_break3] [stat_zones] WARNING: no data found for team 'Сербія U20' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QLsybLy2_break3] [stat_zones] WARNING: no data found for team 'Словенія U20' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QLsybLy2_break3] [stat_zones] WARNING: no data found for team 'Сербія U20' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QLsybLy2_break3] [stat_zones] WARNING: no data found for team 'Словенія U20' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QLsybLy2_break3] [stat_zones] WARNING: no data found for team 'Сербія U20' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [worker][job:QLsybLy2_break3] __OUTPUT_FILE__:Sloveniya_U20_vs_Serbiya_U20_QLsybLy2.json
+worker-1         | [worker][job:QLsybLy2_break3] [math_script] Processing match QLsybLy2
+worker-1         | [worker][job:QLsybLy2_break3] [math_script] ✓ Result written to /src/data/Sloveniya_U20_vs_Serbiya_U20_QLsybLy2.json
+worker-1         | [worker][job:QLsybLy2_break3] Step 2 exited 0
+worker-1         | [idle_debug] rows_a_raw=35 last_ts_a=1784392200 rows_b_raw=35 last_ts_b=1784401200
+worker-1         | [idle_debug] a[0] mid='j7mzZrP0' dt='18.07.2026 16:30:00'
+worker-1         | [stat_zones] WARNING: no data found for team 'Словенія U20' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Сербія U20' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Словенія U20' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Сербія U20' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Словенія U20' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Сербія U20' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | __OUTPUT_FILE__:Sloveniya_U20_vs_Serbiya_U20_QLsybLy2.json
+worker-1         | [worker][job:QLsybLy2_break3] Step 3 → python3 /src/super_basket_vps_system.py run --match /src/data/Sloveniya_U20_vs_Serbiya_U20_QLsybLy2.json
+worker-1         | [worker][job:QLsybLy2_break3] {
+worker-1         | [worker][job:QLsybLy2_break3]   "output_status": "OK",
+worker-1         | [worker][job:QLsybLy2_break3]   "match_id": "QLsybLy2",
+worker-1         | [worker][job:QLsybLy2_break3]   "stage": "HT",
+worker-1         | [worker][job:QLsybLy2_break3]   "format": "GENERIC_4x10",
+worker-1         | [worker][job:QLsybLy2_break3]   "decision": {
+worker-1         | [worker][job:QLsybLy2_break3]     "action": "PASS",
+worker-1         | [worker][job:QLsybLy2_break3]     "deterministic_action": "PASS",
+worker-1         | [worker][job:QLsybLy2_break3]     "status": "PASS",
+worker-1         | [worker][job:QLsybLy2_break3]     "signal_id": null,
+worker-1         | [worker][job:QLsybLy2_break3]     "market": {
+worker-1         | [worker][job:QLsybLy2_break3]       "market_type": "MATCH_TOTAL",
+worker-1         | [worker][job:QLsybLy2_break3]       "team": null,
+worker-1         | [worker][job:QLsybLy2_break3]       "segment": "MATCH",
+worker-1         | [worker][job:QLsybLy2_break3]       "side": "UNDER",
+worker-1         | [worker][job:QLsybLy2_break3]       "line": 148.5,
+worker-1         | [worker][job:QLsybLy2_break3]       "odds": 1.82,
+worker-1         | [worker][job:QLsybLy2_break3]       "bookmaker": "unknown",
+worker-1         | [worker][job:QLsybLy2_break3]       "offers": [
+worker-1         | [worker][job:QLsybLy2_break3]         {
+worker-1         | [worker][job:QLsybLy2_break3]           "market_id": "mt_148_5_0_under_2",
+worker-1         | [worker][job:QLsybLy2_break3]           "bookmaker": "unknown",
+worker-1         | [worker][job:QLsybLy2_break3]           "odds": 1.82,
+worker-1         | [worker][job:QLsybLy2_break3]           "source_market_id": "mt_148_5_0"
+worker-1         | [worker][job:QLsybLy2_break3]         }
+worker-1         | [worker][job:QLsybLy2_break3]       ]
+worker-1         | [worker][job:QLsybLy2_break3]     },
+worker-1         | [worker][job:QLsybLy2_break3]     "probabilities": {
+worker-1         | [worker][job:QLsybLy2_break3]       "p_hist": 0.4528182891024414,
+worker-1         | [worker][job:QLsybLy2_break3]       "p_scenario": 0.4523723809341066,
+worker-1         | [worker][job:QLsybLy2_break3]       "p_live": 0.5682066101816816,
+worker-1         | [worker][job:QLsybLy2_break3]       "p_raw": 0.5138849176407718,
+worker-1         | [worker][job:QLsybLy2_break3]       "p_rule": 0.5138849176407718,
+worker-1         | [worker][job:QLsybLy2_break3]       "p_calibrated": 0.5138849176407718,
+worker-1         | [worker][job:QLsybLy2_break3]       "p_final": 0.5138849176407718
+worker-1         | [worker][job:QLsybLy2_break3]     },
+worker-1         | [worker][job:QLsybLy2_break3]     "stake": "0%",
+worker-1         | [worker][job:QLsybLy2_break3]     "explanation_uk": "Найкращий доступний варіант має P_final 51.4%; рішення PASS через NO_HARD_CONFLICT.",
+worker-1         | [worker][job:QLsybLy2_break3]     "main_risk_uk": "Наявні дані або гейти не дозволяють безпечно перетворити цей варіант на активну ставку.",
+worker-1         | [worker][job:QLsybLy2_break3]     "trigger_uk": "Потрібні P_final не нижче 65%, відсутність hard blocker та stat-gate не проти.",
+worker-1         | [worker][job:QLsybLy2_break3]     "reason_codes": [
+worker-1         | [worker][job:QLsybLy2_break3]       "NO_HARD_CONFLICT"
+worker-1         | [worker][job:QLsybLy2_break3]     ],
+worker-1         | [worker][job:QLsybLy2_break3]     "gpt_status": "SKIPPED_DETERMINISTIC_PASS",
+worker-1         | [worker][job:QLsybLy2_break3]     "telegram_status": "NOT_ATTEMPTED"
+worker-1         | [worker][job:QLsybLy2_break3]   },
+worker-1         | [worker][job:QLsybLy2_break3]   "gpt_status": "SKIPPED_DETERMINISTIC_PASS",
+worker-1         | [worker][job:QLsybLy2_break3]   "telegram_status": "SKIPPED_PASS"
+worker-1         | [worker][job:QLsybLy2_break3] }
+worker-1         | [worker][job:QLsybLy2_break3] Step 3 exited 0
+worker-1         | [worker][job:QLsybLy2_break3] Step 3 completed — decision: PASS/PASS | gpt: SKIPPED_DETERMINISTIC_PASS | telegram: SKIPPED_PASS
+worker-1         | [worker][job:QLsybLy2_break3] ✓ Full chain completed for match QLsybLy2
+worker-1         | [worker] ✓ Job QLsybLy2_break3 completed. Match: QLsybLy2 | decision: PASS/PASS
+worker-1         | [worker][job:h4HTzz9F_break2] Starting analysis — Даллас Вінгз Ж vs Лос-Анджелес Спаркс Ж [США: WNBA] (scheduled fire: 2026-07-19T17:57:26.447Z)
+worker-1         | [worker][job:h4HTzz9F_break2] Step 1 → node /src/match_h2h_export.js --matchId h4HTzz9F --home Dallas_Vingz_Zh --away Los-Andzheles_Sparks_Zh
+worker-1         | [worker][job:h4HTzz9F_break2] --- Формат виводу: json ---
+worker-1         | [worker][job:h4HTzz9F_break2] --- Отримання fsign через Playwright... ---
+worker-1         | [worker][job:h4HTzz9F_break2] seasons: [{"text":"WNBA 2026","url":"https://www.flashscore.ua/basketball/usa/wnba/"},{"text":"WNBA 2025","url":"https://www.flashscore.ua/basketball/usa/wnba-2025/"},{"text":"WNBA 2024","url":"https://www.flashscore.ua/basketball/usa/wnba-2024/"}]
+worker-1         | [worker][job:h4HTzz9F_break2] ✔ current_season_start_date: 02.07. 23:30
+worker-1         | [worker][job:h4HTzz9F_break2] 
+worker-1         | [worker][job:h4HTzz9F_break2] --- Завантаження ліній (betking.com.ua)… ---
+worker-1         | [worker][job:h4HTzz9F_break2]   Match: "Даллас Вінгз Ж" vs "Лос-Анджелес Спаркс Ж"
+worker-1         | [worker][job:h4HTzz9F_break2]   liveStatus: "Перерва"
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] homeVariants: ["даллас вінгз ж","dallas vingz zh"]
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] awayVariants: ["лос-анджелес спаркс ж","los-andzheles sparks zh"]
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] Navigating to lobby…
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] Cards count poll 1: 11
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] Cards count poll 2: 34
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] Cards count poll 3: 34
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] Cards count poll 4: 34
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] Card list stable at 34 cards
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] Looking for match card (with scroll)…
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] homeWords: ["dallas vingz zh","даллас вінгз ж","даллас","dallas","вінгз","vingz"]
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] awayWords: ["los-andzheles sparks zh","лос-анджелес спаркс ж","andzheles","анджелес","спаркс","sparks"]
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] homeQualifiers: []
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] awayQualifiers: []
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] Looking for match card (with scroll)…
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] ✅ Match card clicked after 0 scrolls — found: ["Даллас Вінгз Ж","Лос-Анджелес Спаркс Ж"] (strategy: full-variants)
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] Waiting for detail page…
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] Match detail loaded — scraping markets…
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] Tab poll 1: 9 tab(s)
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] Tabs found: Усі, Головні, Конструктор ставок, Мульти ставки, 2-а половина, 3-тя чверть, 4-та чверть, Пропозиції на команду, Цифрові маркети
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] Specific tabs: Мульти ставки, 2-а половина, 3-тя чверть, 4-та чверть, Пропозиції на команду, Цифрові маркети
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] Generic  tabs: Усі, Головні
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] Total unique markets after all tabs: 23
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] Unclassified market: "SGP - У Q3 Даллас Вінгз Ж набере більше очок + Jessica Shepard більше 4.5 очок + Jessica Shepard більше 2.5 підбирань"
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] Unclassified market: "SGP - У Q3 Даллас Вінгз Ж набере більше очок + Paige Bueckers більше 5.5 очок + Paige Bueckers більше 1.5 підбирань"
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] Unclassified market: "SGP - У Q3  Лос-Анджелес Спаркс Ж набере більше очок + Nneka Ogwumike більше 4.5 очок + Nneka Ogwumike більше 2.5 підбирань"
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "2 половина - непарна/парна кількість голів"
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "2-а половина - Останні цифри рахунку"
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] фора  market: "Третя чверть - фора" → cat="quarter_handicap_q3"
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] тотал market: "Третя чверть - тотал" → cat="quarter_total_q3"
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] тотал market: "Третя чверть - Даллас Вінгз Ж тотал" → cat="quarter_total_q3"
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Четверта чверть - Сума останньої цифри рахунку обох команд"
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] тотал market: "Тотал (вкл. овертайм)" → cat="match_total"
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] фора  market: "Фора (вкл. овертайм)" → cat="match_handicap"
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] тотал market: "Даллас Вінгз Ж Тотал очків (вкл. овертайм)" → cat="ind_total"
+worker-1         | [worker][job:h4HTzz9F_break2]   [betking] тотал market: "Лос-Анджелес Спаркс Ж Тотал очків (вкл. овертайм)" → cat="ind_total"
+worker-1         | [worker][job:h4HTzz9F_break2] ✅ Лінії збережено: /src/data/line_result_h4HTzz9F.json
+worker-1         | [worker][job:h4HTzz9F_break2]   match_1x2: 1 рядків
+worker-1         | [worker][job:h4HTzz9F_break2]   match_handicap: 1 рядків
+worker-1         | [worker][job:h4HTzz9F_break2]   quarter_handicap: 2 рядків
+worker-1         | [worker][job:h4HTzz9F_break2]   match_total: 1 рядків
+worker-1         | [worker][job:h4HTzz9F_break2]   quarter_total: 4 рядків
+worker-1         | [worker][job:h4HTzz9F_break2]   quarter_dnb: 1 рядків
+worker-1         | [worker][job:h4HTzz9F_break2]   quarter_1x2: 1 рядків
+worker-1         | [worker][job:h4HTzz9F_break2]   last_digit: 80 рядків
+worker-1         | [worker][job:h4HTzz9F_break2]   home_ind_total: 3 рядків
+worker-1         | [worker][job:h4HTzz9F_break2]   away_ind_total: 3 рядків
+worker-1         | [worker][job:h4HTzz9F_break2] Step 1 exited 0
+worker-1         | [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "2 половина - непарна/парна кількість голів"
+worker-1         |   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "2-а половина - Останні цифри рахунку"
+worker-1         |   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Четверта чверть - Сума останньої цифри рахунку обох команд"
+worker-1         | [worker][job:h4HTzz9F_break2] Step 2 → python3 /src/math_script.py /src/data/Dallas_Vingz_Zh_vs_Los-Andzheles_Sparks_Zh_h4HTzz9F.json /src/data/line_result_h4HTzz9F.json
+worker-1         | [worker][job:h4HTzz9F_break2] [idle_debug] rows_a_raw=35 last_ts_a=1783897200 rows_b_raw=35 last_ts_b=1784331000
+worker-1         | [worker][job:h4HTzz9F_break2] [idle_debug] a[0] mid='Ya8NGg0n' dt='12.07.2026 23:00:00'
+worker-1         | [worker][job:h4HTzz9F_break2] [stat_zones] WARNING: no data found for team 'Даллас Вінгз Ж' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [worker][job:h4HTzz9F_break2] [stat_zones] WARNING: no data found for team 'Лос-Анджелес Спаркс Ж' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [worker][job:h4HTzz9F_break2] [stat_zones] WARNING: no data found for team 'Даллас Вінгз Ж' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [worker][job:h4HTzz9F_break2] [stat_zones] WARNING: no data found for team 'Лос-Анджелес Спаркс Ж' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [worker][job:h4HTzz9F_break2] [stat_zones] WARNING: no data found for team 'Даллас Вінгз Ж' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [worker][job:h4HTzz9F_break2] [stat_zones] WARNING: no data found for team 'Лос-Анджелес Спаркс Ж' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [worker][job:h4HTzz9F_break2] __OUTPUT_FILE__:Dallas_Vingz_Zh_vs_Los-Andzheles_Sparks_Zh_h4HTzz9F.json
+worker-1         | [worker][job:h4HTzz9F_break2] [math_script] Processing match h4HTzz9F
+worker-1         | [worker][job:h4HTzz9F_break2] [math_script] ✓ Result written to /src/data/Dallas_Vingz_Zh_vs_Los-Andzheles_Sparks_Zh_h4HTzz9F.json
+worker-1         | [worker][job:h4HTzz9F_break2] Step 2 exited 0
+worker-1         | [idle_debug] rows_a_raw=35 last_ts_a=1783897200 rows_b_raw=35 last_ts_b=1784331000
+worker-1         | [idle_debug] a[0] mid='Ya8NGg0n' dt='12.07.2026 23:00:00'
+worker-1         | [stat_zones] WARNING: no data found for team 'Даллас Вінгз Ж' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Лос-Анджелес Спаркс Ж' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Даллас Вінгз Ж' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Лос-Анджелес Спаркс Ж' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Даллас Вінгз Ж' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Лос-Анджелес Спаркс Ж' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | __OUTPUT_FILE__:Dallas_Vingz_Zh_vs_Los-Andzheles_Sparks_Zh_h4HTzz9F.json
+worker-1         | [worker][job:h4HTzz9F_break2] Step 3 → python3 /src/super_basket_vps_system.py run --match /src/data/Dallas_Vingz_Zh_vs_Los-Andzheles_Sparks_Zh_h4HTzz9F.json
+worker-1         | [worker][job:h4HTzz9F_break2] {
+worker-1         | [worker][job:h4HTzz9F_break2]   "output_status": "OK",
+worker-1         | [worker][job:h4HTzz9F_break2]   "match_id": "h4HTzz9F",
+worker-1         | [worker][job:h4HTzz9F_break2]   "stage": "HT",
+worker-1         | [worker][job:h4HTzz9F_break2]   "format": "GENERIC_4x12",
+worker-1         | [worker][job:h4HTzz9F_break2]   "decision": {
+worker-1         | [worker][job:h4HTzz9F_break2]     "action": "PASS",
+worker-1         | [worker][job:h4HTzz9F_break2]     "deterministic_action": "PASS",
+worker-1         | [worker][job:h4HTzz9F_break2]     "status": "PASS",
+worker-1         | [worker][job:h4HTzz9F_break2]     "signal_id": null,
+worker-1         | [worker][job:h4HTzz9F_break2]     "market": {
+worker-1         | [worker][job:h4HTzz9F_break2]       "market_type": "MATCH_TOTAL",
+worker-1         | [worker][job:h4HTzz9F_break2]       "team": null,
+worker-1         | [worker][job:h4HTzz9F_break2]       "segment": "MATCH",
+worker-1         | [worker][job:h4HTzz9F_break2]       "side": "UNDER",
+worker-1         | [worker][job:h4HTzz9F_break2]       "line": 181.5,
+worker-1         | [worker][job:h4HTzz9F_break2]       "odds": 1.85,
+worker-1         | [worker][job:h4HTzz9F_break2]       "bookmaker": "unknown",
+worker-1         | [worker][job:h4HTzz9F_break2]       "offers": [
+worker-1         | [worker][job:h4HTzz9F_break2]         {
+worker-1         | [worker][job:h4HTzz9F_break2]           "market_id": "mt_181_5_0_under_2",
+worker-1         | [worker][job:h4HTzz9F_break2]           "bookmaker": "unknown",
+worker-1         | [worker][job:h4HTzz9F_break2]           "odds": 1.85,
+worker-1         | [worker][job:h4HTzz9F_break2]           "source_market_id": "mt_181_5_0"
+worker-1         | [worker][job:h4HTzz9F_break2]         }
+worker-1         | [worker][job:h4HTzz9F_break2]       ]
+worker-1         | [worker][job:h4HTzz9F_break2]     },
+worker-1         | [worker][job:h4HTzz9F_break2]     "probabilities": {
+worker-1         | [worker][job:h4HTzz9F_break2]       "p_hist": 0.5,
+worker-1         | [worker][job:h4HTzz9F_break2]       "p_scenario": 0.5,
+worker-1         | [worker][job:h4HTzz9F_break2]       "p_live": 0.6216650735800737,
+worker-1         | [worker][job:h4HTzz9F_break2]       "p_raw": 0.5644824889974391,
+worker-1         | [worker][job:h4HTzz9F_break2]       "p_rule": 0.5644824889974391,
+worker-1         | [worker][job:h4HTzz9F_break2]       "p_calibrated": 0.5644824889974391,
+worker-1         | [worker][job:h4HTzz9F_break2]       "p_final": 0.5644824889974391
+worker-1         | [worker][job:h4HTzz9F_break2]     },
+worker-1         | [worker][job:h4HTzz9F_break2]     "stake": "0%",
+worker-1         | [worker][job:h4HTzz9F_break2]     "explanation_uk": "Найкращий доступний варіант має P_final 56.4%; рішення PASS через NO_SAME_FORMAT_HISTORY.",
+worker-1         | [worker][job:h4HTzz9F_break2]     "main_risk_uk": "Наявні дані або гейти не дозволяють безпечно перетворити цей варіант на активну ставку.",
+worker-1         | [worker][job:h4HTzz9F_break2]     "trigger_uk": "Потрібні P_final не нижче 65%, відсутність hard blocker та stat-gate не проти.",
+worker-1         | [worker][job:h4HTzz9F_break2]     "reason_codes": [
+worker-1         | [worker][job:h4HTzz9F_break2]       "NO_SAME_FORMAT_HISTORY"
+worker-1         | [worker][job:h4HTzz9F_break2]     ],
+worker-1         | [worker][job:h4HTzz9F_break2]     "gpt_status": "SKIPPED_DETERMINISTIC_PASS",
+worker-1         | [worker][job:h4HTzz9F_break2]     "telegram_status": "NOT_ATTEMPTED"
+worker-1         | [worker][job:h4HTzz9F_break2]   },
+worker-1         | [worker][job:h4HTzz9F_break2]   "gpt_status": "SKIPPED_DETERMINISTIC_PASS",
+worker-1         | [worker][job:h4HTzz9F_break2]   "telegram_status": "SKIPPED_PASS"
+worker-1         | [worker][job:h4HTzz9F_break2] }
+worker-1         | [worker][job:h4HTzz9F_break2] Step 3 exited 0
+worker-1         | [worker][job:h4HTzz9F_break2] Step 3 completed — decision: PASS/PASS | gpt: SKIPPED_DETERMINISTIC_PASS | telegram: SKIPPED_PASS
+worker-1         | [worker][job:h4HTzz9F_break2] ✓ Full chain completed for match h4HTzz9F
+worker-1         | [worker] ✓ Job h4HTzz9F_break2 completed. Match: h4HTzz9F | decision: PASS/PASS
+worker-1         | [worker][job:h4HTzz9F_break3] Starting analysis — Даллас Вінгз Ж vs Лос-Анджелес Спаркс Ж [США: WNBA] (scheduled fire: 2026-07-19T17:59:55.997Z)
+worker-1         | [worker][job:h4HTzz9F_break3] Step 1 → node /src/match_h2h_export.js --matchId h4HTzz9F --home Dallas_Vingz_Zh --away Los-Andzheles_Sparks_Zh
+worker-1         | [worker][job:h4HTzz9F_break3] --- Формат виводу: json ---
+worker-1         | [worker][job:h4HTzz9F_break3] --- Отримання fsign через Playwright... ---
+worker-1         | [worker][job:h4HTzz9F_break3] seasons: [{"text":"WNBA 2026","url":"https://www.flashscore.ua/basketball/usa/wnba/"},{"text":"WNBA 2025","url":"https://www.flashscore.ua/basketball/usa/wnba-2025/"},{"text":"WNBA 2024","url":"https://www.flashscore.ua/basketball/usa/wnba-2024/"}]
+worker-1         | [worker][job:h4HTzz9F_break3] ✔ current_season_start_date: 02.07. 23:30
+worker-1         | [worker][job:h4HTzz9F_break3] 
+worker-1         | [worker][job:h4HTzz9F_break3] --- Завантаження ліній (betking.com.ua)… ---
+worker-1         | [worker][job:h4HTzz9F_break3]   Match: "Даллас Вінгз Ж" vs "Лос-Анджелес Спаркс Ж"
+worker-1         | [worker][job:h4HTzz9F_break3]   liveStatus: "Перерва"
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] homeVariants: ["даллас вінгз ж","dallas vingz zh"]
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] awayVariants: ["лос-анджелес спаркс ж","los-andzheles sparks zh"]
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] Navigating to lobby…
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] Cards count poll 1: 11
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] Cards count poll 2: 35
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] Cards count poll 3: 35
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] Cards count poll 4: 35
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] Card list stable at 35 cards
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] Looking for match card (with scroll)…
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] homeWords: ["dallas vingz zh","даллас вінгз ж","даллас","dallas","вінгз","vingz"]
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] awayWords: ["los-andzheles sparks zh","лос-анджелес спаркс ж","andzheles","анджелес","спаркс","sparks"]
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] homeQualifiers: []
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] awayQualifiers: []
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] Looking for match card (with scroll)…
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] ✅ Match card clicked after 0 scrolls — found: ["Даллас Вінгз Ж","Лос-Анджелес Спаркс Ж"] (strategy: full-variants)
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] Waiting for detail page…
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] Match detail loaded — scraping markets…
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] Tab poll 1: 9 tab(s)
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] Tabs found: Усі, Головні, Конструктор ставок, Мульти ставки, 2-а половина, 3-тя чверть, 4-та чверть, Пропозиції на команду, Цифрові маркети
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] Specific tabs: Мульти ставки, 2-а половина, 3-тя чверть, 4-та чверть, Пропозиції на команду, Цифрові маркети
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] Generic  tabs: Усі, Головні
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] Total unique markets after all tabs: 23
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] Unclassified market: "SGP - У Q3 Даллас Вінгз Ж набере більше очок + Jessica Shepard більше 4.5 очок + Jessica Shepard більше 2.5 підбирань"
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] Unclassified market: "SGP - У Q3 Даллас Вінгз Ж набере більше очок + Paige Bueckers більше 5.5 очок + Paige Bueckers більше 1.5 підбирань"
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] Unclassified market: "SGP - У Q3  Лос-Анджелес Спаркс Ж набере більше очок + Nneka Ogwumike більше 4.5 очок + Nneka Ogwumike більше 2.5 підбирань"
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] фора  market: "Третя чверть - фора" → cat="quarter_handicap_q3"
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] тотал market: "Третя чверть - тотал" → cat="quarter_total_q3"
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "2 половина - непарна/парна кількість голів"
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "2-а половина - Останні цифри рахунку"
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Четверта чверть - Сума останньої цифри рахунку обох команд"
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] тотал market: "Третя чверть - Даллас Вінгз Ж тотал" → cat="quarter_total_q3"
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] тотал market: "Тотал (вкл. овертайм)" → cat="match_total"
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] фора  market: "Фора (вкл. овертайм)" → cat="match_handicap"
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] тотал market: "Даллас Вінгз Ж Тотал очків (вкл. овертайм)" → cat="ind_total"
+worker-1         | [worker][job:h4HTzz9F_break3]   [betking] тотал market: "Лос-Анджелес Спаркс Ж Тотал очків (вкл. овертайм)" → cat="ind_total"
+worker-1         | [worker][job:h4HTzz9F_break3] ✅ Лінії збережено: /src/data/line_result_h4HTzz9F.json
+worker-1         | [worker][job:h4HTzz9F_break3]   match_1x2: 1 рядків
+worker-1         | [worker][job:h4HTzz9F_break3]   match_handicap: 1 рядків
+worker-1         | [worker][job:h4HTzz9F_break3]   quarter_handicap: 2 рядків
+worker-1         | [worker][job:h4HTzz9F_break3]   match_total: 1 рядків
+worker-1         | [worker][job:h4HTzz9F_break3]   quarter_total: 4 рядків
+worker-1         | [worker][job:h4HTzz9F_break3]   quarter_dnb: 1 рядків
+worker-1         | [worker][job:h4HTzz9F_break3]   quarter_1x2: 1 рядків
+worker-1         | [worker][job:h4HTzz9F_break3]   last_digit: 80 рядків
+worker-1         | [worker][job:h4HTzz9F_break3]   home_ind_total: 3 рядків
+worker-1         | [worker][job:h4HTzz9F_break3]   away_ind_total: 3 рядків
+worker-1         | [worker][job:h4HTzz9F_break3] Step 1 exited 0
+worker-1         | [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "2 половина - непарна/парна кількість голів"
+worker-1         |   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "2-а половина - Останні цифри рахунку"
+worker-1         |   [betking] ⚠ UNCLASSIFIED (тотал/чверт/полов): "Четверта чверть - Сума останньої цифри рахунку обох команд"
+worker-1         | [worker][job:h4HTzz9F_break3] Step 2 → python3 /src/math_script.py /src/data/Dallas_Vingz_Zh_vs_Los-Andzheles_Sparks_Zh_h4HTzz9F.json /src/data/line_result_h4HTzz9F.json
+worker-1         | [worker][job:h4HTzz9F_break3] [idle_debug] rows_a_raw=35 last_ts_a=1783897200 rows_b_raw=35 last_ts_b=1784331000
+worker-1         | [worker][job:h4HTzz9F_break3] [idle_debug] a[0] mid='Ya8NGg0n' dt='12.07.2026 23:00:00'
+worker-1         | [worker][job:h4HTzz9F_break3] [stat_zones] WARNING: no data found for team 'Даллас Вінгз Ж' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [worker][job:h4HTzz9F_break3] [stat_zones] WARNING: no data found for team 'Лос-Анджелес Спаркс Ж' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [worker][job:h4HTzz9F_break3] [stat_zones] WARNING: no data found for team 'Даллас Вінгз Ж' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [worker][job:h4HTzz9F_break3] [stat_zones] WARNING: no data found for team 'Лос-Анджелес Спаркс Ж' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [worker][job:h4HTzz9F_break3] [stat_zones] WARNING: no data found for team 'Даллас Вінгз Ж' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [worker][job:h4HTzz9F_break3] [stat_zones] WARNING: no data found for team 'Лос-Анджелес Спаркс Ж' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [worker][job:h4HTzz9F_break3] __OUTPUT_FILE__:Dallas_Vingz_Zh_vs_Los-Andzheles_Sparks_Zh_h4HTzz9F.json
+worker-1         | [worker][job:h4HTzz9F_break3] [math_script] Processing match h4HTzz9F
+worker-1         | [worker][job:h4HTzz9F_break3] [math_script] ✓ Result written to /src/data/Dallas_Vingz_Zh_vs_Los-Andzheles_Sparks_Zh_h4HTzz9F.json
+worker-1         | [worker][job:h4HTzz9F_break3] Step 2 exited 0
+worker-1         | [idle_debug] rows_a_raw=35 last_ts_a=1783897200 rows_b_raw=35 last_ts_b=1784331000
+worker-1         | [idle_debug] a[0] mid='Ya8NGg0n' dt='12.07.2026 23:00:00'
+worker-1         | [stat_zones] WARNING: no data found for team 'Даллас Вінгз Ж' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Лос-Анджелес Спаркс Ж' in team_scope_coverage (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Даллас Вінгз Ж' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Лос-Анджелес Спаркс Ж' in team_relative_zone_thresholds (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Даллас Вінгз Ж' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | [stat_zones] WARNING: no data found for team 'Лос-Анджелес Спаркс Ж' in audit_cases (exact match and single-word fallback both empty).
+worker-1         | __OUTPUT_FILE__:Dallas_Vingz_Zh_vs_Los-Andzheles_Sparks_Zh_h4HTzz9F.json
+worker-1         | [worker][job:h4HTzz9F_break3] Step 3 → python3 /src/super_basket_vps_system.py run --match /src/data/Dallas_Vingz_Zh_vs_Los-Andzheles_Sparks_Zh_h4HTzz9F.json
+worker-1         | [worker][job:h4HTzz9F_break3] {
+worker-1         | [worker][job:h4HTzz9F_break3]   "output_status": "OK",
+worker-1         | [worker][job:h4HTzz9F_break3]   "match_id": "h4HTzz9F",
+worker-1         | [worker][job:h4HTzz9F_break3]   "stage": "HT",
+worker-1         | [worker][job:h4HTzz9F_break3]   "format": "GENERIC_4x12",
+worker-1         | [worker][job:h4HTzz9F_break3]   "decision": {
+worker-1         | [worker][job:h4HTzz9F_break3]     "action": "PASS",
+worker-1         | [worker][job:h4HTzz9F_break3]     "deterministic_action": "PASS",
+worker-1         | [worker][job:h4HTzz9F_break3]     "status": "PASS",
+worker-1         | [worker][job:h4HTzz9F_break3]     "signal_id": null,
+worker-1         | [worker][job:h4HTzz9F_break3]     "market": {
+worker-1         | [worker][job:h4HTzz9F_break3]       "market_type": "MATCH_TOTAL",
+worker-1         | [worker][job:h4HTzz9F_break3]       "team": null,
+worker-1         | [worker][job:h4HTzz9F_break3]       "segment": "MATCH",
+worker-1         | [worker][job:h4HTzz9F_break3]       "side": "UNDER",
+worker-1         | [worker][job:h4HTzz9F_break3]       "line": 181.5,
+worker-1         | [worker][job:h4HTzz9F_break3]       "odds": 1.85,
+worker-1         | [worker][job:h4HTzz9F_break3]       "bookmaker": "unknown",
+worker-1         | [worker][job:h4HTzz9F_break3]       "offers": [
+worker-1         | [worker][job:h4HTzz9F_break3]         {
+worker-1         | [worker][job:h4HTzz9F_break3]           "market_id": "mt_181_5_0_under_2",
+worker-1         | [worker][job:h4HTzz9F_break3]           "bookmaker": "unknown",
+worker-1         | [worker][job:h4HTzz9F_break3]           "odds": 1.85,
+worker-1         | [worker][job:h4HTzz9F_break3]           "source_market_id": "mt_181_5_0"
+worker-1         | [worker][job:h4HTzz9F_break3]         }
+worker-1         | [worker][job:h4HTzz9F_break3]       ]
+worker-1         | [worker][job:h4HTzz9F_break3]     },
+worker-1         | [worker][job:h4HTzz9F_break3]     "probabilities": {
+worker-1         | [worker][job:h4HTzz9F_break3]       "p_hist": 0.5,
+worker-1         | [worker][job:h4HTzz9F_break3]       "p_scenario": 0.5,
+worker-1         | [worker][job:h4HTzz9F_break3]       "p_live": 0.6216650735800737,
+worker-1         | [worker][job:h4HTzz9F_break3]       "p_raw": 0.5644824889974391,
+worker-1         | [worker][job:h4HTzz9F_break3]       "p_rule": 0.5644824889974391,
+worker-1         | [worker][job:h4HTzz9F_break3]       "p_calibrated": 0.5644824889974391,
+worker-1         | [worker][job:h4HTzz9F_break3]       "p_final": 0.5644824889974391
+worker-1         | [worker][job:h4HTzz9F_break3]     },
+worker-1         | [worker][job:h4HTzz9F_break3]     "stake": "0%",
+worker-1         | [worker][job:h4HTzz9F_break3]     "explanation_uk": "Найкращий доступний варіант має P_final 56.4%; рішення PASS через NO_SAME_FORMAT_HISTORY.",
+worker-1         | [worker][job:h4HTzz9F_break3]     "main_risk_uk": "Наявні дані або гейти не дозволяють безпечно перетворити цей варіант на активну ставку.",
+worker-1         | [worker][job:h4HTzz9F_break3]     "trigger_uk": "Потрібні P_final не нижче 65%, відсутність hard blocker та stat-gate не проти.",
+worker-1         | [worker][job:h4HTzz9F_break3]     "reason_codes": [
+worker-1         | [worker][job:h4HTzz9F_break3]       "NO_SAME_FORMAT_HISTORY"
+worker-1         | [worker][job:h4HTzz9F_break3]     ],
+worker-1         | [worker][job:h4HTzz9F_break3]     "gpt_status": "SKIPPED_DETERMINISTIC_PASS",
+worker-1         | [worker][job:h4HTzz9F_break3]     "telegram_status": "NOT_ATTEMPTED"
+worker-1         | [worker][job:h4HTzz9F_break3]   },
+worker-1         | [worker][job:h4HTzz9F_break3]   "gpt_status": "SKIPPED_DETERMINISTIC_PASS",
+worker-1         | [worker][job:h4HTzz9F_break3]   "telegram_status": "SKIPPED_PASS"
+worker-1         | [worker][job:h4HTzz9F_break3] }
+worker-1         | [worker][job:h4HTzz9F_break3] Step 3 exited 0
+worker-1         | [worker][job:h4HTzz9F_break3] Step 3 completed — decision: PASS/PASS | gpt: SKIPPED_DETERMINISTIC_PASS | telegram: SKIPPED_PASS
+worker-1         | [worker][job:h4HTzz9F_break3] ✓ Full chain completed for match h4HTzz9F
+worker-1         | [worker] ✓ Job h4HTzz9F_break3 completed. Match: h4HTzz9F | decision: PASS/PASS
