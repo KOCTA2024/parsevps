@@ -83,7 +83,7 @@ MIN_VALID_MATCHES = 30
 # JSON-файла. Расчёты (process_match и т.д.) по-прежнему используют ВСЮ историю
 # из parsed["team_a_hist"] / parsed["team_b_hist"] — лимит применяется только
 # на этапе сборки raw_data для вывода.
-HIST_OUTPUT_LIMIT = 20
+HIST_OUTPUT_LIMIT = 35
 
 
 def _sanitize_half_total_lines(entries: list, home_ind_entries: list, away_ind_entries: list) -> tuple[list, list]:
@@ -138,10 +138,26 @@ def load_lines(path: str) -> dict:
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        home_ind_total = data.get("home_ind_total", [])
-        away_ind_total = data.get("away_ind_total", [])
+        # Preserve the parser buckets and numeric lines exactly as received.
+        # The bookmaker name lives in top-level meta.source in line_result.json,
+        # while the final calculator reads it from each row. Attach it without
+        # changing scope, line or odds.
+        source_name = str((data.get("meta") or {}).get("source") or BOOKMAKER_NAME).upper()
+
+        def _rows(bucket: str) -> list:
+            result = []
+            for raw_row in data.get(bucket, []) or []:
+                if not isinstance(raw_row, dict):
+                    continue
+                row = dict(raw_row)
+                row.setdefault("bookmaker", source_name)
+                result.append(row)
+            return result
+
+        home_ind_total = _rows("home_ind_total")
+        away_ind_total = _rows("away_ind_total")
         half_total_clean, half_total_excluded = _sanitize_half_total_lines(
-            data.get("half_total", []), home_ind_total, away_ind_total,
+            _rows("half_total"), home_ind_total, away_ind_total,
         )
         if half_total_excluded:
             print(
@@ -152,12 +168,12 @@ def load_lines(path: str) -> dict:
                 file=sys.stderr,
             )
         return {
-            "match_total":    data.get("match_total", []),
+            "match_total":    _rows("match_total"),
             "half_total":     half_total_clean,
-            "quarter_total":  data.get("quarter_total", []),
-            "match_handicap": data.get("match_handicap", []),
-            "match_1x2":      data.get("match_1x2", []),
-            "other":          data.get("other", []),
+            "quarter_total":  _rows("quarter_total"),
+            "match_handicap": _rows("match_handicap"),
+            "match_1x2":      _rows("match_1x2"),
+            "other":          _rows("other"),
             "home_ind_total": home_ind_total,
             "away_ind_total": away_ind_total,
         }
@@ -6786,6 +6802,14 @@ def enrich_raw_game(rec: dict) -> dict:
         period_ru = PERIOD.get(m.group("period").lower(), m.group("period"))
         result[key + "__label"] = f"{side_ru}: {stat_ru} — {period_ru}"
 
+    # v5 history items carry explicit per-game rules under _v5_rules.
+    # The final calculator looks for row["rules"], so expose the same metadata
+    # without guessing for legacy rows.
+    if not isinstance(result.get("rules"), dict):
+        explicit_rules = rec.get("_v5_rules")
+        if isinstance(explicit_rules, dict) and explicit_rules:
+            result["rules"] = dict(explicit_rules)
+
     return result
 
 
@@ -7379,6 +7403,27 @@ def build_result_json(match_result: dict, lines_data: dict = None,
     return {
         # ── ТЗ §11: Required top-level keys ─────────────────────────────
         "schema_version": "basketball_history_zones_v1.1",
+
+        # ── FINAL CALCULATOR COMPATIBILITY CONTRACT ─────────────────────
+        # super_basket_vps_system.py reads these blocks from the TOP LEVEL.
+        # Keep the newer compact logic/* structure below as well.
+        "match": match_block,
+        "data_quality": _top_data_quality,
+        "bookmaker_lines": bookmaker_lines,
+        "live_team_stats": live_team_stats,
+        "live_boxscore": live_boxscore,
+        "projections": projections,
+        "history_by_exact_line": history_by_exact_line,
+        "scenario_patterns_by_line": scenario_patterns_by_line,
+        "line_evaluations": line_evaluations,
+        "checkpoint_matrices": checkpoint_matrices,
+        "quarter_result_profile": quarter_result_profile,
+        "stat_conditioned_line_profiles": stat_conditioned_line_profiles,
+        "stat_alignment": stat_alignment,
+        "stat_zones": stat_zones,
+        "history_zones": _history_zones_clean,
+        "markets_evaluation": markets_evaluation,
+        "final_verdict": final_verdict,
 
         # ── rules — формат матча (для _format_info() в super_basket) ────
         "rules": {
@@ -8040,8 +8085,18 @@ def main():
         print(f"[math_script] ERROR: Invalid JSON — {e}", file=sys.stderr)
         sys.exit(1)
 
-    # Load lines for build_result_json (already validated above)
-    lines_data = load_lines(line_result_path)
+    # Load lines for build_result_json.
+    # In single-file v5 mode bookmaker offers live under bookmaker_offers,
+    # so load_lines() would incorrectly return empty arrays.
+    try:
+        with open(line_result_path, "r", encoding="utf-8") as _lf:
+            _line_source = json.load(_lf)
+    except (OSError, json.JSONDecodeError):
+        _line_source = None
+    if is_v5_parser_json(_line_source):
+        lines_data = build_lines_data_from_v5(_line_source)
+    else:
+        lines_data = load_lines(line_result_path)
 
     # ── team_relative_stat_zones (02_team_relative_stat_zones_COMPACT.json) ──
     # Looked up in ./src (same directory as this script). Filtered per-match
@@ -8078,10 +8133,13 @@ def main():
             for mr, p, rb in results
         ]
 
+    # Write the FULL calculator payload directly.
+    # IMPORTANT: compress_result.py is intentionally NOT imported or called.
+    # The compressor previously sat between the bookmaker line file and the
+    # final calculator and could alter/drop fields or line buckets. The final
+    # calculator must receive the exact, uncompressed contract produced above.
     output_path = Path(h2h_path)
     with open(output_path, "w", encoding="utf-8") as f:
-        from compress_result import compress
-        merged = compress(merged)
         json.dump(merged, f, ensure_ascii=False, separators=(",", ":"))
 
     print(f"[math_script] ✓ Result written to {output_path}")

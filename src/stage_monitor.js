@@ -103,14 +103,15 @@ const MATCHES_FILE = process.env.MATCHES_FILE
 // летня ліга NBA непомітно потрапляє під дефолтні (менші) офсети.
 const NBA_PATTERN = /\bNBA\b|НБА|12[\s-]?min/i;
 
-const POLL_INTERVAL_MS   = Number(process.env.STAGE_POLL_INTERVAL_MS) || 30_000;      // 30 с: не пропускати коротку Q1/Q3 паузу
+const POLL_INTERVAL_MS   = Number(process.env.STAGE_POLL_INTERVAL_MS) || 60_000;      // 1 хв
 // Було 15 хв — зарано здавались, якщо матч стартував із запізненням щодо
 // kickoff у фіді (реальний Q1/пауза розтягувались довше вікна). Підняли дефолт.
 // Було 25 хв. Тепер, коли час у 'not_started' більше не витрачає це вікно
 // (див. NOT_STARTED_MAX_WAIT_MS нижче), цей таймаут рахується вже ВІД
 // реального старту матчу — тож підняли трохи вище як запас на лаг фіда
 // в детекції break/stall самого Q1↔Q2 чи Q3↔Q4 переходу.
-const CHECK_WINDOW_MS    = Number(process.env.STAGE_CHECK_WINDOW_MS)  || 35 * 60_000; // скільки чекати перерву в межах чекпоінта
+const CHECK_WINDOW_MS    = Number(process.env.STAGE_CHECK_WINDOW_MS)  || 35 * 60_000; // soft window; продовжується, поки реальна гра ще не дійшла до target boundary
+const HARD_CHECK_WINDOW_MS = Number(process.env.STAGE_HARD_WINDOW_MS) || 3 * 60 * 60_000; // аварійний максимум після фактичного старту live-спостереження
 const RESCAN_INTERVAL_MS = Number(process.env.MATCHES_RESCAN_MS)      || 5 * 60_000;   // раз стільки перечитуємо matches.json
 
 // Скільки максимум чекати ЗАВЕРШЕННЯ Checkpoint #1 (у будь-якому вигляді —
@@ -148,14 +149,6 @@ const CHECKPOINT2_TRIGGER_WAIT_MS = Number(process.env.CHECKPOINT2_TRIGGER_WAIT_
 // пауза після Q1/Q3 ~2 хв (SHORT_BREAK_MIN), тому STAGE_STALL_CONFIRM_MS за
 // замовчуванням теж 2 хв.
 const STALL_CONFIRM_MS = Number(process.env.STAGE_STALL_CONFIRM_MS) || 2 * 60_000; // 2 хв
-
-// Catch-up may use the beginning of the next quarter only as a very short
-// replacement for a missed break.  completedQ=2 remains true throughout all
-// of Q3, so without a freshness limit a restarted monitor could incorrectly
-// enqueue the half-time parser at Q3 minute 8.  Two played minutes is enough
-// to survive a 30-second poll and a short feed lag, but anything deeper is a
-// stale checkpoint and must be skipped rather than replayed late.
-const CHECKPOINT_BOUNDARY_GRACE_MIN = Number(process.env.CHECKPOINT_BOUNDARY_GRACE_MIN) || 1;
 
 // Матчі часто стартують із затримкою відносно kickoff у фіді (іноді майже
 // без затримки, іноді дуже суттєво) — тому CHECK_WINDOW_MS раніше "згоряв"
@@ -262,44 +255,14 @@ function log(matchId, ...args) {
 }
 
 // Pure checkpoint classifier used by the watcher and regression tests.
-// TARGET means the requested boundary is fresh: either the real break is
-// visible, or the immediately following quarter has only just started.
-// STALE means the boundary was missed and must not be replayed later.
-function checkpointProgressState(stage, checkpointIndex, boundaryGraceMin = 1) {
+// TARGET means exactly the requested quarter boundary has been reached;
+// STALE means this lower checkpoint was missed and must not be replayed later.
+function checkpointProgressState(stage, checkpointIndex) {
   const completed = stage?.completedQuarters;
   const target = checkpointIndex + 1;
   if (!Number.isInteger(completed)) return 'UNKNOWN';
+  if (completed === target) return 'TARGET';
   if (completed > target) return 'STALE';
-  if (completed < target) return 'WAIT';
-
-  const status = stage?.status || 'unknown';
-
-  // Exact break after Q1/Q2/Q3 is always the preferred and freshest signal.
-  if (status === 'break') return 'TARGET';
-
-  if (status === 'live') {
-    const currentQuarter = stage?.currentQuarter;
-    const liveMinute = Number(stage?.liveMinute);
-    const expectedNextQuarter = target + 1;
-
-    if (Number.isInteger(currentQuarter)) {
-      if (currentQuarter > expectedNextQuarter) return 'STALE';
-      if (currentQuarter < expectedNextQuarter) return 'WAIT';
-
-      // We missed the short break, but can still fire at the very beginning
-      // of the next quarter.  Never treat minute 8 of Q3 as a fresh HT event.
-      if (Number.isFinite(liveMinute)) {
-        return liveMinute <= boundaryGraceMin ? 'TARGET' : 'STALE';
-      }
-      return 'WAIT';
-    }
-
-    // Quarter scores say the target quarter is complete, but without the
-    // current quarter/minute we cannot prove that the boundary is still fresh.
-    return 'WAIT';
-  }
-
-  // unknown/not_started cannot establish a fresh completed-quarter boundary.
   return 'WAIT';
 }
 
@@ -472,6 +435,8 @@ function watchCheckpoint(match, checkpointIndex, sportId, quarterMin) {
   const targetCompletedQuarters = checkpointIndex + 1;
   let windowOpenedAt = Date.now();
   const notStartedWaitStartedAt = Date.now();
+  let liveWaitStartedAt = null;
+  let softWindowExtensions = 0;
   let stopped = false;
   let prevLiveMinute = null;
   let stallSinceMs = null;
@@ -502,7 +467,8 @@ function watchCheckpoint(match, checkpointIndex, sportId, quarterMin) {
 
   log(id, `▶ Checkpoint #${checkpointIndex + 1} window opened — target: ` +
           `${targetCompletedQuarters} completed quarter(s); polling every ${POLL_INTERVAL_MS / 1000}s; ` +
-          `window ${CHECK_WINDOW_MS / 60_000} min after real start.`);
+          `soft window ${CHECK_WINDOW_MS / 60_000} min with progress-aware extension; ` +
+          `hard max ${HARD_CHECK_WINDOW_MS / 60_000} min.`);
 
   const poll = async () => {
     if (stopped) return;
@@ -531,13 +497,10 @@ function watchCheckpoint(match, checkpointIndex, sportId, quarterMin) {
       return;
     }
 
-    if (Date.now() - windowOpenedAt > CHECK_WINDOW_MS) {
-      finishWatcher();
-      log(id, `⏱ Checkpoint #${checkpointIndex + 1} window expired — target quarter not confirmed.`);
-      if (checkpointIndex === 0) settleCheckpoint1(id);
-      if (checkpointIndex === 1) settleCheckpoint2(id, null);
-      return;
-    }
+    // Start the hard safety clock only after the match is actually no longer
+    // not_started. Scheduled kickoff can be wrong by hours, so pre-game delay
+    // must not consume either the soft or hard watcher budget.
+    if (liveWaitStartedAt === null) liveWaitStartedAt = Date.now();
 
     const progressText = stage.completedQuarters !== null && stage.completedQuarters !== undefined
       ? `; completedQ=${stage.completedQuarters}; currentQ=${stage.currentQuarter ?? '?'}`
@@ -548,7 +511,7 @@ function watchCheckpoint(match, checkpointIndex, sportId, quarterMin) {
     // Primary trigger: actual quarter-score progress. This prevents a delayed
     // match's Q1 break from being mistaken for HT/Q3 and also catches a missed
     // break as soon as the next quarter has a score.
-    const progressState = checkpointProgressState(stage, checkpointIndex, CHECKPOINT_BOUNDARY_GRACE_MIN);
+    const progressState = checkpointProgressState(stage, checkpointIndex);
     if (progressState === 'STALE') {
       finishWatcher();
       log(id, `↷ Checkpoint #${checkpointIndex + 1} skipped: feed already confirms ` +
@@ -613,6 +576,48 @@ function watchCheckpoint(match, checkpointIndex, sportId, quarterMin) {
         : `liveMinute stalled at ${stage.liveMinute}' ≥${STALL_CONFIRM_MS / 60_000} min with no quarter-score data`;
       await queueTarget(reason);
       return;
+    }
+
+    const now = Date.now();
+
+    // Hard safety only. Under normal operation the watcher is driven by real
+    // quarter progress, not by wall-clock kickoff arithmetic. This prevents
+    // an abandoned or permanently frozen feed from living forever.
+    if (liveWaitStartedAt !== null && now - liveWaitStartedAt > HARD_CHECK_WINDOW_MS) {
+      finishWatcher();
+      log(id, `⏱ Checkpoint #${checkpointIndex + 1} hard timeout after ` +
+              `${HARD_CHECK_WINDOW_MS / 60_000} min of live waiting — giving up.`);
+      if (checkpointIndex === 0) settleCheckpoint1(id);
+      if (checkpointIndex === 1) settleCheckpoint2(id, null);
+      return;
+    }
+
+    // Flashscore often does NOT expose status=break after Q1/Q2/Q3. Instead
+    // it can keep status=live, currentQ unchanged and the minute label frozen
+    // at 10 (or 12) for 2–3 minutes. That is not a reason to expire. As long
+    // as the feed still says live/break and the requested boundary has not
+    // been passed, renew the soft window and keep polling until df_sur confirms
+    // completedQ=target or the next quarter appears.
+    if (now - windowOpenedAt > CHECK_WINDOW_MS) {
+      const feedStillActive = stage.status === 'live' || stage.status === 'break';
+      const progressKnown = Number.isInteger(stage.completedQuarters);
+      const targetNotPassed = !progressKnown || stage.completedQuarters < targetCompletedQuarters;
+
+      if (feedStillActive && targetNotPassed) {
+        windowOpenedAt = now;
+        softWindowExtensions += 1;
+        log(id, `↻ Checkpoint #${checkpointIndex + 1} soft window extended (#${softWindowExtensions}): ` +
+                `feed still active and target Q${targetCompletedQuarters} is not confirmed/passed ` +
+                `(status=${stage.status}, completedQ=${stage.completedQuarters ?? '?'}, ` +
+                `currentQ=${stage.currentQuarter ?? '?'}, minute=${stage.liveMinute ?? '?'}).`);
+      } else {
+        finishWatcher();
+        log(id, `⏱ Checkpoint #${checkpointIndex + 1} soft window expired — ` +
+                `target quarter not confirmed and feed is no longer safely waiting.`);
+        if (checkpointIndex === 0) settleCheckpoint1(id);
+        if (checkpointIndex === 1) settleCheckpoint2(id, null);
+        return;
+      }
     }
 
     timer = setTimeout(poll, POLL_INTERVAL_MS);
@@ -761,33 +766,22 @@ async function handleStaleCheckpoint(match, idx, minutes, checkpointDeadline, ne
     return;
   }
 
-  // Prefer actual quarter progress over scheduled kickoff math.  The freshness
-  // classifier is essential here: completedQ=2 is still reported at Q3 minute
-  // 8, but that is no longer a valid half-time trigger.
+  // Prefer actual quarter progress over scheduled kickoff math. This is the
+  // delayed-start fix: a match can be live in Q1 while wall-clock arithmetic
+  // says even Q3 should already be over.
   const targetCompleted = idx + 1;
   const completed = liveStatus?.completedQuarters;
   if (Number.isInteger(completed)) {
-    const progressState = checkpointProgressState(
-      liveStatus,
-      idx,
-      CHECKPOINT_BOUNDARY_GRACE_MIN,
-    );
-
-    if (progressState === 'STALE') {
-      log(id, `⏰ Checkpoint #${idx + 1} catch-up skipped: boundary is already stale ` +
-              `(status=${liveStatus?.status ?? '?'}, completedQ=${completed}, ` +
-              `currentQ=${liveStatus?.currentQuarter ?? '?'}, minute=${liveStatus?.liveMinute ?? '?'}, ` +
-              `target=${targetCompleted}, grace=${CHECKPOINT_BOUNDARY_GRACE_MIN}m).`);
+    if (completed > targetCompleted) {
+      log(id, `⏰ Checkpoint #${idx + 1} catch-up skipped: actual feed already confirms ` +
+              `${completed} completed quarters (target=${targetCompleted}).`);
       if (idx === 0) settleCheckpoint1(id);
       if (idx === 1) settleCheckpoint2(id, null);
       return;
     }
 
-    const mode = progressState === 'TARGET' ? 'fresh boundary' : 'target not reached yet';
-    log(id, `⏰ Checkpoint #${idx + 1} kickoff deadline is stale, but actual quarter progress shows ` +
-            `${mode} (completedQ=${completed}, currentQ=${liveStatus?.currentQuarter ?? '?'}, ` +
-            `minute=${liveStatus?.liveMinute ?? '?'}, target=${targetCompleted}) → opening watcher only; ` +
-            `no analysis job is queued until the target boundary is fresh.`);
+    log(id, `⏰ Checkpoint #${idx + 1} kickoff deadline is stale, but actual quarter progress is ` +
+            `completedQ=${completed}, target=${targetCompleted} → opening target-aware catch-up window.`);
     startCheckpoint();
     return;
   }
@@ -918,8 +912,8 @@ async function main() {
   console.log(
     `[stage-monitor] Started. Watching "${MATCHES_FILE}" | ` +
     `poll every ${POLL_INTERVAL_MS / 1000}s | check window ${CHECK_WINDOW_MS / 60_000} min | ` +
-    `stall-confirm (Checkpoints #1/#3 fallback) ${STALL_CONFIRM_MS / 60_000} min | ` +
-    `next-quarter freshness grace ${CHECKPOINT_BOUNDARY_GRACE_MIN} min | ` +
+    `stall-confirm fallback ${STALL_CONFIRM_MS / 60_000} min | ` +
+    `soft window ${CHECK_WINDOW_MS / 60_000} min (progress-aware) | hard max ${HARD_CHECK_WINDOW_MS / 60_000} min | ` +
     `rescanning matches.json every ${RESCAN_INTERVAL_MS / 60_000} min | ` +
     `Checkpoint #2 waits up to ${CHECKPOINT1_WAIT_MS / 60_000} min for Checkpoint #1 to finish | ` +
     `Checkpoint #3 waits only for the Q2 trigger, never for parser/GPT completion | ` +
