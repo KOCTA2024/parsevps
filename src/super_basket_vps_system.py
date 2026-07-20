@@ -844,9 +844,53 @@ def _team_state(canonical: dict[str, Any], team: str) -> dict[str, Any]:
     opp_q = [quarter.get(opponent) for quarter in canonical['quarters']]
     elapsed = canonical['elapsed_game_seconds']
     q_seconds = canonical['quarter_seconds']
-    completed = min(4, elapsed // q_seconds)
-    boundary = elapsed % q_seconds == 0
-    return {'side': side, 'team_q': team_q, 'opp_q': opp_q, 'completed_quarters': int(completed), 'at_boundary': boundary, 'current_quarter': canonical.get('current_quarter'), 'score': canonical['score'][side], 'opponent_score': canonical['score'][opponent], 'total': canonical['score']['total']}
+
+    # A checkpoint job is usually queued when the provider already shows the first
+    # minute of the next quarter (Q2/Q3/Q4). In that snapshot elapsed % q_seconds
+    # is no longer zero, so relying only on exact clock boundaries silently disables
+    # PATTERN_13..15 after Q1/HT/Q3. The queue source is authoritative here.
+    trigger_checkpoint = to_int(canonical.get('trigger_checkpoint'))
+    checkpoint_boundary = trigger_checkpoint in (1, 2, 3)
+    if checkpoint_boundary:
+        completed = int(trigger_checkpoint)
+        boundary = True
+    else:
+        completed = min(4, elapsed // q_seconds)
+        boundary = elapsed % q_seconds == 0
+
+    # Do not contaminate an after-quarter scenario with points already scored in
+    # the next quarter. When the completed-quarter boxscore is available, rebuild
+    # the checkpoint score strictly from Q1..Qn; otherwise preserve the live-score
+    # fallback used by the previous implementation.
+    checkpoint_team_values = team_q[:int(completed)]
+    checkpoint_opp_values = opp_q[:int(completed)]
+    checkpoint_boxscore_complete = (
+        int(completed) > 0
+        and all(value is not None for value in checkpoint_team_values + checkpoint_opp_values)
+    )
+    if boundary and checkpoint_boxscore_complete:
+        score = float(sum(checkpoint_team_values))
+        opponent_score = float(sum(checkpoint_opp_values))
+        total = score + opponent_score
+        checkpoint_score_source = 'COMPLETED_QUARTERS'
+    else:
+        score = canonical['score'][side]
+        opponent_score = canonical['score'][opponent]
+        total = canonical['score']['total']
+        checkpoint_score_source = 'LIVE_SCORE_FALLBACK'
+
+    return {
+        'side': side,
+        'team_q': team_q,
+        'opp_q': opp_q,
+        'completed_quarters': int(completed),
+        'at_boundary': boundary,
+        'current_quarter': canonical.get('current_quarter'),
+        'score': score,
+        'opponent_score': opponent_score,
+        'total': total,
+        'checkpoint_score_source': checkpoint_score_source,
+    }
 
 def _game_margin(game: dict[str, Any], after_quarters: int) -> Optional[float]:
     team_values = game['team_quarters'][:after_quarters]
