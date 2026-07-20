@@ -1710,19 +1710,13 @@ def _trace_step(step: str, applied: bool, formula: str, inputs: dict[str, Any], 
     }
 
 def _verdict(probability: float, blockers: list[dict[str, Any]], strong_clean: bool) -> str:
-    if blockers or probability < 0.65:
+    if blockers or probability < 0.68:
         return 'PASS'
-    if probability < 0.7:
-        return 'RISK ENTRY / BELOW DISPATCH'
-    if probability < 0.73:
-        return 'RISK ENTRY'
     if probability < 0.75:
-        return 'LOW PLAY'
+        return 'RISK PLAY'
     if probability < 0.8:
-        return 'PLAY'
-    if probability < 0.85:
-        return 'MAIN PLAY'
-    return 'STRONG PLAY' if strong_clean else 'MAIN PLAY'
+        return 'LIVE PLAY'
+    return 'PLAY' if strong_clean else 'LIVE PLAY'
 
 def _router(market: dict[str, Any], canonical: dict[str, Any]) -> dict[str, Any]:
     market_type = market['market_type']
@@ -1855,6 +1849,11 @@ class SuperBasketCalculator:
             caps.append(_cap('PRODUCTION_ROUTER_DOWNGRADE', router['cap'], router['reason']))
         if router.get('hard_block'):
             blockers.append(_blocker('PRODUCTION_ROUTER_BLOCK', router['reason']))
+        if market.get('segment') == 'Q3' and market['market_type'] in {'CURRENT_QUARTER_TOTAL', 'CURRENT_QUARTER_TEAM_IT'}:
+            if p_raw < 0.80:
+                blockers.append(_blocker('Q3_EXCEPTIONAL_PROBABILITY_BELOW_80', 'Standalone Q3 requires model probability of at least 80%', {'p_raw': p_raw}))
+            if stat.get('stat_support') != 'ON':
+                blockers.append(_blocker('Q3_EXCEPTIONAL_STATS_REQUIRED', 'Standalone Q3 requires complete live statistics'))
         same_format_n = int(canonical['data_gate'].get('pooled_n') or 0)
         if same_format_n == 0:
             caps.append(_cap('NO_SAME_FORMAT_HISTORY', 0.67, 'No same-duration history is available'))
@@ -1863,10 +1862,9 @@ class SuperBasketCalculator:
             caps.append(_cap('SMALL_SAME_FORMAT_SAMPLE', self.config['caps']['small_sample'], 'Same-format history sample is below 20 games', {'same_format_pooled_n': same_format_n}))
         live_mode = canonical['stage'] != 'PRE_MATCH'
         if live_mode and stat['stat_support'] == 'OFF':
-            # Missing live stats (fouls/FTA/etc.) no longer caps P_final at all.
-            # The deterministic P_hist/P_scenario/P_live blend is allowed through
-            # uncapped, same as when full stats are available (no-stats/PLAY-without-stats mode).
-            pass
+            # A physically consistent score/clock fallback remains eligible, but
+            # it must never be promoted to a clean PLAY without live statistics.
+            caps.append(_cap('NO_STATS_FALLBACK', self.config['caps']['stat_off'], 'Live statistics unavailable; RISK PLAY only'))
         elif live_mode and stat['stat_support'] == 'LIMITED':
             caps.append(_cap('STAT_SUPPORT_LIMITED', self.config['caps']['stat_limited'], 'Incomplete live statistics'))
         if stat['stat_gate_status'] == 'AGAINST':
@@ -1982,7 +1980,7 @@ DEFAULT_CONFIG = json.loads(r"""{
   "engine_version": "5.0",
   "calibration_status": "calibration_default_not_backtested",
   "odds_min": 1.44,
-  "dispatch_threshold": 0.65,
+  "dispatch_threshold": 0.68,
   "smoothing": {"alpha": 1.0, "beta": 1.0},
   "credibility": {
     "h2h_k": 8.0,
@@ -2057,7 +2055,7 @@ DEFAULT_CONFIG = json.loads(r"""{
   },
   "caps": {
     "stat_limited": 0.79,
-    "stat_off": 0.67,
+    "stat_off": 0.79,
     "fake_over": 0.74,
     "fake_under": 0.74,
     "small_sample": 0.74,
@@ -2173,17 +2171,13 @@ def normalized_action(probability: float, blockers: list[dict[str, Any]], mode: 
     if mode.upper() == 'STRICT':
         if probability < 0.75:
             return 'PASS', 'TRIGGER ONLY', '0%'
-    elif probability < 0.65:
+    elif probability < 0.68:
         return 'PASS', 'PASS', '0%'
-    if probability < 0.73:
-        return 'RISK', 'RISK ENTRY', '10-15% live-limit'
     if probability < 0.75:
-        return 'RISK', 'LOW PLAY', '15% live-limit'
+        return 'RISK', 'RISK PLAY', '10-15% live-limit'
     if probability < 0.80:
-        return 'PLAY', 'PLAY', '20-25% live-limit'
-    if probability < 0.85:
-        return 'PLAY', 'MAIN PLAY', '30-35% live-limit'
-    return 'PLAY', 'STRONG PLAY', '40-50% live-limit'
+        return 'PLAY', 'LIVE PLAY', '20-25% live-limit'
+    return 'PLAY', 'PLAY', '30-35% live-limit'
 
 def _precomputed_line_reconciliation(source: dict[str, Any], evaluation: Optional[dict[str, Any]], data_gate: dict[str, Any]) -> dict[str, Any]:
     if not evaluation:
@@ -2450,6 +2444,8 @@ def apply_learning_to_evaluation(evaluation: dict[str, Any], store: LearningStor
     p_rule = float(item['p_final'])
     p_calibrated = float(calibration['p_calibrated'])
     action, status, stake = normalized_action(p_calibrated, item.get('blockers', []), mode)
+    if action != 'PASS' and item.get('stat_comparison', {}).get('stat_support') == 'OFF':
+        action, status, stake = 'RISK', 'RISK PLAY — NO-STATS FALLBACK', '10-15% live-limit'
     item['p_rule'] = p_rule
     item['p_calibrated'] = p_calibrated
     item['p_final_system'] = p_calibrated
@@ -2514,7 +2510,7 @@ def deterministic_explanation(evaluation: Optional[dict[str, Any]], action: str,
         main = codes[0] if codes else 'P_FINAL_BELOW_THRESHOLD'
         explanation = f'Найкращий доступний варіант має P_final {probability:.1%}; рішення PASS через {main}.'
         risk = 'Наявні дані або гейти не дозволяють безпечно перетворити цей варіант на активну ставку.'
-        trigger = f'Потрібні P_final не нижче {"75%" if mode.upper() == "STRICT" else "65%"}, відсутність hard blocker та stat-gate не проти.'
+        trigger = f'Потрібні P_final не нижче {"75%" if mode.upper() == "STRICT" else "68%"}, відсутність hard blocker та stat-gate не проти.'
         return explanation, risk, trigger
     explanation = (
         f'P_final {probability:.1%}: проєкція {live.get("projection_used"):.1f} очка, '
@@ -2522,7 +2518,7 @@ def deterministic_explanation(evaluation: Optional[dict[str, Any]], action: str,
         f'P_hist {float(history.get("p_hist") or 0):.1%}, stat-gate {stat.get("stat_gate_status")}.'
     )
     if action == 'RISK':
-        risk = 'Ймовірність перебуває в action-зоні 65–74%, тому це не clean PLAY і потрібен зменшений ліміт.'
+        risk = 'Ймовірність перебуває в action-зоні 68–74%, тому це не clean PLAY і потрібен зменшений ліміт.'
     else:
         risk = 'Лінія та коефіцієнт можуть змінитися; сигнал чинний лише для вказаного snapshot.'
     trigger = 'Брати тільки якщо та сама лінія ще доступна, odds >=1.44 і рахунок/час не змінилися суттєво.'
@@ -2783,7 +2779,7 @@ def process_vps_match_file(
         context = source.get('analysis_context') if isinstance(source.get('analysis_context'), dict) else {}
         source['analysis_context'] = {**context, 'trigger_checkpoint': checkpoint}
     zones = load_json(Path(zones_path).expanduser().resolve()) if zones_path else {}
-    core_result = SuperBasketCalculator(deepcopy(DEFAULT_CONFIG), zones).calculate(source, dispatch_threshold=0.65, strict_schema=strict_schema)
+    core_result = SuperBasketCalculator(deepcopy(DEFAULT_CONFIG), zones).calculate(source, dispatch_threshold=0.68, strict_schema=strict_schema)
     calculation = core_result['super_basket_calculation']
     target = Path(output_path).expanduser().resolve() if output_path else source_path.with_name(source_path.stem + '_result.json')
     store = LearningStore(db_path)
