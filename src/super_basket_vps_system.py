@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SUPER_BASKET VPS SYSTEM v5.0 - single-file edition.
+"""SUPER_BASKET VPS ACTION SYSTEM v5.2 - single-file edition.
 
 PROGRAMMER INTEGRATION:
     python super_basket_vps_system.py run --match /path/to/match.json
@@ -539,6 +539,230 @@ def adapt_match(source: dict[str, Any], config: dict[str, Any], strict: bool=Fal
         },
     }
 
+
+# ===== coursework_remaining_forecast.py =====
+def _coursework_distribution(values: Iterable[float]) -> dict[str, Any]:
+    rows = [float(value) for value in values if value is not None and math.isfinite(float(value))]
+    if not rows:
+        return {
+            'n': 0, 'mean': None, 'median': None, 'standard_deviation': None,
+            'p10': None, 'p25': None, 'p75': None, 'p90': None,
+            'minimum': None, 'maximum': None,
+        }
+    return {
+        'n': len(rows),
+        'mean': statistics.fmean(rows),
+        'median': statistics.median(rows),
+        'standard_deviation': statistics.stdev(rows) if len(rows) > 1 else 0.0,
+        'p10': percentile(rows, 0.10),
+        'p25': percentile(rows, 0.25),
+        'p75': percentile(rows, 0.75),
+        'p90': percentile(rows, 0.90),
+        'minimum': min(rows),
+        'maximum': max(rows),
+    }
+
+
+def build_coursework_remaining_forecast(canonical: dict[str, Any]) -> dict[str, Any]:
+    """Independent live-aware remaining-quarter projection.
+
+    The scenario checkpoint stays frozen at the completed-quarter boundary, while the
+    projection side uses the newest live score and the remaining fraction of the new
+    quarter. This prevents both errors at once:
+      * points scored after Q1/Q2/Q3 are not injected into P_scenario;
+      * those points and the updated clock are not discarded from P_live/projection.
+
+    Live box-score statistics are already consumed by calculate_live_projection() via
+    projection_stat_adjusted. They are deliberately not applied a second time here,
+    keeping this coursework component independent and avoiding double counting.
+    """
+    trigger = to_int(canonical.get('trigger_checkpoint'))
+    if trigger in (1, 2, 3):
+        completed = int(trigger)
+    elif canonical.get('stage') == 'HT':
+        completed = 2
+    elif canonical.get('stage') in {'AFTER_3Q', 'Q4_CONFIRMATION'}:
+        completed = 3
+    else:
+        completed = max(
+            0,
+            min(4, int(canonical.get('elapsed_game_seconds', 0) // canonical['quarter_seconds']))
+        )
+
+    quarters = canonical.get('quarters') or []
+    completed_rows = quarters[:completed]
+    complete_box = completed > 0 and all(
+        isinstance(row, dict) and row.get('home') is not None and row.get('away') is not None
+        for row in completed_rows
+    )
+    if complete_box:
+        checkpoint_total = float(
+            sum(float(row['home']) + float(row['away']) for row in completed_rows)
+        )
+    else:
+        checkpoint_total = float((canonical.get('score') or {}).get('total') or 0.0)
+
+    live_total = float((canonical.get('score') or {}).get('total') or checkpoint_total)
+    live_points_after_checkpoint = max(0.0, live_total - checkpoint_total)
+
+    quarter_seconds = max(1, int(canonical.get('quarter_seconds') or 600))
+    raw_current_q = to_int(canonical.get('current_quarter'))
+    if completed >= 4:
+        plan_current_q = 4
+        current_ratio = 0.0
+        future_quarters: list[int] = []
+    else:
+        inferred_next = min(4, completed + 1)
+        plan_current_q = max(inferred_next, min(4, raw_current_q or inferred_next))
+        if raw_current_q == plan_current_q and plan_current_q > completed:
+            seconds_left = to_number(canonical.get('quarter_seconds_remaining'))
+            if seconds_left is None:
+                elapsed_in_quarter = max(
+                    0,
+                    int(canonical.get('elapsed_game_seconds') or 0) - (plan_current_q - 1) * quarter_seconds,
+                )
+                seconds_left = max(0, quarter_seconds - elapsed_in_quarter)
+            current_ratio = max(0.0, min(1.0, float(seconds_left) / quarter_seconds))
+        else:
+            # The next quarter has not started yet (e.g. exact break after Q2/Q3).
+            current_ratio = 1.0
+        future_quarters = list(range(plan_current_q, 5))
+        if current_ratio <= 0.0 and future_quarters and future_quarters[0] == plan_current_q:
+            future_quarters = future_quarters[1:]
+
+    partial_current = bool(
+        future_quarters
+        and future_quarters[0] == plan_current_q
+        and 0.0 < current_ratio < 1.0
+    )
+
+    unique: dict[str, dict[str, Any]] = {}
+    for pool_name in ('team_a', 'team_b', 'h2h'):
+        for game in (canonical.get('history', {}).get(pool_name) or []):
+            game_id = str(game.get('id') or _game_key(game.get('raw') or game))
+            if game_id not in unique:
+                unique[game_id] = game
+
+    def historical_quarter_total(game: dict[str, Any], quarter_number: int) -> Optional[float]:
+        game_quarters = game.get('quarters') or []
+        if quarter_number < 1 or quarter_number > len(game_quarters):
+            return None
+        return to_number((game_quarters[quarter_number - 1] or {}).get('total'))
+
+    def historical_remaining_value(
+        game: dict[str, Any],
+        target_quarters: list[int],
+    ) -> Optional[float]:
+        total = 0.0
+        for number in target_quarters:
+            value = historical_quarter_total(game, number)
+            if value is None:
+                return None
+            if number == plan_current_q:
+                value *= current_ratio
+            total += float(value)
+        return total
+
+    remaining_values: list[float] = []
+    sample_ids: list[str] = []
+    for game_id, game in unique.items():
+        value = historical_remaining_value(game, future_quarters)
+        if value is not None and future_quarters:
+            remaining_values.append(float(value))
+            sample_ids.append(game_id)
+
+    remaining_distribution = _coursework_distribution(remaining_values)
+    n = int(remaining_distribution['n'])
+    readiness = 'READY' if n >= 20 else 'REVIEW_REQUIRED' if n >= 8 else 'INSUFFICIENT_DATA'
+    remaining_median = to_number(remaining_distribution.get('median'))
+    if completed >= 4:
+        final_total = live_total
+    else:
+        final_total = live_total + remaining_median if remaining_median is not None else None
+
+    def actual_segment_points(numbers: list[int]) -> float:
+        result = 0.0
+        for number in numbers:
+            if 1 <= number <= len(quarters):
+                value = to_number((quarters[number - 1] or {}).get('total'))
+                if value is not None:
+                    result += float(value)
+        return result
+
+    def segment_projection(numbers: list[int]) -> Optional[float]:
+        current_points = actual_segment_points(numbers)
+        remaining_numbers = [number for number in future_quarters if number in numbers]
+        if not remaining_numbers:
+            return current_points
+        values = [
+            historical_remaining_value(game, remaining_numbers)
+            for game in unique.values()
+        ]
+        distribution = _coursework_distribution(value for value in values if value is not None)
+        median = to_number(distribution.get('median'))
+        return current_points + float(median) if median is not None else None
+
+    segment_projections: dict[str, Optional[float]] = {
+        'MATCH': final_total,
+        'H1': segment_projection([1, 2]),
+        'H2': segment_projection([3, 4]),
+    }
+
+    for number in range(1, 5):
+        actual = actual_segment_points([number])
+        if number <= completed:
+            segment_projections[f'Q{number}'] = actual
+            continue
+        values = []
+        for game in unique.values():
+            value = historical_quarter_total(game, number)
+            if value is None:
+                continue
+            if number == plan_current_q:
+                value *= current_ratio
+            values.append(float(value))
+        distribution = _coursework_distribution(values)
+        median = to_number(distribution.get('median'))
+        segment_projections[f'Q{number}'] = actual + float(median) if median is not None else None
+
+    return {
+        'model': 'COURSEWORK_LIVE_AWARE_REMAINING_FRACTION',
+        'checkpoint': completed,
+        'checkpoint_total_points': checkpoint_total,
+        'checkpoint_score_source': 'COMPLETED_QUARTERS' if complete_box else 'LIVE_SCORE_FALLBACK',
+        'live_current_total_points': live_total,
+        'live_points_after_checkpoint': live_points_after_checkpoint,
+        'remaining_plan': {
+            'future_quarters': future_quarters,
+            'current_quarter': plan_current_q,
+            'current_quarter_remaining_ratio': current_ratio if plan_current_q in future_quarters else 0.0,
+            'partial_current_quarter': partial_current,
+        },
+        'future_quarters': future_quarters,
+        'historical_remaining_distribution': remaining_distribution,
+        'forecast_final_total_points': final_total,
+        'central_interval_p10_p90': [
+            live_total + float(remaining_distribution['p10'])
+            if remaining_distribution.get('p10') is not None else None,
+            live_total + float(remaining_distribution['p90'])
+            if remaining_distribution.get('p90') is not None else None,
+        ],
+        'formula': 'live_current_total_points + median(historical_remaining_points_scaled_by_clock)',
+        'already_scored_points_added_once': True,
+        'segment_projections': segment_projections,
+        'sample_game_ids': sample_ids,
+        'data_readiness': readiness,
+        'eligible_as_projection_component': readiness in {'READY', 'REVIEW_REQUIRED'},
+        'live_bridge': {
+            'points_used': True,
+            'clock_used': True,
+            'partial_new_quarter_used': partial_current,
+            'live_stats_available': canonical.get('stat_support') != 'OFF',
+            'live_stats_consumed_by': 'MAIN_P_LIVE_PROJECTION_STAT_ADJUSTED',
+            'double_count_prevented': True,
+        },
+    }
+
 # ===== market_parser.py =====
 SUPPORTED_BUCKETS = {'match_total', 'half_total', 'quarter_total', 'team_it', 'home_ind_total', 'away_ind_total'}
 
@@ -612,6 +836,13 @@ def parse_markets(source: dict[str, Any], canonical: dict[str, Any], config: dic
     evaluations: list[dict[str, Any]] = []
     audit: list[dict[str, Any]] = []
     sequence = 0
+    source_meta = source.get('meta') if isinstance(source.get('meta'), dict) else {}
+    root_bookmaker = str(
+        source_meta.get('source')
+        or source_meta.get('bookmaker')
+        or source.get('bookmaker')
+        or 'unknown'
+    )
     for bucket, rows in containers.items():
         if not isinstance(rows, list):
             continue
@@ -628,7 +859,7 @@ def parse_markets(source: dict[str, Any], canonical: dict[str, Any], config: dic
             market_type, segment = _market_type(bucket, scope, team)
             line = to_number(alias_value(row, 'LINE', aliases))
             real_line = bool(row.get('is_real_bookmaker_line', True))
-            bookmaker = str(row.get('bookmaker') or row.get('source') or 'unknown')
+            bookmaker = str(row.get('bookmaker') or row.get('source') or root_bookmaker or 'unknown')
             current_issue = _current_quarter_issue(market_type or '', segment, canonical)
             base_reasons: list[str] = []
             if market_type is None:
@@ -658,7 +889,7 @@ def parse_markets(source: dict[str, Any], canonical: dict[str, Any], config: dic
                 sequence += 1
                 safe_line = 'na' if line is None else str(line).replace('.', '_')
                 market_id = str(row.get('id') or f'{bucket}_{segment}_{safe_line}_{sequence}')
-                evaluations.append({'market_id': f'{market_id}_{side.lower()}_{sequence}', 'source_market_id': row.get('id'), 'market_type': market_type or 'UNSUPPORTED', 'team': team, 'segment': segment, 'side': side, 'line': line, 'odds': odds, 'bookmaker': bookmaker, 'source_bucket': bucket, 'parser_issues': reasons, 'eligible_market': not reasons})
+                evaluations.append({'market_id': f'{market_id}_{side.lower()}_{sequence}', 'source_market_id': row.get('id'), 'market_type': market_type or 'UNSUPPORTED', 'team': team, 'segment': segment, 'side': side, 'line': line, 'odds': odds, 'bookmaker': bookmaker, 'source_bucket': bucket, 'source_scope': scope or None, 'raw_line_row': deepcopy(row), 'parser_issues': reasons, 'eligible_market': not reasons})
     return (evaluations, audit)
 
 # ===== history_engine.py =====
@@ -960,8 +1191,8 @@ def _active_patterns(canonical: dict[str, Any], team: str, config: dict[str, Any
         add('PATTERN_13', 'CURRENT_MARGIN_BUCKET', 'margin_state', True, lambda game, n=checkpoint, b=margin_bounds: _within_bucket(_game_margin(game, n), b))
         add('PATTERN_14', 'CURRENT_TOTAL_BUCKET', 'total_state', True, lambda game, n=checkpoint, b=total_bounds: _within_bucket(_game_total(game, n), b))
         add('PATTERN_15', 'CURRENT_TEAM_SCORE_BUCKET', 'total_state', True, lambda game, n=checkpoint, b=score_bounds: _within_bucket(sum(game['team_quarters'][:n]) if all((value is not None for value in game['team_quarters'][:n])) else None, b))
-        add('PATTERN_16', 'SAME_STAGE', 'time_state', True, lambda game: True)
-        add('PATTERN_17', 'SAME_QUARTER_NUMBER', 'time_state', True, lambda game: True)
+        rejected.append({'pattern_id': 'PATTERN_16', 'name': 'SAME_STAGE', 'pattern_group': 'time_state', 'team': team, 'rejection_reason': 'HISTORICAL_STAGE_SNAPSHOT_NOT_AVAILABLE'})
+        rejected.append({'pattern_id': 'PATTERN_17', 'name': 'SAME_QUARTER_NUMBER', 'pattern_group': 'time_state', 'team': team, 'rejection_reason': 'HISTORICAL_STAGE_SNAPSHOT_NOT_AVAILABLE'})
     else:
         for pattern_id, name, group in (('PATTERN_13', 'CURRENT_MARGIN_BUCKET', 'margin_state'), ('PATTERN_14', 'CURRENT_TOTAL_BUCKET', 'total_state'), ('PATTERN_15', 'CURRENT_TEAM_SCORE_BUCKET', 'total_state'), ('PATTERN_16', 'SAME_STAGE', 'time_state'), ('PATTERN_17', 'SAME_QUARTER_NUMBER', 'time_state'), ('PATTERN_18', 'SAME_MINUTE_BUCKET', 'time_state')):
             rejected.append({'pattern_id': pattern_id, 'name': name, 'pattern_group': group, 'team': team, 'rejection_reason': 'HISTORICAL_CHECKPOINT_NOT_AVAILABLE'})
@@ -1250,8 +1481,9 @@ def _parser_projection_components(market: dict[str, Any], canonical: dict[str, A
     snapshot_ok = parser_elapsed is None or abs(parser_elapsed - elapsed_minutes) <= 1.5
     team_side = 'home' if market.get('team') == canonical['home_team'] else 'away' if market.get('team') else None
     result: dict[str, dict[str, Any]] = {}
+    coursework = canonical.get('coursework_forecast') if isinstance(canonical.get('coursework_forecast'), dict) else {}
 
-    def add(name: str, value: Any, reason: Optional[str]=None) -> None:
+    def add(name: str, value: Any, reason: Optional[str]=None, suggested_weight: Optional[float]=None) -> None:
         numeric = to_number(value)
         if numeric is not None and numeric < clock['current_points']:
             reason = 'PARSER_PROJECTION_BELOW_CURRENT_SCORE'
@@ -1259,6 +1491,7 @@ def _parser_projection_components(market: dict[str, Any], canonical: dict[str, A
             'value': numeric,
             'available': numeric is not None and reason is None,
             'exclusion_reason': reason if reason else None,
+            'suggested_weight': suggested_weight,
         }
 
     market_type = market['market_type']
@@ -1289,6 +1522,17 @@ def _parser_projection_components(market: dict[str, Any], canonical: dict[str, A
         else:
             key = 'total_center'
         add('projection_parser_current_quarter', quarter_projection.get(key))
+
+    # The newer coursework model supplies an independent remaining-quarter median.
+    # It is available only for combined totals, never for team IT, so segment semantics
+    # cannot be mixed (e.g. TEAM_IT_MATCH vs TEAM_IT_H2).
+    if market_type in {'MATCH_TOTAL', 'H1_TOTAL', 'H2_TOTAL', 'CURRENT_QUARTER_TOTAL'}:
+        segment_key = str(market.get('segment') or 'MATCH')
+        value = (coursework.get('segment_projections') or {}).get(segment_key)
+        readiness = coursework.get('data_readiness')
+        reason = None if coursework.get('eligible_as_projection_component') else 'COURSEWORK_SAMPLE_INSUFFICIENT'
+        weight = 0.12 if readiness == 'READY' else 0.06 if readiness == 'REVIEW_REQUIRED' else 0.0
+        add('projection_coursework_remaining', value, reason, suggested_weight=weight)
     return result
 
 def calculate_live_projection(market: dict[str, Any], canonical: dict[str, Any], history: dict[str, Any], scenario: dict[str, Any], config: dict[str, Any], stat: Optional[dict[str, Any]]=None) -> dict[str, Any]:
@@ -1395,7 +1639,7 @@ def calculate_live_projection(market: dict[str, Any], canonical: dict[str, Any],
     }
     for key, item in parser_components.items():
         component_values[key] = item.get('value') if item.get('available') else None
-        component_weights[key] = parser_weights.get(key, 0.08)
+        component_weights[key] = float(item.get('suggested_weight') if item.get('suggested_weight') is not None else parser_weights.get(key, 0.08))
     items = [(key, float(value), component_weights[key]) for key, value in component_values.items() if value is not None]
     line = float(market['line'])
     if items:
@@ -1815,6 +2059,44 @@ def _dedupe_markets(markets: list[dict[str, Any]], odds_min: float) -> tuple[lis
         'duplicate_offers_removed': len(markets) - len(unique),
     }
 
+
+def _market_semantic_issues(market: dict[str, Any], canonical: dict[str, Any]) -> list[dict[str, Any]]:
+    """Hard guards against comparing a line from one segment with another segment's score."""
+    issues: list[dict[str, Any]] = []
+    line = to_number(market.get('line'))
+    if line is None:
+        return issues
+    try:
+        clock = _segment_clock(market, canonical)
+    except Exception:
+        return issues
+    current_points = to_number(clock.get('current_points'))
+    remaining_seconds = to_number(clock.get('remaining_seconds'))
+    if current_points is not None and remaining_seconds is not None and remaining_seconds > 0 and line <= current_points:
+        issues.append(_blocker(
+            'LINE_BELOW_CURRENT_SCOPE_SCORE',
+            'Bookmaker line is not above the points already scored in the same market scope; probable segment mismatch',
+            {
+                'market_type': market.get('market_type'),
+                'segment': market.get('segment'),
+                'source_bucket': market.get('source_bucket'),
+                'source_scope': market.get('source_scope'),
+                'line': line,
+                'current_scope_points': current_points,
+            },
+        ))
+    # A match-scoped line must come from a Match-scoped row. The parser derives the
+    # market from scope, but retaining this guard protects against hand-edited/enriched JSON.
+    source_scope = str(market.get('source_scope') or '').upper().replace(' ', '')
+    segment = str(market.get('segment') or '').upper()
+    if source_scope and segment == 'MATCH' and source_scope not in {'MATCH', 'FULLMATCH', 'FT'}:
+        issues.append(_blocker(
+            'SOURCE_SCOPE_SEGMENT_MISMATCH',
+            'Source scope does not match normalized market segment',
+            {'source_scope': source_scope, 'normalized_segment': segment},
+        ))
+    return issues
+
 class SuperBasketCalculator:
 
     def __init__(self, config: dict[str, Any], zones_data: Optional[dict[str, Any]]=None) -> None:
@@ -1833,8 +2115,14 @@ class SuperBasketCalculator:
 
     def evaluate_market(self, market: dict[str, Any], canonical: dict[str, Any]) -> dict[str, Any]:
         initial_blockers = [_blocker(issue, issue.replace('_', ' ').title()) for issue in market.get('parser_issues', [])]
-        if market.get('line') is None or market.get('odds') is None or market.get('market_type') == 'UNSUPPORTED':
+        initial_blockers.extend(_market_semantic_issues(market, canonical))
+        if market.get('line') is None or market.get('odds') is None or market.get('market_type') == 'UNSUPPORTED' or initial_blockers:
             return _empty_evaluation(market, initial_blockers)
+        router_preview = _router(market, canonical)
+        if router_preview.get('hard_block'):
+            blocked = _empty_evaluation(market, [_blocker('PRODUCTION_ROUTER_BLOCK', router_preview['reason'])])
+            blocked['router'] = router_preview
+            return blocked
         history = calculate_history(market, canonical, self.config)
         scenario = calculate_scenario(market, canonical, history, self.config)
         stat = calculate_stat_gate(market, canonical, self.zones_data)
@@ -1944,6 +2232,7 @@ class SuperBasketCalculator:
 
     def calculate(self, source: dict[str, Any], dispatch_threshold: Optional[float]=None, strict_schema: bool=False) -> dict[str, Any]:
         canonical = adapt_match(source, self.config, strict_schema)
+        canonical['coursework_forecast'] = build_coursework_remaining_forecast(canonical)
         markets, audit = parse_markets(source, canonical, self.config)
         canonical['data_gate']['lines_found'] = sum((row.get('line') is not None for row in audit))
         markets, dedupe_summary = _dedupe_markets(markets, float(self.config['odds_min']))
@@ -1959,7 +2248,7 @@ class SuperBasketCalculator:
         unhashed.pop('super_basket_calculation', None)
         unhashed.pop('super_basket_system', None)
         snapshot_hash = hashlib.sha256(json.dumps(unhashed, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')).hexdigest()
-        calculation = {'engine_version': str(self.config.get('engine_version', '5.0')), 'calculated_at': source.get('meta', {}).get('generated_at') or source.get('generated_at'), 'input_snapshot_hash': snapshot_hash, 'canonical_snapshot': {'match_id': canonical['match_id'], 'name': canonical['name'], 'stage': canonical['stage'], 'explicit_stage': canonical['explicit_stage'], 'trigger_checkpoint': canonical.get('trigger_checkpoint'), 'current_quarter': canonical['current_quarter'], 'clock': canonical['clock'], 'score': canonical['score'], 'elapsed_game_seconds': canonical['elapsed_game_seconds'], 'remaining_game_seconds': canonical['remaining_game_seconds'], 'stat_support': canonical['stat_support'], 'format': canonical.get('format')}, 'data_gate': canonical['data_gate'], 'market_audit': dedupe_summary, 'markets_detected': audit, 'market_evaluations': evaluations, 'candidates': candidates, 'best_candidate': best, 'gpt_dispatch': {'threshold': threshold, 'eligible': bool(payload_candidates), 'candidate_count': len(payload_candidates), 'payload': {'match_id': canonical['match_id'], 'stage': canonical['stage'], 'candidates': payload_candidates}}}
+        calculation = {'engine_version': str(self.config.get('engine_version', '5.0')), 'calculated_at': source.get('meta', {}).get('generated_at') or source.get('generated_at'), 'input_snapshot_hash': snapshot_hash, 'canonical_snapshot': {'match_id': canonical['match_id'], 'name': canonical['name'], 'home_team': canonical['home_team'], 'away_team': canonical['away_team'], 'tournament': canonical['tournament'], 'stage': canonical['stage'], 'explicit_stage': canonical['explicit_stage'], 'trigger_checkpoint': canonical.get('trigger_checkpoint'), 'current_quarter': canonical['current_quarter'], 'quarter_minutes': canonical['quarter_minutes'], 'clock': canonical['clock'], 'score': canonical['score'], 'quarters': canonical['quarters'], 'elapsed_game_seconds': canonical['elapsed_game_seconds'], 'remaining_game_seconds': canonical['remaining_game_seconds'], 'stat_support': canonical['stat_support'], 'format': canonical.get('format')}, 'coursework_forecast': canonical.get('coursework_forecast'), 'data_gate': canonical['data_gate'], 'market_audit': dedupe_summary, 'markets_detected': audit, 'market_evaluations': evaluations, 'candidates': candidates, 'best_candidate': best, 'gpt_dispatch': {'threshold': threshold, 'eligible': bool(payload_candidates), 'candidate_count': len(payload_candidates), 'payload': {'match_id': canonical['match_id'], 'stage': canonical['stage'], 'candidates': payload_candidates}}}
         output = deepcopy(source)
         output['super_basket_calculation'] = calculation
         return output
@@ -1981,7 +2270,7 @@ def save_json(path: str | Path, data: dict[str, Any]) -> None:
 
 # ===== EMBEDDED CONFIG AND SIMPLE INTEGRATION API =====
 DEFAULT_CONFIG = json.loads(r"""{
-  "engine_version": "5.0",
+  "engine_version": "5.3",
   "calibration_status": "calibration_default_not_backtested",
   "odds_min": 1.44,
   "odds_max": 10.0,
@@ -2007,7 +2296,7 @@ DEFAULT_CONFIG = json.loads(r"""{
     "HT": {"hist": 0.27, "scenario": 0.20, "live": 0.53},
     "AFTER_3Q": {"hist": 0.16, "scenario": 0.17, "live": 0.67},
     "Q4_CONFIRMATION": {"hist": 0.10, "scenario": 0.15, "live": 0.75},
-    "CURRENT_Q1_Q3": {"hist": 0.23, "scenario": 0.23, "live": 0.54}
+    "CURRENT_Q1_Q3": {"hist": 0.23, "scenario": 0.23, "live": 0.56}
   },
   "sigma": {
     "MATCH_TOTAL": {"PRE_MATCH": 16.0, "EARLY_LIVE": 15.0, "HT": 12.0, "AFTER_3Q": 8.0, "Q4_CONFIRMATION": 7.0, "default": 14.0},
@@ -2138,7 +2427,7 @@ DEFAULT_CONFIG = json.loads(r"""{
 
 
 # ===== VPS ORCHESTRATION, AUDIT, LEARNING, GPT AND TELEGRAM =====
-SYSTEM_VERSION = '5.0.0'
+SYSTEM_VERSION = '5.3.0'
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec='seconds')
@@ -2150,6 +2439,7 @@ def utc_now() -> str:
 # лежав у volume 'state' і переживав рестарт контейнера.
 VERDICT_LOG_FILE = os.getenv('VERDICT_LOG_FILE', 'verdicts.log')
 EXCEL_AUDIT_FILE = os.getenv('EXCEL_AUDIT_FILE', 'super_basket_detailed_log.xlsx')
+ENABLE_EXCEL_AUDIT = os.getenv('SUPER_BASKET_EXCEL_AUDIT', 'false').strip().lower() in {'1', 'true', 'yes', 'on'}
 PUBLIC_FILES_BASE_URL = os.getenv('PUBLIC_FILES_BASE_URL', '').rstrip('/')
 
 def _public_file_url(file_path: Any) -> Optional[str]:
@@ -2354,16 +2644,43 @@ def env_bool(name: str, default: bool) -> bool:
 def normalized_action(probability: float, blockers: list[dict[str, Any]], mode: str) -> tuple[str, str, str]:
     if blockers:
         return 'PASS', 'PASS', '0%'
-    if mode.upper() == 'STRICT':
-        if probability < 0.75:
-            return 'PASS', 'TRIGGER ONLY', '0%'
-    elif probability < 0.68:
+    if mode.upper() == 'STRICT' and probability < 0.75:
+        return 'PASS', 'TRIGGER ONLY', '0%'
+    if probability < 0.68:
         return 'PASS', 'PASS', '0%'
+    if probability < 0.73:
+        return 'RISK', 'RISK ENTRY', '10-15% live-limit'
     if probability < 0.75:
-        return 'RISK', 'RISK PLAY', '10-15% live-limit'
+        return 'PLAY', 'LOW PLAY', '15-20% live-limit'
     if probability < 0.80:
-        return 'PLAY', 'LIVE PLAY', '20-25% live-limit'
-    return 'PLAY', 'PLAY', '30-35% live-limit'
+        return 'PLAY', 'PLAY', '20-25% live-limit'
+    if probability < 0.85:
+        return 'PLAY', 'MAIN PLAY', '30-35% live-limit'
+    return 'PLAY', 'STRONG PLAY', '40-50% live-limit'
+
+
+def build_budget_recommendation(action: str, status: str, stake: str) -> dict[str, Any]:
+    match = re.search(r'(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)%', stake or '')
+    pct_min = float(match.group(1)) if match else 0.0
+    pct_max = float(match.group(2)) if match else 0.0
+    live_limit = to_number(os.getenv('SUPER_BASKET_LIVE_LIMIT'))
+    bankroll = to_number(os.getenv('SUPER_BASKET_BANKROLL'))
+    base_amount = live_limit if live_limit is not None else bankroll
+    base_type = 'LIVE_LIMIT' if live_limit is not None else 'BANKROLL_FALLBACK' if bankroll is not None else 'PERCENT_ONLY'
+    currency = os.getenv('SUPER_BASKET_CURRENCY', 'USDT')
+    return {
+        'action': action,
+        'status': status,
+        'base_type': base_type,
+        'base_amount': base_amount,
+        'currency': currency,
+        'percent_min': pct_min,
+        'percent_max': pct_max,
+        'amount_min': round(base_amount * pct_min / 100.0, 2) if base_amount is not None else None,
+        'amount_max': round(base_amount * pct_max / 100.0, 2) if base_amount is not None else None,
+        'text': stake,
+        'educational_note': 'Budget range is a configurable live-limit allocation, not a guarantee of outcome.',
+    }
 
 def _precomputed_line_reconciliation(source: dict[str, Any], evaluation: Optional[dict[str, Any]], data_gate: dict[str, Any]) -> dict[str, Any]:
     if not evaluation:
@@ -2753,6 +3070,7 @@ def build_decision(selected: Optional[dict[str, Any]], closest: Optional[dict[st
         'market': market,
         'probabilities': probabilities,
         'stake': stake,
+        'budget_recommendation': build_budget_recommendation(action, status, stake),
         'explanation_uk': explanation,
         'main_risk_uk': main_risk,
         'trigger_uk': trigger,
@@ -2840,6 +3158,13 @@ def build_telegram_message(decision: dict[str, Any], calculation: dict[str, Any]
         f'<b>P_final:</b> {float(probability):.1%}',
         f'<b>Статус:</b> {html.escape(decision["status"])}',
         f'<b>Stake:</b> {html.escape(decision["stake"])}',
+        (
+            f'<b>Бюджет:</b> {decision["budget_recommendation"]["amount_min"]:.2f}–'
+            f'{decision["budget_recommendation"]["amount_max"]:.2f} '
+            f'{html.escape(str(decision["budget_recommendation"]["currency"]))}'
+            if decision.get('budget_recommendation', {}).get('amount_min') is not None
+            else f'<b>Бюджет:</b> {html.escape(decision["stake"])}'
+        ),
         f'<b>Пояснення:</b> {html.escape(explanation)}',
         f'<b>Головний ризик:</b> {html.escape(risk)}',
         '<i>Сигнал чинний лише для вказаних лінії, коефіцієнта, рахунку та часу.</i>',
@@ -3118,6 +3443,8 @@ def process_vps_match_file(
                 'empty_or_rejected_reason': line_reason,
             },
             'probabilities': deepcopy(decision.get('probabilities') or {}),
+            'budget_recommendation': deepcopy(decision.get('budget_recommendation') or {}),
+            'coursework_forecast': deepcopy(calculation.get('coursework_forecast') or {}),
             'gates': {
                 'caps': deepcopy(decision.get('caps') or []),
                 'blockers': deepcopy(decision.get('blockers') or []),
@@ -3128,7 +3455,8 @@ def process_vps_match_file(
             },
         })
         save_json(target, core_result)
-        append_excel_audit(core_result)
+        if ENABLE_EXCEL_AUDIT:
+            append_excel_audit(core_result)
         store.mark_processed(calculation['input_snapshot_hash'], str(source_path), str(target), system['status'])
         return core_result
     finally:
@@ -3274,7 +3602,7 @@ def _single_file_cli(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0].startswith('--') and '--match' in argv:
         argv.insert(0, 'run')
-    parser = argparse.ArgumentParser(description='SUPER_BASKET VPS SYSTEM v5.0')
+    parser = argparse.ArgumentParser(description='SUPER_BASKET VPS ACTION SYSTEM v5.2')
     subparsers = parser.add_subparsers(dest='command', required=True)
 
     run = subparsers.add_parser('run', help='Process one parser JSON')
@@ -3372,6 +3700,10 @@ def _single_file_cli(argv: list[str] | None = None) -> int:
                 'telegram_chats_file': os.getenv('TELEGRAM_CHATS_FILE'),
                 'telegram_chats_file_chat_count': len(_load_telegram_chat_ids()),
                 'require_gpt': env_bool('SUPER_BASKET_REQUIRE_GPT', True),
+                'live_limit_set': to_number(os.getenv('SUPER_BASKET_LIVE_LIMIT')) is not None,
+                'bankroll_set': to_number(os.getenv('SUPER_BASKET_BANKROLL')) is not None,
+                'budget_currency': os.getenv('SUPER_BASKET_CURRENCY', 'USDT'),
+                'excel_audit_enabled': ENABLE_EXCEL_AUDIT,
             }, ensure_ascii=False, indent=2))
     except KeyboardInterrupt:
         print('STOPPED', file=sys.stderr)
