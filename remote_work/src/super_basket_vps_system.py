@@ -30,7 +30,6 @@ import statistics
 import sys
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -2149,17 +2148,6 @@ def utc_now() -> str:
 # покласти поруч з SUPER_BASKET_DB, напр. /app/state/verdicts.log), щоб файл
 # лежав у volume 'state' і переживав рестарт контейнера.
 VERDICT_LOG_FILE = os.getenv('VERDICT_LOG_FILE', 'verdicts.log')
-EXCEL_AUDIT_FILE = os.getenv('EXCEL_AUDIT_FILE', 'super_basket_detailed_log.xlsx')
-PUBLIC_FILES_BASE_URL = os.getenv('PUBLIC_FILES_BASE_URL', '').rstrip('/')
-
-def _public_file_url(file_path: Any) -> Optional[str]:
-    if not file_path or not PUBLIC_FILES_BASE_URL:
-        return None
-    try:
-        relative = Path(str(file_path)).resolve().relative_to(Path('/app/state'))
-    except (OSError, ValueError):
-        return None
-    return f"{PUBLIC_FILES_BASE_URL}/{urllib.parse.quote(relative.as_posix())}"
 
 def append_verdict_log(entry: dict[str, Any], path: str | Path | None = None) -> None:
     """Дописує один JSON-рядок (JSON Lines) з підсумком чекпоінта.
@@ -2174,176 +2162,6 @@ def append_verdict_log(entry: dict[str, Any], path: str | Path | None = None) ->
             fh.write(json.dumps(entry, ensure_ascii=False) + '\n')
     except OSError as exc:
         print(f'WARNING: could not write verdict log to {target}: {exc}', file=sys.stderr)
-
-def _excel_scalar_rows(value: Any, prefix: str = '') -> Iterable[tuple[str, Any]]:
-    """Flatten every scalar in a calculation payload without dropping detail."""
-    if isinstance(value, dict):
-        for key, child in value.items():
-            path = f'{prefix}.{key}' if prefix else str(key)
-            yield from _excel_scalar_rows(child, path)
-    elif isinstance(value, list):
-        for index, child in enumerate(value):
-            yield from _excel_scalar_rows(child, f'{prefix}[{index}]')
-    else:
-        if value is None or isinstance(value, (str, int, float, bool)):
-            cell_value = value
-        else:
-            cell_value = str(value)
-        if isinstance(cell_value, str) and len(cell_value) > 32767:
-            cell_value = cell_value[:32740] + '... [TRUNCATED]'
-        yield prefix, cell_value
-
-def append_excel_audit(core_result: dict[str, Any], path: str | Path | None = None) -> None:
-    """Append one wide row per checkpoint to a single XLSX sheet.
-
-    Every scalar from the result JSON (calculation + system + decision, including
-    reason_codes/explanation/blockers/caps) becomes its own column, plus a handful
-    of human-readable summary columns up front. New market/blocker/cap indices
-    across different runs simply add new columns as needed.
-
-    A sidecar flock plus atomic replace makes concurrent Docker workers safe.
-    Excel is diagnostic only: export failures never interrupt a betting job.
-    """
-    target = Path(path or EXCEL_AUDIT_FILE).expanduser()
-    lock_path = target.with_suffix(target.suffix + '.lock')
-    tmp_path: Optional[Path] = None
-    try:
-        import fcntl
-        from openpyxl import Workbook, load_workbook
-        from openpyxl.styles import Font, PatternFill
-
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with lock_path.open('a+b') as lock_handle:
-            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
-            workbook = load_workbook(target) if target.exists() else Workbook()
-            for stale_name in ('Market evaluations', 'All calculations'):
-                if stale_name in workbook.sheetnames:
-                    workbook.remove(workbook[stale_name])
-            if 'Runs' in workbook.sheetnames:
-                ws = workbook['Runs']
-            elif workbook.sheetnames == ['Sheet']:
-                ws = workbook['Sheet']
-                ws.title = 'Runs'
-            else:
-                ws = workbook.create_sheet('Runs')
-
-            calculation = core_result.get('super_basket_calculation') or {}
-            system = core_result.get('super_basket_system') or {}
-            decision = system.get('decision') or {}
-            snapshot = calculation.get('canonical_snapshot') or {}
-            market = decision.get('market') or {}
-            gpt_review = system.get('gpt_review') or {}
-            source_file = (system.get('files') or {}).get('source')
-            result_file = (system.get('files') or {}).get('result')
-            run_id = f"{system.get('processed_at', utc_now())}|{snapshot.get('match_id', '')}|{snapshot.get('trigger_checkpoint', '')}"
-
-            def _codes_summary(items: Any) -> str:
-                if not items:
-                    return ''
-                return '; '.join(str(code) for code in items)
-
-            def _rule_summary(items: Any) -> str:
-                if not items:
-                    return ''
-                parts = []
-                for entry in items:
-                    if isinstance(entry, dict):
-                        rule_id = entry.get('rule_id', '')
-                        reason = entry.get('reason', '')
-                        parts.append(f'{rule_id}: {reason}' if reason else str(rule_id))
-                    else:
-                        parts.append(str(entry))
-                return ' | '.join(parts)
-
-            row_data: dict[str, Any] = {
-                'run_id': run_id,
-                'timestamp_utc': system.get('processed_at'),
-                'match_id': snapshot.get('match_id'),
-                'match_name': snapshot.get('name'),
-                'trigger_checkpoint': snapshot.get('trigger_checkpoint'),
-                'stage': snapshot.get('stage'),
-                'clock': snapshot.get('clock'),
-                'score_home': (snapshot.get('score') or {}).get('home'),
-                'score_away': (snapshot.get('score') or {}).get('away'),
-                'action': decision.get('action'),
-                'status': decision.get('status'),
-                'stake': decision.get('stake'),
-                'p_final': (decision.get('probabilities') or {}).get('p_final'),
-                'market_type': market.get('market_type'),
-                'segment': market.get('segment'),
-                'team': market.get('team'),
-                'side': market.get('side'),
-                'line': market.get('line'),
-                'odds': market.get('odds'),
-                'signal_id': decision.get('signal_id'),
-                'reason_codes': _codes_summary(decision.get('reason_codes')),
-                'explanation_uk': decision.get('explanation_uk'),
-                'main_risk_uk': decision.get('main_risk_uk'),
-                'trigger_uk': decision.get('trigger_uk'),
-                'blockers_summary': _rule_summary(decision.get('blockers')),
-                'caps_summary': _rule_summary(decision.get('caps')),
-                'gpt_status': gpt_review.get('status'),
-                'gpt_explanation_uk': gpt_review.get('explanation_uk'),
-                'gpt_main_risk_uk': gpt_review.get('main_risk_uk'),
-                'telegram_status': (system.get('telegram_delivery') or {}).get('status'),
-                'input_hash': calculation.get('input_snapshot_hash'),
-                'source_file': source_file,
-                'result_file': result_file,
-                'source_url': _public_file_url(source_file),
-                'result_url': _public_file_url(result_file),
-            }
-            # Every remaining scalar from the full result JSON, one column each.
-            audit_payload = {'super_basket_calculation': calculation, 'super_basket_system': system}
-            for json_path, value in _excel_scalar_rows(audit_payload):
-                row_data[f'raw.{json_path}'] = value
-
-            if ws.max_row == 1 and ws.cell(1, 1).value is None:
-                header_index: dict[str, int] = {}
-                for column, header in enumerate(row_data.keys(), 1):
-                    ws.cell(1, column, header)
-                    header_index[header] = column
-            else:
-                header_index = {ws.cell(1, column).value: column for column in range(1, ws.max_column + 1)}
-                for header in row_data.keys():
-                    if header not in header_index:
-                        new_column = ws.max_column + 1
-                        ws.cell(1, new_column, header)
-                        header_index[header] = new_column
-
-            for cell in ws[1]:
-                cell.font = Font(bold=True, color='FFFFFF')
-                cell.fill = PatternFill('solid', fgColor='1F4E78')
-            ws.freeze_panes = 'B2'
-
-            new_row = ws.max_row + 1
-            for header, value in row_data.items():
-                cell_value = value
-                if isinstance(cell_value, str) and len(cell_value) > 32767:
-                    cell_value = cell_value[:32740] + '... [TRUNCATED]'
-                ws.cell(new_row, header_index[header], cell_value)
-            for name in ('source_url', 'result_url'):
-                column = header_index.get(name)
-                if column:
-                    cell = ws.cell(new_row, column)
-                    if cell.value:
-                        cell.hyperlink = cell.value
-                        cell.style = 'Hyperlink'
-
-            ws.auto_filter.ref = ws.dimensions
-            ws.column_dimensions['A'].width = 42
-            ws.column_dimensions['B'].width = 24
-            ws.column_dimensions[ws.cell(1, header_index['explanation_uk']).column_letter].width = 60
-            tmp_path = target.with_name(f'.{target.name}.{os.getpid()}.tmp')
-            workbook.save(tmp_path)
-            os.replace(tmp_path, target)
-            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
-    except Exception as exc:
-        if tmp_path is not None:
-            try:
-                tmp_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-        print(f'WARNING: could not write Excel audit to {target}: {exc}', file=sys.stderr)
 
 def env_bool(name: str, default: bool) -> bool:
     value = os.getenv(name)
@@ -3057,7 +2875,6 @@ def process_vps_match_file(
             'gpt_review': review,
             'telegram_delivery': {**delivery, 'duplicate_signal': duplicate},
             'learning': evaluation_for_output.get('calibration') if evaluation_for_output else {'status': 'NO_MARKET'},
-            'files': {'source': str(source_path), 'result': str(target)},
         }
         core_result['super_basket_system'] = system
         snapshot = calculation['canonical_snapshot']
@@ -3128,7 +2945,6 @@ def process_vps_match_file(
             },
         })
         save_json(target, core_result)
-        append_excel_audit(core_result)
         store.mark_processed(calculation['input_snapshot_hash'], str(source_path), str(target), system['status'])
         return core_result
     finally:
