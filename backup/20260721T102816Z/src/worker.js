@@ -35,8 +35,6 @@ const PYTHON_BIN  = process.env.PYTHON_BIN || 'python3';
 // Лежит в state-volume, чтобы переживать пересоздание контейнера.
 const SUPER_BASKET_DB = process.env.SUPER_BASKET_DB
   || path.join(APP_ROOT, 'state', 'super_basket.sqlite3');
-const MATCH_FILES_DIR = process.env.MATCH_FILES_DIR
-  || path.join(APP_ROOT, 'state', 'match_files');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -120,9 +118,8 @@ async function processJob(job) {
   const checkpointSuffix = triggerCheckpoint >= 1 && triggerCheckpoint <= 3
     ? `_q${triggerCheckpoint}_result.json`
     : `_checkpoint_${Date.now()}_result.json`;
-  fs.mkdirSync(MATCH_FILES_DIR, { recursive: true });
   const calculatedFilePath = path.join(
-    MATCH_FILES_DIR,
+    path.dirname(dataFilePath),
     `${path.basename(dataFilePath, path.extname(dataFilePath))}${checkpointSuffix}`
   );
 

@@ -23,8 +23,6 @@ services:
       TELEGRAM_CHATS_FILE: /app/state/telegram_chats.json
       VERDICT_LOG_FILE: /app/state/verdicts.log
       EXCEL_AUDIT_FILE: /app/state/super_basket_detailed_log.xlsx
-      MATCH_FILES_DIR: /app/state/match_files
-      PUBLIC_FILES_BASE_URL: http://130.0.235.172:8080
     volumes:
       - ./src:/app/src
       - ./src/data:/app/data

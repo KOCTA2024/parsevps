@@ -30,7 +30,6 @@ import statistics
 import sys
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -2150,16 +2149,6 @@ def utc_now() -> str:
 # лежав у volume 'state' і переживав рестарт контейнера.
 VERDICT_LOG_FILE = os.getenv('VERDICT_LOG_FILE', 'verdicts.log')
 EXCEL_AUDIT_FILE = os.getenv('EXCEL_AUDIT_FILE', 'super_basket_detailed_log.xlsx')
-PUBLIC_FILES_BASE_URL = os.getenv('PUBLIC_FILES_BASE_URL', '').rstrip('/')
-
-def _public_file_url(file_path: Any) -> Optional[str]:
-    if not file_path or not PUBLIC_FILES_BASE_URL:
-        return None
-    try:
-        relative = Path(str(file_path)).resolve().relative_to(Path('/app/state'))
-    except (OSError, ValueError):
-        return None
-    return f"{PUBLIC_FILES_BASE_URL}/{urllib.parse.quote(relative.as_posix())}"
 
 def append_verdict_log(entry: dict[str, Any], path: str | Path | None = None) -> None:
     """Дописує один JSON-рядок (JSON Lines) з підсумком чекпоінта.
@@ -2225,12 +2214,6 @@ def append_excel_audit(core_result: dict[str, Any], path: str | Path | None = No
                 if ws.max_row == 1 and ws.cell(1, 1).value is None:
                     for column, header in enumerate(headers, 1):
                         ws.cell(1, column, header)
-                else:
-                    existing = {ws.cell(1, column).value for column in range(1, ws.max_column + 1)}
-                    for header in headers:
-                        if header not in existing:
-                            ws.cell(1, ws.max_column + 1, header)
-                            existing.add(header)
                     for cell in ws[1]:
                         cell.font = Font(bold=True, color='FFFFFF')
                         cell.fill = PatternFill('solid', fgColor='1F4E78')
@@ -2238,18 +2221,9 @@ def append_excel_audit(core_result: dict[str, Any], path: str | Path | None = No
                     ws.auto_filter.ref = f'A1:{ws.cell(1, len(headers)).coordinate}'
                 return ws
 
-            runs = sheet('Runs', ['run_id', 'timestamp_utc', 'match_id', 'match_name', 'trigger_checkpoint', 'stage', 'clock', 'score_home', 'score_away', 'action', 'status', 'p_final', 'market_type', 'segment', 'team', 'side', 'line', 'odds', 'gpt_status', 'telegram_status', 'input_hash', 'source_file', 'result_file', 'source_url', 'result_url'])
+            runs = sheet('Runs', ['run_id', 'timestamp_utc', 'match_id', 'match_name', 'trigger_checkpoint', 'stage', 'clock', 'score_home', 'score_away', 'action', 'status', 'p_final', 'market_type', 'segment', 'team', 'side', 'line', 'odds', 'gpt_status', 'telegram_status', 'input_hash', 'source_file', 'result_file'])
             market = decision.get('market') or {}
-            source_file = (system.get('files') or {}).get('source')
-            result_file = (system.get('files') or {}).get('result')
-            source_url = _public_file_url(source_file)
-            result_url = _public_file_url(result_file)
-            runs.append([run_id, system.get('processed_at'), snapshot.get('match_id'), snapshot.get('name'), snapshot.get('trigger_checkpoint'), snapshot.get('stage'), snapshot.get('clock'), (snapshot.get('score') or {}).get('home'), (snapshot.get('score') or {}).get('away'), decision.get('action'), decision.get('status'), (decision.get('probabilities') or {}).get('p_final'), market.get('market_type'), market.get('segment'), market.get('team'), market.get('side'), market.get('line'), market.get('odds'), (system.get('gpt_review') or {}).get('status'), (system.get('telegram_delivery') or {}).get('status'), calculation.get('input_snapshot_hash'), source_file, result_file, source_url, result_url])
-            for column in (24, 25):
-                cell = runs.cell(runs.max_row, column)
-                if cell.value:
-                    cell.hyperlink = cell.value
-                    cell.style = 'Hyperlink'
+            runs.append([run_id, system.get('processed_at'), snapshot.get('match_id'), snapshot.get('name'), snapshot.get('trigger_checkpoint'), snapshot.get('stage'), snapshot.get('clock'), (snapshot.get('score') or {}).get('home'), (snapshot.get('score') or {}).get('away'), decision.get('action'), decision.get('status'), (decision.get('probabilities') or {}).get('p_final'), market.get('market_type'), market.get('segment'), market.get('team'), market.get('side'), market.get('line'), market.get('odds'), (system.get('gpt_review') or {}).get('status'), (system.get('telegram_delivery') or {}).get('status'), calculation.get('input_snapshot_hash'), (system.get('files') or {}).get('source'), (system.get('files') or {}).get('result')])
 
             evaluations = sheet('Market evaluations', ['run_id', 'evaluation_index', 'market_type', 'segment', 'team', 'side', 'line', 'odds', 'bookmaker', 'system_action', 'p_hist', 'p_scenario', 'p_live', 'p_raw', 'p_final', 'full_evaluation_json'])
             for index, item in enumerate(calculation.get('market_evaluations') or []):

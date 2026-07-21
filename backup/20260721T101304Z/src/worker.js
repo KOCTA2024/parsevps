@@ -35,8 +35,6 @@ const PYTHON_BIN  = process.env.PYTHON_BIN || 'python3';
 // Лежит в state-volume, чтобы переживать пересоздание контейнера.
 const SUPER_BASKET_DB = process.env.SUPER_BASKET_DB
   || path.join(APP_ROOT, 'state', 'super_basket.sqlite3');
-const MATCH_FILES_DIR = process.env.MATCH_FILES_DIR
-  || path.join(APP_ROOT, 'state', 'match_files');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -117,18 +115,10 @@ async function processJob(job) {
 
   // ── Step 2: Python calculator ─────────────────────────────────────────────
   const calcScript = path.join(APP_ROOT, 'src', 'math_script.py');
-  const checkpointSuffix = triggerCheckpoint >= 1 && triggerCheckpoint <= 3
-    ? `_q${triggerCheckpoint}_result.json`
-    : `_checkpoint_${Date.now()}_result.json`;
-  fs.mkdirSync(MATCH_FILES_DIR, { recursive: true });
-  const calculatedFilePath = path.join(
-    MATCH_FILES_DIR,
-    `${path.basename(dataFilePath, path.extname(dataFilePath))}${checkpointSuffix}`
-  );
 
-  log(jid, 'info', `Step 2 → ${PYTHON_BIN} ${calcScript} ${dataFilePath} ${lineFilePath} --output ${calculatedFilePath}`);
+  log(jid, 'info', `Step 2 → ${PYTHON_BIN} ${calcScript} ${dataFilePath} ${lineFilePath}`);
 
-  const calcResult = await run(PYTHON_BIN, [calcScript, dataFilePath, lineFilePath, '--output', calculatedFilePath], { jobId: jid });
+  const calcResult = await run(PYTHON_BIN, [calcScript, dataFilePath, lineFilePath], { jobId: jid });
   log(jid, 'info', `Step 2 exited ${calcResult.code}${calcResult.stderr ? '\n' + calcResult.stderr : ''}`);
   if (calcResult.code !== 0) {
     throw new Error(`Calculator failed (exit ${calcResult.code}): ${calcResult.stderr || '(none)'}`);
@@ -136,17 +126,17 @@ async function processJob(job) {
   await job.updateProgress(70);
 
   // ── Step 3: super_basket_vps_system.py ────────────────────────────────────
-  // calculatedFilePath содержит отдельный snapshot этого checkpoint (h2h + lines +
+  // dataFilePath к этому моменту уже содержит merged JSON (h2h + lines +
   // raw_data + team_relative_stat_zones) — это ровно то, что нужно скрипту
   // как --match. Все gates (stat/conflict/router/Team-IT/Q4), GPT-review
   // сигнала и отправка в Telegram теперь внутри этого скрипта.
   const superBasketScript = path.join(APP_ROOT, 'src', 'super_basket_vps_system.py');
-  log(jid, 'info', `Step 3 → ${PYTHON_BIN} ${superBasketScript} run --match ${calculatedFilePath} ` +
+  log(jid, 'info', `Step 3 → ${PYTHON_BIN} ${superBasketScript} run --match ${dataFilePath} ` +
       `--checkpoint ${triggerCheckpoint || 0}`);
 
   const superBasketArgs = [
     superBasketScript, 'run',
-    '--match', calculatedFilePath,
+    '--match', dataFilePath,
     '--db', SUPER_BASKET_DB,
   ];
   if (triggerCheckpoint >= 1 && triggerCheckpoint <= 3) {

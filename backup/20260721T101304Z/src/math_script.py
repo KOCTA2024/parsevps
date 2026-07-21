@@ -8003,14 +8003,6 @@ def main():
          python math_script.py <h2h_file> <line_result_file>
     """
     args = sys.argv[1:]
-    output_override = None
-    if "--output" in args:
-        output_index = args.index("--output")
-        if output_index + 1 >= len(args):
-            print("[math_script] ERROR: --output requires a file path", file=sys.stderr)
-            sys.exit(1)
-        output_override = args[output_index + 1]
-        del args[output_index:output_index + 2]
 
     if len(args) == 1 and not args[0].startswith("--") and os.path.isfile(args[0]):
         # ── ТЗ v5.0: один самодостатній файл (schema_version + match) ────
@@ -8146,8 +8138,7 @@ def main():
     # The compressor previously sat between the bookmaker line file and the
     # final calculator and could alter/drop fields or line buckets. The final
     # calculator must receive the exact, uncompressed contract produced above.
-    output_path = Path(output_override) if output_override else Path(h2h_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path = Path(h2h_path)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(merged, f, ensure_ascii=False, separators=(",", ":"))
 
