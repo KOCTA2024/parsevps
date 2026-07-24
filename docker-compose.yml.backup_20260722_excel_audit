@@ -1,0 +1,96 @@
+services:
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  # ── Worker (всегда живёт, слушает очередь) ────────────────────────────────
+  worker:
+    build: .
+    working_dir: /app
+    command: node src/worker.js
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      WORKER_CONCURRENCY: 2
+      SUPER_BASKET_DB: /app/state/super_basket.sqlite3
+      TELEGRAM_CHATS_FILE: /app/state/telegram_chats.json
+      VERDICT_LOG_FILE: /app/state/verdicts.log
+      EXCEL_AUDIT_FILE: /app/state/super_basket_detailed_log.xlsx
+      MATCH_FILES_DIR: /app/state/match_files
+      PUBLIC_FILES_BASE_URL: http://130.0.235.172:8080
+    volumes:
+      - ./src:/app/src
+      - ./src/data:/app/data
+      - state:/app/state
+    depends_on:
+      redis:
+        condition: service_healthy
+  # ── Monitor (cron, раз в 24 ч) — только обновляет matches.json ───────────
+  monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /app
+    command: sh -c "while true; do HOUR=$$(date -u +%H); MIN=$$(date -u +%M); if [ \"$$HOUR\" = '01' ] && [ \"$$MIN\" = '00' ]; then node src/monitor.js >> /app/state/monitor.log 2>&1; sleep 61; fi; sleep 30; done"
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MATCHES_FILE: /app/state/matches.json
+    volumes:
+      - ./src:/app/src
+      - ./src/data:/app/data
+      - state:/app/state
+      - ./scheduler.crontab:/etc/crontabs/scheduler:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ── Stage-monitor (всегда живёт, следит за стадией матчей и ставит job'ы
+  #    в очередь при обнаружении перерыва — заменяет orchestrator.js) ───────
+  stage-monitor:
+    build: .
+    working_dir: /app
+    command: node src/stage_monitor.js
+    restart: unless-stopped
+    shm_size: '1gb'  # Playwright/Chromium под нагрузкой стабильнее с нормальной /dev/shm
+    env_file:
+      - .env
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MATCHES_FILE: /app/state/matches.json
+    volumes:
+      - ./src:/app/src
+      - ./src/data:/app/data
+      - state:/app/state
+    depends_on:
+      redis:
+        condition: service_healthy
+      worker:
+        condition: service_started
+      monitor:
+        condition: service_started
+
+  # ── Fileserver (раздаёт содержимое state/ по HTTP, без авторизации) ──────
+  fileserver:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - state:/usr/share/nginx/html:ro
+      - ./nginx-fileserver.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  state:   # изолированный volume для matches.json

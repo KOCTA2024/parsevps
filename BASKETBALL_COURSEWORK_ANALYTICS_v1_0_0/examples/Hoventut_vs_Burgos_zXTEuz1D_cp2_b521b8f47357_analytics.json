@@ -1,0 +1,187 @@
+{
+  "coursework_basketball_analytics": {
+    "system_version": "1.0.0",
+    "research_context": true,
+    "created_at": "2026-07-21T13:26:04+00:00",
+    "input_hash": "b521b8f47357f44691fde549fbeac8f57c8bcf051c79c7f4c42a688cdd3c2066",
+    "run_key": "ACADEMIC-C748F2B0758EDAB0A40D7D87",
+    "match": {
+      "match_id": "zXTEuz1D",
+      "name": "Ховентут Бадалона vs Сан-Пабло Бургос",
+      "home_team": "Ховентут Бадалона",
+      "away_team": "Сан-Пабло Бургос",
+      "quarter_minutes": 10,
+      "regulation_minutes": 40
+    },
+    "checkpoint": 2,
+    "snapshot_state": {
+      "elapsed_minutes": 20.0,
+      "current_quarter": 3,
+      "current_quarter_minutes_left": 10.0,
+      "score": {
+        "home": 45.0,
+        "away": 41.0,
+        "total": 86.0
+      },
+      "finished": false
+    },
+    "data_readiness": "READY",
+    "data_quality": {
+      "schema_errors": [],
+      "same_format_history_n": 73,
+      "ignored_non_sport_sections": true
+    },
+    "remaining_plan": {
+      "future_quarters": [
+        3,
+        4
+      ],
+      "current_quarter": 3,
+      "current_quarter_remaining_ratio": 1.0,
+      "partial_current_quarter": false
+    },
+    "forecast": {
+      "current_total_points": 86.0,
+      "historical_remaining_distribution": {
+        "n": 73,
+        "mean": 87.87671232876713,
+        "median": 88.0,
+        "standard_deviation": 10.393567996975944,
+        "p10": 75.0,
+        "p25": 81.0,
+        "p75": 96.0,
+        "p90": 100.8,
+        "minimum": 64.0,
+        "maximum": 113.0
+      },
+      "forecast_final_total_points": 174.0,
+      "central_interval_p10_p90": [
+        161.0,
+        186.8
+      ],
+      "formula": "current_total_points + median(historical_remaining_points)",
+      "already_scored_points_added_once": true,
+      "approximation_used": false
+    },
+    "quarter_profiles": {
+      "Q3": {
+        "n": 73,
+        "mean": 44.56164383561644,
+        "median": 44.0,
+        "standard_deviation": 6.482854098333077,
+        "p10": 36.0,
+        "p25": 39.0,
+        "p75": 49.0,
+        "p90": 53.0,
+        "minimum": 30.0,
+        "maximum": 58.0
+      },
+      "Q4": {
+        "n": 73,
+        "mean": 43.31506849315068,
+        "median": 45.0,
+        "standard_deviation": 7.826019124846664,
+        "p10": 34.0,
+        "p25": 39.0,
+        "p75": 49.0,
+        "p90": 53.0,
+        "minimum": 19.0,
+        "maximum": 58.0
+      }
+    },
+    "history_audit": {
+      "n_raw": 75,
+      "n_unique_complete": 73,
+      "n_same_format": 73,
+      "sample_game_ids": [
+        "QH2TA3vP",
+        "0YoqkmY9",
+        "hM5rBt9l",
+        "dpqTod5d",
+        "2JmyHBuA",
+        "M3LGiQic",
+        "ruEVtANa",
+        "0ludgP4l",
+        "GUTjlhVP",
+        "jFgQbosR",
+        "SlPEFXO0",
+        "SQtSOy2E",
+        "tM8fPKwJ",
+        "hSjzNq77",
+        "bHVCWoUI",
+        "U1HO4ego",
+        "ljzz1Uif",
+        "ATI2a0H5",
+        "radSWwuQ",
+        "j15tL2KM",
+        "hdpIsCxK",
+        "IaPKlq3m",
+        "fonJPTX1",
+        "l8mBYWCk",
+        "8MHPCImf",
+        "tnQeYEaN",
+        "69VWwJVo",
+        "bRQyrpHD",
+        "O8CgV6X7",
+        "ptfYPBeS",
+        "C0ul4U1s",
+        "61BPTpQF",
+        "OnJEDs65",
+        "vwUck1y8",
+        "pGh20Rq9",
+        "0n9j9Kw1",
+        "IkUhvWJi",
+        "lC74G7Am",
+        "rNroBCY7",
+        "rJ0te0rA",
+        "OETFvubT",
+        "8dS12CQG",
+        "rRYdSA86",
+        "EZtgZDdU",
+        "6LeX2fue",
+        "Kl5cjHek",
+        "hzkHAos4",
+        "jmvxEaWb",
+        "UJAf1Mng",
+        "4daozplf",
+        "S6Q9uW6j",
+        "dA8WuFKF",
+        "CUhlilfR",
+        "GxQxZlYr",
+        "44aU7CZq",
+        "pKIcDYBM",
+        "d0HMBLzI",
+        "rFrtariC",
+        "8dUcn576",
+        "IuZKml03",
+        "EuCYOA9r",
+        "vHzJXyA5",
+        "vLnTrBqH",
+        "G0rf8Ltf",
+        "SnMKHYpI",
+        "4p9U6HWa",
+        "E9i7vNxB",
+        "hf3btq8b",
+        "pUajr5wn",
+        "fcWdqtmG",
+        "z3fT9Qw7",
+        "nmo5V16c",
+        "hzegq9Dr"
+      ],
+      "excluded": {
+        "current_match": 0,
+        "technical_result": 0,
+        "duplicate": 2,
+        "incomplete_quarters": 0
+      }
+    },
+    "external_delivery": {
+      "enabled": false,
+      "reason": "COURSEWORK_OFFLINE_ONLY"
+    },
+    "integrity_report": {
+      "all_passed": true,
+      "errors": []
+    }
+  }
+}

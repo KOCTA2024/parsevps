@@ -1,0 +1,279 @@
+{
+  "raw_list_files": 18,
+  "passed": 18,
+  "skipped_no_line": 0,
+  "failed": 0,
+  "failed_rows": [],
+  "rows": [
+    {
+      "file": "Al-Riyadi_vs_Al-Khekmekh_Bejrut_YFEikeoC.json",
+      "match_id": "YFEikeoC",
+      "status": "PASS",
+      "action": "PASS",
+      "checks": {
+        "raw_block_exact_header_removed": true,
+        "main_match_exact": true,
+        "quarter_keys_q1_to_q4": true,
+        "line_meta_exact": true,
+        "line_schema_exact": true,
+        "bookmaker_provenance_exact": true,
+        "super_preserves_math_contract": true
+      }
+    },
+    {
+      "file": "Albaniya_U18_W_vs_Kipr_U18_W_KKO8dO65.json",
+      "match_id": "KKO8dO65",
+      "status": "PASS",
+      "action": "PASS",
+      "checks": {
+        "raw_block_exact_header_removed": true,
+        "main_match_exact": true,
+        "quarter_keys_q1_to_q4": true,
+        "line_meta_exact": true,
+        "line_schema_exact": true,
+        "bookmaker_provenance_exact": true,
+        "super_preserves_math_contract": true
+      }
+    },
+    {
+      "file": "Albaniya_U18_vs_Malta_U18_KQRO2BbK.json",
+      "match_id": "KQRO2BbK",
+      "status": "PASS",
+      "action": "PASS",
+      "checks": {
+        "raw_block_exact_header_removed": true,
+        "main_match_exact": true,
+        "quarter_keys_q1_to_q4": true,
+        "line_meta_exact": true,
+        "line_schema_exact": true,
+        "bookmaker_provenance_exact": true,
+        "super_preserves_math_contract": true
+      }
+    },
+    {
+      "file": "Bulakan_Kuyas_vs_Keson_Gaskers_bZcru2iS.json",
+      "match_id": "bZcru2iS",
+      "status": "PASS",
+      "action": "PASS",
+      "checks": {
+        "raw_block_exact_header_removed": true,
+        "main_match_exact": true,
+        "quarter_keys_q1_to_q4": true,
+        "line_meta_exact": true,
+        "line_schema_exact": true,
+        "bookmaker_provenance_exact": true,
+        "super_preserves_math_contract": true
+      }
+    },
+    {
+      "file": "Gibraltar_U18_W_vs_Kosovo_U18_W_0bQOht6U.json",
+      "match_id": "0bQOht6U",
+      "status": "PASS",
+      "action": "PASS",
+      "checks": {
+        "raw_block_exact_header_removed": true,
+        "main_match_exact": true,
+        "quarter_keys_q1_to_q4": true,
+        "line_meta_exact": true,
+        "line_schema_exact": true,
+        "bookmaker_provenance_exact": true,
+        "super_preserves_math_contract": true
+      }
+    },
+    {
+      "file": "Gruziya_U18_W_vs_Virmeniya_U18_W_hYMGf2yI.json",
+      "match_id": "hYMGf2yI",
+      "status": "PASS",
+      "action": "PASS",
+      "checks": {
+        "raw_block_exact_header_removed": true,
+        "main_match_exact": true,
+        "quarter_keys_q1_to_q4": true,
+        "line_meta_exact": true,
+        "line_schema_exact": true,
+        "bookmaker_provenance_exact": true,
+        "super_preserves_math_contract": true
+      }
+    },
+    {
+      "file": "Kalgari_Serdzh_vs_Vankuver_Bendits_jssPNTUh.json",
+      "match_id": "jssPNTUh",
+      "status": "PASS",
+      "action": "PASS",
+      "checks": {
+        "raw_block_exact_header_removed": true,
+        "main_match_exact": true,
+        "quarter_keys_q1_to_q4": true,
+        "line_meta_exact": true,
+        "line_schema_exact": true,
+        "bookmaker_provenance_exact": true,
+        "super_preserves_math_contract": true
+      }
+    },
+    {
+      "file": "Kosovo_U18_vs_Gibraltar_U18_K6yVtUy1.json",
+      "match_id": "K6yVtUy1",
+      "status": "PASS",
+      "action": "PASS",
+      "checks": {
+        "raw_block_exact_header_removed": true,
+        "main_match_exact": true,
+        "quarter_keys_q1_to_q4": true,
+        "line_meta_exact": true,
+        "line_schema_exact": true,
+        "bookmaker_provenance_exact": true,
+        "super_preserves_math_contract": true
+      }
+    },
+    {
+      "file": "Los-Andzheles_Sparks_Zh_vs_Finiks_Merk_yuri_Zh_SKYXWQ7s.json",
+      "match_id": "SKYXWQ7s",
+      "status": "PASS",
+      "action": "PASS",
+      "checks": {
+        "raw_block_exact_header_removed": true,
+        "main_match_exact": true,
+        "quarter_keys_q1_to_q4": true,
+        "line_meta_exact": true,
+        "line_schema_exact": true,
+        "bookmaker_provenance_exact": true,
+        "super_preserves_math_contract": true
+      }
+    },
+    {
+      "file": "Meycauayan_vs_Pasig_Siti_QLazsOMF.json",
+      "match_id": "QLazsOMF",
+      "status": "PASS",
+      "action": "PASS",
+      "checks": {
+        "raw_block_exact_header_removed": true,
+        "main_match_exact": true,
+        "quarter_keys_q1_to_q4": true,
+        "line_meta_exact": true,
+        "line_schema_exact": true,
+        "bookmaker_provenance_exact": true,
+        "super_preserves_math_contract": true
+      }
+    },
+    {
+      "file": "Moldova_U18_vs_San-Maryno_U18_j9IfckMs.json",
+      "match_id": "j9IfckMs",
+      "status": "PASS",
+      "action": "PASS",
+      "checks": {
+        "raw_block_exact_header_removed": true,
+        "main_match_exact": true,
+        "quarter_keys_q1_to_q4": true,
+        "line_meta_exact": true,
+        "line_schema_exact": true,
+        "bookmaker_provenance_exact": true,
+        "super_preserves_math_contract": true
+      }
+    },
+    {
+      "file": "Negros_Hacienderos_vs_Pasaj_Voyadzhers_IedSrph3.json",
+      "match_id": "IedSrph3",
+      "status": "PASS",
+      "action": "PASS",
+      "checks": {
+        "raw_block_exact_header_removed": true,
+        "main_match_exact": true,
+        "quarter_keys_q1_to_q4": true,
+        "line_meta_exact": true,
+        "line_schema_exact": true,
+        "bookmaker_provenance_exact": true,
+        "super_preserves_math_contract": true
+      }
+    },
+    {
+      "file": "San-Migel_Birmen_vs_Konverdzh_FajberEksers_GUY8uh03.json",
+      "match_id": "GUY8uh03",
+      "status": "PASS",
+      "action": "PASS",
+      "checks": {
+        "raw_block_exact_header_removed": true,
+        "main_match_exact": true,
+        "quarter_keys_q1_to_q4": true,
+        "line_meta_exact": true,
+        "line_schema_exact": true,
+        "bookmaker_provenance_exact": true,
+        "super_preserves_math_contract": true
+      }
+    },
+    {
+      "file": "Saskatun_Mamba_vs_Edmonton_Stingers_URhGPk0t.json",
+      "match_id": "URhGPk0t",
+      "status": "PASS",
+      "action": "PASS",
+      "checks": {
+        "raw_block_exact_header_removed": true,
+        "main_match_exact": true,
+        "quarter_keys_q1_to_q4": true,
+        "line_meta_exact": true,
+        "line_schema_exact": true,
+        "bookmaker_provenance_exact": true,
+        "super_preserves_math_contract": true
+      }
+    },
+    {
+      "file": "Sietl_Storm_Zh_vs_Minnesota_Links_Zh_zoxtV4xf.json",
+      "match_id": "zoxtV4xf",
+      "status": "PASS",
+      "action": "PASS",
+      "checks": {
+        "raw_block_exact_header_removed": true,
+        "main_match_exact": true,
+        "quarter_keys_q1_to_q4": true,
+        "line_meta_exact": true,
+        "line_schema_exact": true,
+        "bookmaker_provenance_exact": true,
+        "super_preserves_math_contract": true
+      }
+    },
+    {
+      "file": "TNT_Tropang_Giga_vs_Tajten_Ultra_Dzhaient_Rajzers_lOtNHl8d.json",
+      "match_id": "lOtNHl8d",
+      "status": "PASS",
+      "action": "PASS",
+      "checks": {
+        "raw_block_exact_header_removed": true,
+        "main_match_exact": true,
+        "quarter_keys_q1_to_q4": true,
+        "line_meta_exact": true,
+        "line_schema_exact": true,
+        "bookmaker_provenance_exact": true,
+        "super_preserves_math_contract": true
+      }
+    },
+    {
+      "file": "Tauranga_Vai_vs_Otago_Naggets_x02yWUnn.json",
+      "match_id": "x02yWUnn",
+      "status": "PASS",
+      "action": "PASS",
+      "checks": {
+        "raw_block_exact_header_removed": true,
+        "main_match_exact": true,
+        "quarter_keys_q1_to_q4": true,
+        "line_meta_exact": true,
+        "line_schema_exact": true,
+        "bookmaker_provenance_exact": true,
+        "super_preserves_math_contract": true
+      }
+    },
+    {
+      "file": "Virmeniya_U18_vs_Andorra_U18_hKZxu86D.json",
+      "match_id": "hKZxu86D",
+      "status": "PASS",
+      "action": "PASS",
+      "checks": {
+        "raw_block_exact_header_removed": true,
+        "main_match_exact": true,
+        "quarter_keys_q1_to_q4": true,
+        "line_meta_exact": true,
+        "line_schema_exact": true,
+        "bookmaker_provenance_exact": true,
+        "super_preserves_math_contract": true
+      }
+    }
+  ]
+}

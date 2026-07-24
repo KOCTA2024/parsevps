@@ -1,14 +1,14 @@
 'use strict';
 
 /**
- * worker.js  (з Step 3 — OpenAI аналіз)
+ * worker.js  (Step 3 — детермінований аналіз без OpenAI)
  *
  * Ланцюжок:
  *   1. node src/match_h2h_export.js         — парсер h2h
  *   2. python3 src/math_script.py           — математичний розрахунок
  *   3. python3 src/super_basket_vps_system.py run — розрахунок P_final,
- *      gates (stat/conflict/router/Team-IT/Q4), GPT-review сигналу,
- *      відправка PLAY/RISK в Telegram, запис у SQLite.
+ *      gates (stat/conflict/router/Team-IT/Q4), відправка детермінованого
+ *      PLAY/RISK в Telegram, запис у SQLite. GPT явно вимкнений.
  */
 import path from 'path';
 import fs from 'fs';
@@ -113,18 +113,20 @@ async function processJob(job) {
       `— likely failed to locate the match on the source site (see Step 1 logs above).`
     );
   }
+
+  // Only calculated artifacts are checkpoint-specific. math_script.py merges
+  // the current parser JSON and lines itself, so duplicating both source files
+  // for every checkpoint is unnecessary.
+  fs.mkdirSync(MATCH_FILES_DIR, { recursive: true });
+  const checkpointKey = triggerCheckpoint >= 1 && triggerCheckpoint <= 3
+    ? `q${triggerCheckpoint}`
+    : `checkpoint_${Date.now()}`;
+  const matchBaseName = path.basename(dataFilePath, path.extname(dataFilePath));
   await job.updateProgress(40);
 
   // ── Step 2: Python calculator ─────────────────────────────────────────────
   const calcScript = path.join(APP_ROOT, 'src', 'math_script.py');
-  const checkpointSuffix = triggerCheckpoint >= 1 && triggerCheckpoint <= 3
-    ? `_q${triggerCheckpoint}_result.json`
-    : `_checkpoint_${Date.now()}_result.json`;
-  fs.mkdirSync(MATCH_FILES_DIR, { recursive: true });
-  const calculatedFilePath = path.join(
-    MATCH_FILES_DIR,
-    `${path.basename(dataFilePath, path.extname(dataFilePath))}${checkpointSuffix}`
-  );
+  const calculatedFilePath = path.join(MATCH_FILES_DIR, `${matchBaseName}_${checkpointKey}_result.json`);
 
   log(jid, 'info', `Step 2 → ${PYTHON_BIN} ${calcScript} ${dataFilePath} ${lineFilePath} --output ${calculatedFilePath}`);
 
@@ -138,16 +140,25 @@ async function processJob(job) {
   // ── Step 3: super_basket_vps_system.py ────────────────────────────────────
   // calculatedFilePath содержит отдельный snapshot этого checkpoint (h2h + lines +
   // raw_data + team_relative_stat_zones) — это ровно то, что нужно скрипту
-  // как --match. Все gates (stat/conflict/router/Team-IT/Q4), GPT-review
-  // сигнала и отправка в Telegram теперь внутри этого скрипта.
+  // как --match. Все gates (stat/conflict/router/Team-IT/Q4), детерміноване
+  // рішення і відправка в Telegram тепер усередині цього скрипта.
+  // Обидва прапори обов'язкові: --no-gpt вимикає виклик моделі, а
+  // --no-require-gpt дозволяє PLAY/RISK пройти без GPT-review.
   const superBasketScript = path.join(APP_ROOT, 'src', 'super_basket_vps_system.py');
+  const superBasketOutputPath = path.join(
+    MATCH_FILES_DIR,
+    `${matchBaseName}_${checkpointKey}_calculator_result.json`
+  );
   log(jid, 'info', `Step 3 → ${PYTHON_BIN} ${superBasketScript} run --match ${calculatedFilePath} ` +
-      `--checkpoint ${triggerCheckpoint || 0}`);
+      `--output ${superBasketOutputPath} --no-gpt --no-require-gpt --checkpoint ${triggerCheckpoint || 0}`);
 
   const superBasketArgs = [
     superBasketScript, 'run',
     '--match', calculatedFilePath,
+    '--output', superBasketOutputPath,
     '--db', SUPER_BASKET_DB,
+    '--no-gpt',
+    '--no-require-gpt',
   ];
   if (triggerCheckpoint >= 1 && triggerCheckpoint <= 3) {
     superBasketArgs.push('--checkpoint', String(triggerCheckpoint));
@@ -186,6 +197,8 @@ async function processJob(job) {
     decision:       summary.decision ?? null,
     aiVerdict:      summary.decision?.action ?? summary.decision?.status ?? null,
     checkpoint:     triggerCheckpoint || null,
+    calculatedFilePath,
+    superBasketOutputPath,
     outputStatus:   summary.output_status,
     completedAt:    new Date().toISOString(),
   };

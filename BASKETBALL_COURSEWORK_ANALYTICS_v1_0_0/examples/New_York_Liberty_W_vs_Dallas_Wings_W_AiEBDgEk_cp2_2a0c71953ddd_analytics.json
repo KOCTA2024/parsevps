@@ -1,0 +1,183 @@
+{
+  "coursework_basketball_analytics": {
+    "system_version": "1.0.0",
+    "research_context": true,
+    "created_at": "2026-07-21T13:26:04+00:00",
+    "input_hash": "2a0c71953ddd08ad1e4fb92919a62e39f60a54b458b71647bd68e39ec81df4c3",
+    "run_key": "ACADEMIC-AB1C70D3086217C7DBE5DE3F",
+    "match": {
+      "match_id": "AiEBDgEk",
+      "name": "Нью-Йорк Ліберті Ж vs Даллас Вінгз Ж",
+      "home_team": "Нью-Йорк Ліберті Ж",
+      "away_team": "Даллас Вінгз Ж",
+      "quarter_minutes": 10,
+      "regulation_minutes": 40
+    },
+    "checkpoint": 2,
+    "snapshot_state": {
+      "elapsed_minutes": 27.0,
+      "current_quarter": 3,
+      "current_quarter_minutes_left": 3.0,
+      "score": {
+        "home": 51.0,
+        "away": 63.0,
+        "total": 114.0
+      },
+      "finished": false
+    },
+    "data_readiness": "READY",
+    "data_quality": {
+      "schema_errors": [],
+      "same_format_history_n": 69,
+      "ignored_non_sport_sections": true
+    },
+    "remaining_plan": {
+      "future_quarters": [
+        3,
+        4
+      ],
+      "current_quarter": 3,
+      "current_quarter_remaining_ratio": 0.3,
+      "partial_current_quarter": true
+    },
+    "forecast": {
+      "current_total_points": 114.0,
+      "historical_remaining_distribution": {
+        "n": 69,
+        "mean": 52.87826086956522,
+        "median": 52.4,
+        "standard_deviation": 9.857005116774706,
+        "p10": 41.56,
+        "p25": 47.1,
+        "p75": 59.6,
+        "p90": 66.22000000000001,
+        "minimum": 25.5,
+        "maximum": 74.1
+      },
+      "forecast_final_total_points": 166.4,
+      "central_interval_p10_p90": [
+        155.56,
+        180.22000000000003
+      ],
+      "formula": "current_total_points + median(historical_remaining_points)",
+      "already_scored_points_added_once": true,
+      "approximation_used": true
+    },
+    "quarter_profiles": {
+      "Q3": {
+        "n": 69,
+        "mean": 42.05797101449275,
+        "median": 41.0,
+        "standard_deviation": 7.605887924285668,
+        "p10": 31.8,
+        "p25": 37.0,
+        "p75": 48.0,
+        "p90": 50.0,
+        "minimum": 25.0,
+        "maximum": 60.0
+      },
+      "Q4": {
+        "n": 69,
+        "mean": 40.26086956521739,
+        "median": 39.0,
+        "standard_deviation": 9.153353891772714,
+        "p10": 30.0,
+        "p25": 34.0,
+        "p75": 46.0,
+        "p90": 52.2,
+        "minimum": 18.0,
+        "maximum": 63.0
+      }
+    },
+    "history_audit": {
+      "n_raw": 75,
+      "n_unique_complete": 69,
+      "n_same_format": 69,
+      "sample_game_ids": [
+        "EmmqN6on",
+        "WWT6u926",
+        "6qFPuIdk",
+        "OKgGlhOM",
+        "ttbTwyA4",
+        "fDeMFgQE",
+        "p0Dt3Gt9",
+        "6ivOfy66",
+        "z3bdpcoK",
+        "p4vQE1Eb",
+        "8lrMZ6Q8",
+        "6PyhaQld",
+        "QPnV6Hj5",
+        "AXbNeWQ6",
+        "2mXXpFCl",
+        "lCTVU2Mj",
+        "rBOHNoFN",
+        "K8BRCU05",
+        "U5gKIaXQ",
+        "fTlrpuR1",
+        "rmzekFop",
+        "rTwvc6mg",
+        "vshEto3C",
+        "KCoFXkKs",
+        "AwzAOCsR",
+        "zmraAMMG",
+        "tQMPeN7N",
+        "ldTso6g5",
+        "UidHUp9O",
+        "pO6Sn77e",
+        "AsAcqY03",
+        "WzNVUYoA",
+        "tUdDGrRa",
+        "OhQn0NtJ",
+        "j5BVz7D7",
+        "UwfaJOpB",
+        "hvAR4PVH",
+        "4z53AT1t",
+        "bJVbsVXg",
+        "2mQom04F",
+        "Kjaqzg9T",
+        "fenKd0rh",
+        "S63zhjY7",
+        "SjbNXpeL",
+        "6q84LG5b",
+        "Agzb89AC",
+        "Mcm7aERs",
+        "rouRlODM",
+        "htr0zPbT",
+        "EVW0RTFb",
+        "6o5BGC1t",
+        "tpDPdIA7",
+        "t26egq4F",
+        "dj27bJOc",
+        "rFb5r7Ya",
+        "GvuOVTlf",
+        "GOnisOhU",
+        "8x88W6vC",
+        "44ogY7h2",
+        "bo7ANjvp",
+        "OjetKHXi",
+        "jaIYNQYP",
+        "fwIMxTre",
+        "tfOapKp4",
+        "Y7qHZ2Wo",
+        "CG1BMey0",
+        "OzPa85Gk",
+        "MDPKs0hr",
+        "IsQewo1d"
+      ],
+      "excluded": {
+        "current_match": 0,
+        "technical_result": 0,
+        "duplicate": 6,
+        "incomplete_quarters": 0
+      }
+    },
+    "external_delivery": {
+      "enabled": false,
+      "reason": "COURSEWORK_OFFLINE_ONLY"
+    },
+    "integrity_report": {
+      "all_passed": true,
+      "errors": []
+    }
+  }
+}

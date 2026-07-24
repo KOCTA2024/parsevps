@@ -53,6 +53,16 @@ function transliterate(str) {
   return str.toLowerCase().split('').map(ch => TRANSLIT_MAP[ch] ?? ch).join('');
 }
 
+function normalizeTeamName(str) {
+  return String(str ?? '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[’'`]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // ─── Known alias dictionary ───────────────────────────────────────────────────
 // Key: Cyrillic display name (lowercase). Values: array of Latin substrings
 // that betking may use. Add new teams as you encounter them.
@@ -84,10 +94,11 @@ const TEAM_ALIASES = {
  * Returns array of unique lowercase strings.
  */
 function teamVariants(name) {
-  const orig   = name.toLowerCase().trim();
+  const rawOrig = name.toLowerCase().trim();
+  const orig   = normalizeTeamName(rawOrig);
   const translit = transliterate(orig);
-  const aliases  = TEAM_ALIASES[orig] ?? [];
-  return [...new Set([orig, translit, ...aliases])];
+  const aliases  = TEAM_ALIASES[rawOrig] ?? TEAM_ALIASES[orig] ?? [];
+  return [...new Set([orig, translit, ...aliases.map(normalizeTeamName)].filter(Boolean))];
 }
 
 /**
@@ -275,15 +286,15 @@ function classifyMarket(name) {
 
 function parseBetLabel(label, specialValue) {
   const l = label.trim();
-  const sv = (specialValue ?? '').trim();
+  const sv = (specialValue ?? '').trim().replace(/,/g, '.').replace(/[−–—]/g, '-').replace(/\s+/g, '');
 
   // Over/under via "більше"/"менше"
   if (/більше/i.test(l)) {
-    const m = (sv || l).match(/([\d.]+)/);
+    const m = (sv || l.replace(/,/g, '.')).match(/([\d.]+)/);
     return m ? { side: 'over',  line: parseFloat(m[1]) } : null;
   }
   if (/менше/i.test(l)) {
-    const m = (sv || l).match(/([\d.]+)/);
+    const m = (sv || l.replace(/,/g, '.')).match(/([\d.]+)/);
     return m ? { side: 'under', line: parseFloat(m[1]) } : null;
   }
 
@@ -346,7 +357,10 @@ function collectMarketsFromShadowDOM() {
       const title = titleEl.textContent.trim();
 
       const bets = [];
-      const buttons = box.querySelectorAll('button[class*="OddBoxButton-sc-"]');
+      const buttons = Array.from(box.querySelectorAll('button[class*="OddBoxButton-sc-"]'))
+        // Some Betking builds nest similarly-named market containers. Without
+        // this guard an outer box can absorb bets from all child markets.
+        .filter(btn => btn.closest('[class*="EventDetailsMarketBoxContainer-sc-"]') === box);
       for (const btn of buttons) {
         // Label text (team name or більше/менше)
         const labelEl = btn.querySelector('[class*="OddLabel-sc-"]');
@@ -412,8 +426,8 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
   console.log(`  [betking] awayVariants: ${JSON.stringify(awayVariants)}`);
 
   // Keep simple norm strings for market-level matching (handicap labels etc.)
-  const homeNorm = homeName.toLowerCase().trim();
-  const awayNorm = awayName.toLowerCase().trim();
+  const homeNorm = normalizeTeamName(homeName);
+  const awayNorm = normalizeTeamName(awayName);
 
   const page = await context.newPage();
   page.setDefaultTimeout(NAV_TIMEOUT);
@@ -495,7 +509,12 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
       return page.evaluate(
         ([hKws, aKws, mode, label, hQuals, aQuals]) => {
           function wordIn(nameOnPage, kws) {
-            const n = nameOnPage.toLowerCase().trim();
+            const normalize = value => value.toLowerCase()
+              .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+              .replace(/[’'`]/g, '')
+              .replace(/[^\p{L}\p{N}]+/gu, ' ')
+              .replace(/\s+/g, ' ').trim();
+            const n = normalize(nameOnPage);
             return kws.some(k => n.includes(k) || k.includes(n));
           }
 
@@ -505,7 +524,7 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
           // e.g. it would happily click "Словенія U20" while looking for "Словенія U17 W".
           function qualifiersOk(nameOnPage, quals) {
             if (quals.length === 0) return true;
-            const n = nameOnPage.toLowerCase();
+            const n = nameOnPage.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ');
             return quals.every(q => n.includes(q));
           }
 
@@ -534,9 +553,9 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
             if (mode === 'both')
               return ns.some(n => wordIn(n, hKws)) && ns.some(n => wordIn(n, aKws));
             if (mode === 'home')
-              return ns.some(n => wordIn(n, hKws)) && ns.some(n => qualifiersOk(n, hQuals));
+              return ns.some(n => wordIn(n, hKws) && qualifiersOk(n, hQuals));
             if (mode === 'away')
-              return ns.some(n => wordIn(n, aKws)) && ns.some(n => qualifiersOk(n, aQuals));
+              return ns.some(n => wordIn(n, aKws) && qualifiersOk(n, aQuals));
             return false;
           });
 
@@ -676,6 +695,13 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
     let clickResult = null;
     let scrollsDone = 0;
 
+    // Subscribe before the click. Subscribing after card.click() has a race:
+    // a fast popup can be created before waitForEvent() starts listening.
+    // Start listening before the search/click so a very fast popup cannot be missed.
+    // Keep the listener alive while the card is being searched for, but never make
+    // same-page navigation wait for the full navigation timeout.
+    const popupPromise = context.waitForEvent('page', { timeout: NAV_TIMEOUT }).catch(() => null);
+
     clickResult = await searchPass();
 
     while (!clickResult && scrollsDone < MAX_SCROLLS) {
@@ -716,8 +742,15 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
 
     // 3. Wait for new tab or navigation to match detail
     console.log('  [betking] Waiting for detail page…');
-    const newTab = await context.waitForEvent('page', { timeout: 5000 }).catch(() => null);
+    const newTab = await Promise.race([
+      popupPromise,
+      page.waitForTimeout(5_000).then(() => null),
+    ]);
     detailPage = newTab ?? page;
+
+    if (detailPage !== page) {
+      await detailPage.waitForLoadState('domcontentloaded', { timeout: NAV_TIMEOUT }).catch(() => {});
+    }
 
     // Wait until market boxes appear in shadow DOM
     await detailPage.waitForFunction(() => {
@@ -734,10 +767,10 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
     console.log('  [betking] Match detail loaded — scraping markets…');
 
     // 4. Wait for tabs to render (Shadow DOM tabs may arrive later than market boxes,
-    //    especially on slow single-core VPS). Poll up to 5 s with 500 ms steps.
+    //    especially on slow single-core VPS or while Betking is repricing at HT).
     {
       const TAB_POLL_INTERVAL = 500;
-      const TAB_POLL_MAX      = 10;   // 10 × 500 ms = 5 s max
+      const TAB_POLL_MAX      = 30;   // up to 15 s; HT tab bar can disappear during repricing
       for (let i = 0; i < TAB_POLL_MAX; i++) {
         const tabCount = await detailPage.evaluate(() => {
           function countTabs(root) {
@@ -774,7 +807,7 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
     // Click a tab by its global index and wait for React re-render.
     // On slow VPS use a longer settle delay (1 s instead of 700 ms).
     async function clickTab(idx) {
-      await detailPage.evaluate((tabIdx) => {
+      const clicked = await detailPage.evaluate((tabIdx) => {
         let count = 0;
         function clickInShadow(root) {
           for (const el of root.querySelectorAll('[class*="EventDetailsTabContainer-sc-"]')) {
@@ -784,9 +817,38 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
             if (el.shadowRoot && clickInShadow(el.shadowRoot)) return true;
           return false;
         }
-        clickInShadow(document);
+        return clickInShadow(document);
       }, idx);
-      await detailPage.waitForTimeout(1000);   // generous settle for 1-core VPS
+      if (!clicked) return false;
+
+      // Wait for populated odds, not just a fixed delay. During HT repricing
+      // the boxes remain mounted while every OddValue is temporarily empty.
+      let previousSignature = null;
+      let stableRounds = 0;
+      for (let attempt = 0; attempt < 10; attempt++) {
+        await detailPage.waitForTimeout(750);
+        const state = await detailPage.evaluate(() => {
+          function roots(root, out = [root]) {
+            for (const el of root.querySelectorAll('*')) {
+              if (el.shadowRoot) roots(el.shadowRoot, out);
+            }
+            return out;
+          }
+          const values = [];
+          for (const root of roots(document)) {
+            for (const el of root.querySelectorAll('[class*="OddValue-sc-"]')) {
+              const value = el.textContent.trim();
+              if (value) values.push(value);
+            }
+          }
+          return { validOdds: values.length, signature: values.join('|') };
+        });
+        if (state.validOdds > 0 && state.signature === previousSignature) stableRounds++;
+        else stableRounds = 0;
+        previousSignature = state.signature;
+        if (stableRounds >= 1) return true;
+      }
+      return false;
     }
 
     // Collect markets from all tabs, dedup by title.
@@ -795,12 +857,27 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
     // for markets that have already been updated in a specific tab.
     // Scrape specific tabs FIRST so their data wins the dedup, then fill in
     // anything remaining from the generic tabs.
-    const seenTitles = new Set();
+    const marketIndex = new Map();
     const rawMarkets = [];
 
-    function mergeMarkets(fresh) {
-      for (const m of fresh)
-        if (!seenTitles.has(m.title)) { seenTitles.add(m.title); rawMarkets.push(m); }
+    function mergeMarkets(fresh, priority = 0) {
+      for (const market of fresh) {
+        const key = market.title.toLowerCase().replace(/\s+/g, ' ').trim();
+        const validOdds = market.bets.filter(bet => bet.odd !== null).length;
+        const existing = marketIndex.get(key);
+        if (!existing) {
+          marketIndex.set(key, { index: rawMarkets.length, priority, validOdds });
+          rawMarkets.push(market);
+          continue;
+        }
+        // Prefer specific-period tabs. Within the same priority prefer the
+        // version with more populated odds (fresh over suspended/stale DOM).
+        if (priority > existing.priority ||
+            (priority === existing.priority && validOdds > existing.validOdds)) {
+          rawMarkets[existing.index] = market;
+          marketIndex.set(key, { ...existing, priority, validOdds });
+        }
+      }
     }
 
     const TAB_SKIP    = ['конструктор'];
@@ -821,13 +898,13 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
     // 1. Specific tabs first (freshest data)
     for (const tab of specificTabs) {
       await clickTab(tab.idx);
-      mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM));
+      mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM), 2);
     }
 
     // 2. Generic tabs — fill in anything not yet seen
     for (const tab of genericTabs) {
       await clickTab(tab.idx);
-      mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM));
+      mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM), 1);
     }
 
     // 3. Fallback: if no tabs at all (or nothing collected), scrape whatever is
@@ -835,7 +912,7 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
     //    the tab bar never appears.
     if (rawMarkets.length === 0) {
       console.log('  [betking] No tabs found or empty result — scraping active view directly');
-      mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM));
+      mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM), 0);
     }
 
     // Skip locked/suspended buttons: filter bets with null odds out of each market
@@ -911,7 +988,7 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
           const key = Math.abs(hv).toFixed(1);
           if (!pairs[key]) pairs[key] = { home: null, away: null };
 
-          const teamName     = bet.label.toLowerCase().trim();
+          const teamName     = normalizeTeamName(bet.label);
           const teamVariantsBk = [teamName];
 
           // Match handicap labels against both Cyrillic and Latin variants
@@ -948,7 +1025,7 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
           if (isNaN(hv)) continue;
           const key = Math.abs(hv).toFixed(1);
           if (!pairsQ[key]) pairsQ[key] = { home: null, away: null };
-          const teamName = bet.label.toLowerCase().trim();
+          const teamName = normalizeTeamName(bet.label);
           const isHome = variantsMatch(homeVariants, [teamName]) || teamName.includes(homeNorm) || homeNorm.includes(teamName);
           const isAway = variantsMatch(awayVariants, [teamName]) || teamName.includes(awayNorm) || awayNorm.includes(teamName);
           if (isHome) pairsQ[key].home = { handicap: hv, odd: bet.odd };
@@ -976,7 +1053,7 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
           if (isNaN(hv)) continue;
           const key = Math.abs(hv).toFixed(1);
           if (!pairsH[key]) pairsH[key] = { home: null, away: null };
-          const teamName = bet.label.toLowerCase().trim();
+          const teamName = normalizeTeamName(bet.label);
           const isHome = variantsMatch(homeVariants, [teamName]) || teamName.includes(homeNorm) || homeNorm.includes(teamName);
           const isAway = variantsMatch(awayVariants, [teamName]) || teamName.includes(awayNorm) || awayNorm.includes(teamName);
           if (isHome) pairsH[key].home = { handicap: hv, odd: bet.odd };
@@ -1002,11 +1079,12 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
           if (!p || p.line == null) continue;
           const line = p.line ?? lineVal;
           if (!line) continue;
-          // Sanity guard: a full basketball match total is always ≥ 110.
-          // Lines below that are individual/quarter/half totals misclassified here —
-          // reject them so they never corrupt the match_total array.
-          if (line < 110) {
-            console.warn(`  [betking] ⚠ match_total sanity guard: rejected line=${line} from "${title}" (too small for a full-match total — possible misclassification)`);
+          // Keep genuinely low match totals (youth/women/short-format games).
+          // The old hard floor of 110 silently discarded valid markets. Values
+          // below 40 are still implausible for a full basketball match and most
+          // likely indicate a provider-side grouping/classification problem.
+          if (line < 40) {
+            console.warn(`  [betking] ⚠ match_total sanity guard: rejected implausible line=${line} from "${title}"`);
             continue;
           }
           let e = result.match_total.find(x => x.line === line);
@@ -1060,7 +1138,7 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
 
       // ── individual totals ──
       } else if (cat === 'ind_total') {
-        const titleLower = title.toLowerCase();
+        const titleLower = normalizeTeamName(title);
         // Try Cyrillic match first, then Latin/alias variants
         const isHome = titleLower.includes(homeNorm) ||
                        homeVariants.some(v => titleLower.includes(v)) ||
@@ -1226,12 +1304,18 @@ export async function fetchAndSaveLines(
 ) {
   lineFilename = lineFilename ?? `line_result_${matchId}.json`;
 
+  const writeJsonAtomic = (target, value) => {
+    const temporary = `${target}.${process.pid}.tmp`;
+    fs.writeFileSync(temporary, JSON.stringify(value, null, 2), 'utf-8');
+    fs.renameSync(temporary, target);
+  };
+
   if (!homeName || !awayName) {
     const msg = `fetchAndSaveLines: homeName/awayName not provided (got "${homeName}" / "${awayName}") — skipping betking scrape`;
     console.warn(`  [betking] ⚠ ${msg}`);
     fs.mkdirSync(outputDir, { recursive: true });
     const err = { error: 'missing_team_names', matchId, source: 'betking' };
-    fs.writeFileSync(path.join(outputDir, lineFilename), JSON.stringify(err, null, 2), 'utf-8');
+    writeJsonAtomic(path.join(outputDir, lineFilename), err);
     return err;
   }
 
@@ -1240,24 +1324,67 @@ export async function fetchAndSaveLines(
   console.log(`  liveStatus: "${liveStatus}"`);
 
   let parsed = null;
-  try {
-    parsed = await scrapeBetking(context, homeName, awayName, liveStatus);
-  } catch (e) {
-    console.warn(`  [betking] ⚠ Помилка скрапінгу: ${e.message}`);
-    console.warn(e.stack);
+  let attemptsUsed = 0;
+  let lastError = null;
+  const CORE_MARKET_KEYS = [
+    'match_handicap', 'half_handicap', 'quarter_handicap',
+    'match_total', 'half_total', 'quarter_total',
+    'home_ind_total', 'away_ind_total',
+  ];
+  const coreMarketCount = value => CORE_MARKET_KEYS.reduce(
+    (sum, key) => sum + (Array.isArray(value?.[key]) ? value[key].length : 0), 0
+  );
+  const MAX_SCRAPE_ATTEMPTS = 3;
+
+  for (let attempt = 1; attempt <= MAX_SCRAPE_ATTEMPTS; attempt++) {
+    attemptsUsed = attempt;
+    try {
+      const candidate = await scrapeBetking(context, homeName, awayName, liveStatus);
+      // null means the match card itself was not found. Retrying the same lobby
+      // immediately is expensive and does not address the HT repricing race.
+      if (!candidate) {
+        parsed = null;
+        break;
+      }
+      parsed = candidate;
+      const usable = coreMarketCount(parsed);
+      if (usable > 0) break;
+      if (attempt < MAX_SCRAPE_ATTEMPTS) {
+        const delay = attempt * 2500;
+        console.warn(`  [betking] ⚠ Match card opened but 0 core line markets were populated ` +
+                     `(attempt ${attempt}/${MAX_SCRAPE_ATTEMPTS}); Betking may be repricing. Retrying in ${delay} ms…`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    } catch (e) {
+      lastError = e;
+      console.warn(`  [betking] ⚠ Помилка скрапінгу (attempt ${attempt}/${MAX_SCRAPE_ATTEMPTS}): ${e.message}`);
+      console.warn(e.stack);
+      if (attempt < MAX_SCRAPE_ATTEMPTS) {
+        await new Promise(resolve => setTimeout(resolve, attempt * 2500));
+      }
+    }
   }
 
   fs.mkdirSync(outputDir, { recursive: true });
   const outPath = path.join(outputDir, lineFilename);
 
   if (!parsed) {
-    const empty = { error: 'scrape_failed', matchId, source: 'betking', homeName, awayName };
-    fs.writeFileSync(outPath, JSON.stringify(empty, null, 2), 'utf-8');
+    const empty = { error: 'scrape_failed', errorMessage: lastError?.message ?? null, matchId, source: 'betking', homeName, awayName, attemptsUsed };
+    // Keep the previous snapshot for diagnosis instead of silently destroying it.
+    if (fs.existsSync(outPath)) fs.copyFileSync(outPath, `${outPath}.last_good`);
+    writeJsonAtomic(outPath, empty);
     return empty;
   }
 
-  parsed.meta = { source: 'betking', fetchedAt: new Date().toISOString(), matchId };
-  fs.writeFileSync(outPath, JSON.stringify(parsed, null, 2), 'utf-8');
+  parsed.meta = {
+    source: 'betking',
+    fetchedAt: new Date().toISOString(),
+    matchId,
+    attemptsUsed,
+    coreMarketCount: coreMarketCount(parsed),
+    retryExhaustedWithNoCoreMarkets: coreMarketCount(parsed) === 0,
+  };
+  writeJsonAtomic(outPath, parsed);
   console.log(`✅ Лінії збережено: ${outPath}`);
 
   const KEYS = ['match_1x2','match_handicap','half_handicap','quarter_handicap','match_total','half_total','quarter_total','quarter_dnb','quarter_1x2','quarter_btts','quarter_race','win_margin','last_digit','home_ind_total','away_ind_total'];

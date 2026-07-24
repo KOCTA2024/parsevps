@@ -11,6 +11,7 @@ services:
   # ── Worker (всегда живёт, слушает очередь) ────────────────────────────────
   worker:
     build: .
+    working_dir: /app
     command: node src/worker.js
     restart: unless-stopped
     env_file:
@@ -23,6 +24,7 @@ services:
       TELEGRAM_CHATS_FILE: /app/state/telegram_chats.json
       VERDICT_LOG_FILE: /app/state/verdicts.log
       EXCEL_AUDIT_FILE: /app/state/super_basket_detailed_log.xlsx
+      SUPER_BASKET_EXCEL_AUDIT: "true"
       MATCH_FILES_DIR: /app/state/match_files
       PUBLIC_FILES_BASE_URL: http://130.0.235.172:8080
     volumes:
@@ -37,6 +39,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    working_dir: /app
     command: sh -c "while true; do HOUR=$$(date -u +%H); MIN=$$(date -u +%M); if [ \"$$HOUR\" = '01' ] && [ \"$$MIN\" = '00' ]; then node src/monitor.js >> /app/state/monitor.log 2>&1; sleep 61; fi; sleep 30; done"
     restart: unless-stopped
     env_file:
@@ -58,6 +61,7 @@ services:
   #    в очередь при обнаружении перерыва — заменяет orchestrator.js) ───────
   stage-monitor:
     build: .
+    working_dir: /app
     command: node src/stage_monitor.js
     restart: unless-stopped
     shm_size: '1gb'  # Playwright/Chromium под нагрузкой стабильнее с нормальной /dev/shm

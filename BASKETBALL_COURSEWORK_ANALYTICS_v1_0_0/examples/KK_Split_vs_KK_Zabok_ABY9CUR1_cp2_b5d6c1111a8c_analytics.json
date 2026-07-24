@@ -1,0 +1,184 @@
+{
+  "coursework_basketball_analytics": {
+    "system_version": "1.0.0",
+    "research_context": true,
+    "created_at": "2026-07-21T13:26:04+00:00",
+    "input_hash": "b5d6c1111a8c0ad6fb6ed4e741825ebbbeca8a1854f6be1f3bd8b69c164d50df",
+    "run_key": "ACADEMIC-ED6374377FC681E7FFC0CDDF",
+    "match": {
+      "match_id": "ABY9CUR1",
+      "name": "Спліт vs Забок",
+      "home_team": "Спліт",
+      "away_team": "Забок",
+      "quarter_minutes": 10,
+      "regulation_minutes": 40
+    },
+    "checkpoint": 2,
+    "snapshot_state": {
+      "elapsed_minutes": 20.0,
+      "current_quarter": 3,
+      "current_quarter_minutes_left": 10.0,
+      "score": {
+        "home": 46.0,
+        "away": 38.0,
+        "total": 84.0
+      },
+      "finished": false
+    },
+    "data_readiness": "READY",
+    "data_quality": {
+      "schema_errors": [],
+      "same_format_history_n": 70,
+      "ignored_non_sport_sections": true
+    },
+    "remaining_plan": {
+      "future_quarters": [
+        3,
+        4
+      ],
+      "current_quarter": 3,
+      "current_quarter_remaining_ratio": 1.0,
+      "partial_current_quarter": false
+    },
+    "forecast": {
+      "current_total_points": 84.0,
+      "historical_remaining_distribution": {
+        "n": 70,
+        "mean": 80.97142857142858,
+        "median": 80.5,
+        "standard_deviation": 11.174468088461365,
+        "p10": 68.8,
+        "p25": 73.25,
+        "p75": 90.5,
+        "p90": 95.0,
+        "minimum": 53.0,
+        "maximum": 108.0
+      },
+      "forecast_final_total_points": 164.5,
+      "central_interval_p10_p90": [
+        152.8,
+        179.0
+      ],
+      "formula": "current_total_points + median(historical_remaining_points)",
+      "already_scored_points_added_once": true,
+      "approximation_used": false
+    },
+    "quarter_profiles": {
+      "Q3": {
+        "n": 70,
+        "mean": 40.6,
+        "median": 41.0,
+        "standard_deviation": 7.135134541656256,
+        "p10": 31.0,
+        "p25": 36.0,
+        "p75": 44.0,
+        "p90": 48.1,
+        "minimum": 22.0,
+        "maximum": 59.0
+      },
+      "Q4": {
+        "n": 70,
+        "mean": 40.371428571428574,
+        "median": 40.5,
+        "standard_deviation": 8.792571681265176,
+        "p10": 28.9,
+        "p25": 34.0,
+        "p75": 48.0,
+        "p90": 50.1,
+        "minimum": 20.0,
+        "maximum": 59.0
+      }
+    },
+    "history_audit": {
+      "n_raw": 75,
+      "n_unique_complete": 70,
+      "n_same_format": 70,
+      "sample_game_ids": [
+        "McjZcILP",
+        "AqG2ukl1",
+        "jsffjRJG",
+        "YqWUQkZ7",
+        "Mk4yuD4m",
+        "UFm2w0Tr",
+        "EX2XrqCj",
+        "fZUUL3iB",
+        "xdqsBnwg",
+        "dpIbUMjS",
+        "ITenhmk4",
+        "xxDptSwJ",
+        "ObEcA1ad",
+        "j18MoW9s",
+        "CxMBJ5xA",
+        "vZQHcOFj",
+        "G8uO8lOi",
+        "r3L43gnC",
+        "UgtKTxXb",
+        "4Ky6V52T",
+        "Qw5OkUI5",
+        "ID1Gijlg",
+        "Gh7fh07s",
+        "vXDus4o2",
+        "tvQZZSk2",
+        "GGls6kZH",
+        "vBgIBg5t",
+        "EscI6JkA",
+        "KA8NgLqe",
+        "O2TUjDU6",
+        "hAcZ6Sqg",
+        "4jrT3KPh",
+        "Y7sY8lFt",
+        "hM97Srod",
+        "KS9AowAO",
+        "dKbmzFTI",
+        "2JCfsBJl",
+        "AJpyxGs9",
+        "b7c2l5lT",
+        "jJkc74xI",
+        "thhIfRhC",
+        "v5g3tyY1",
+        "rsdOTcld",
+        "p45UvOdc",
+        "ziNlSpDi",
+        "nJ3fD6to",
+        "lOL7MAJb",
+        "2DO7ijKO",
+        "Gx2WiaE7",
+        "dfGbU4Gq",
+        "baYBw9gc",
+        "O4jKyS6C",
+        "l41Nd3IP",
+        "rR63Ak8D",
+        "2HbeCBw1",
+        "2m72VmtQ",
+        "OnTt7G1L",
+        "tSgwmeAk",
+        "U7dXj4BN",
+        "fkrkvRRH",
+        "GreNPRCO",
+        "0YPPGWTg",
+        "YJ9qy1F8",
+        "OEoHIXsp",
+        "Sr0oOgKM",
+        "jwNLbwiB",
+        "fBTC0aMb",
+        "xWruLnx2",
+        "YPbMAADl",
+        "hKfDBRAr"
+      ],
+      "excluded": {
+        "current_match": 0,
+        "technical_result": 0,
+        "duplicate": 5,
+        "incomplete_quarters": 0
+      }
+    },
+    "external_delivery": {
+      "enabled": false,
+      "reason": "COURSEWORK_OFFLINE_ONLY"
+    },
+    "integrity_report": {
+      "all_passed": true,
+      "errors": []
+    }
+  }
+}

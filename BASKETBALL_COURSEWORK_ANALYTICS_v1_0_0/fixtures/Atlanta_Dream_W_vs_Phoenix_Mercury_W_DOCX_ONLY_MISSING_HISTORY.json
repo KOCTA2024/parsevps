@@ -1,0 +1,1069 @@
+{
+  "schema_version": "super_basket_calculator_input_v5.0",
+  "match": {
+    "id": "DOCX_616b53da93",
+    "name": "Атланта Дрім Ж vs Фінікс Меркурі Ж",
+    "stage": "LIVE_TIME_UNKNOWN",
+    "period": 2,
+    "period_minute_played": null,
+    "period_minute_left": null,
+    "match_minute_played": null,
+    "match_minute_left": null,
+    "score": {
+      "home": 21.0,
+      "away": 28.0,
+      "total": 49.0,
+      "margin_home": -7.0
+    },
+    "quarters": {
+      "q1": {
+        "home": 13.0,
+        "away": 25.0,
+        "total": 38.0
+      },
+      "q2": {
+        "home": 8.0,
+        "away": 3.0,
+        "total": 11.0
+      },
+      "q3": {
+        "home": null,
+        "away": null,
+        "total": null
+      },
+      "q4": {
+        "home": null,
+        "away": null,
+        "total": null
+      }
+    },
+    "series_context": {},
+    "tournament": "WNBA",
+    "date": "",
+    "url": "",
+    "h1_total": 49.0,
+    "current_total": 49.0
+  },
+  "rules": {
+    "quarters": 4,
+    "quarter_minutes": 10,
+    "regulation_minutes": 40
+  },
+  "meta": {
+    "match_id": "DOCX_616b53da93",
+    "match": "Атланта Дрім Ж vs Фінікс Меркурі Ж",
+    "tournament": "WNBA",
+    "date": "",
+    "url": "",
+    "stage": "LIVE_TIME_UNKNOWN",
+    "score": "21-28",
+    "h1_total": 49.0,
+    "current_total": 49.0,
+    "generated_at": "2026-07-21T10:43:14+00:00"
+  },
+  "analysis_context": {},
+  "lines": {
+    "_schema": {
+      "_readme": "Кожен масив описує окремий тип ставки. scope вказує на який ігровий відрізок поширюється ставка: \"Match\"=весь матч, \"H1\"=перша половина(Q1+Q2), \"H2\"=друга половина(Q3+Q4), \"Q1\"/\"Q2\"/\"Q3\"/\"Q4\"=конкретна чверть. НІКОЛИ не використовуй дані з quarter_* для аналізу матчу в цілому і навпаки. Всі поля *Odd (homeOdd, awayOdd, overOdd, underOdd, homeHcpOdd, awayHcpOdd, yesOdd, noOdd) — це десяткові коефіцієнти букмекера: число на яке множиться сума ставки у разі виграшу (наприклад 1.83 означає прибуток 83% від суми ставки).",
+      "match_1x2": "Переможець ВСЬОГО матчу. scope завжди \"Match\". homeOdd/awayOdd.",
+      "match_handicap": "Азіатський гандикап на ВЕСЬ матч. scope=\"Match\". handicap<0 = фора хазяїв (вони фаворити). homeHcpOdd/awayHcpOdd.",
+      "match_total": "Тотал ВСЬОГО матчу (сума очок обох команд за всі чверті). scope=\"Match\". line=межа (типово 130–230), overOdd/underOdd. НЕ ПЛУТАТИ з home_ind_total/away_ind_total — тут СУМА обох команд, не окрема.",
+      "half_total": "Тотал за ПОЛОВИНУ матчу (2 чверті). scope=\"H1\" або \"H2\". line=межа, overOdd/underOdd.",
+      "quarter_total": "Тотал ТІЛЬКИ за одну чверть. scope=\"Q1\"/\"Q2\"/\"Q3\"/\"Q4\". НЕ ПЛУТАТИ з match_total — це набагато менше очок (30-60, не 130+). line=межа, overOdd/underOdd.",
+      "quarter_dnb": "\"Нічия без ставки\" за одну чверть. scope=Q1-Q4. При нічиї в чверті — ставка повертається. homeOdd/awayOdd.",
+      "quarter_1x2": "Переможець ОДНІЄЇ чверті. scope=Q1-Q4. homeOdd/drawOdd/awayOdd. drawOdd може бути null.",
+      "quarter_btts": "Чи наберуть ОБИДВІ команди мінімум threshold очок у чверті. scope=Q1-Q4. yesOdd/noOdd.",
+      "quarter_race": "\"Гонка до N очок\" — хто ПЕРШИМ набере target очок у конкретному ігровому відрізку. scope=Q1-Q4 або Match. target=кількість очок. homeOdd/awayOdd. Це НЕ тотал і НЕ переможець.",
+      "home_ind_total": "Індивідуальний тотал ТІЛЬКИ команди-хазяїна за ВЕСЬ матч. scope=\"Match\". line=межа (типово 55–115), overOdd/underOdd. КРИТИЧНО: це очки ОДНІЄЇ команди, НЕ сума двох. home_ind_total + away_ind_total ≈ match_total. Якщо бачиш line~65-100 — це ind_total, а НЕ match_total.",
+      "away_ind_total": "Індивідуальний тотал ТІЛЬКИ команди-гостей за ВЕСЬ матч. scope=\"Match\". line=межа (типово 55–115), overOdd/underOdd. КРИТИЧНО: це очки ОДНІЄЇ команди, НЕ сума двох. home_ind_total + away_ind_total ≈ match_total. Якщо бачиш line~65-100 — це ind_total, а НЕ match_total.",
+      "team_it": "Індивідуальний тотал команди (уніфікований масив для home+away). Поле team вказує яка команда: \"home\" або \"away\". line=межа, overOdd/underOdd. Аналогічні правила що й home_ind_total/away_ind_total.",
+      "win_margin": "Різниця очок переможця матчу (bucket-ставка). label=діапазон типу \"1-5\" або \"6-10\". odd=коефіцієнт.",
+      "last_digit": "Остання цифра рахунку або сума останніх цифр обох команд. scope=Match/H1/H2. Екзотичний ринок.",
+      "_disambiguation": {
+        "match_total_vs_ind_total": "match_total.line зазвичай 130–230 (сума двох команд). home_ind_total.line та away_ind_total.line зазвичай 55–115 (очки ОДНІЄЇ команди). Якщо line < 120 і scope=Match — швидше за все ind_total, а не match_total. Ніколи не порівнюй line з match_total і line з ind_total як одне й те саме число.",
+        "quarter_total_vs_match_total": "quarter_total.line зазвичай 30–60. match_total.line зазвичай 130–230. Різниця ~4x. scope у quarter_total завжди Q1/Q2/Q3/Q4, у match_total завжди Match.",
+        "team_it_vs_match_total": "team_it / home_ind_total / away_ind_total описують очки ОДНІЄЇ команди. match_total описує суму очок ОБОХ команд. Не підсумовуй ind_total як match_total і не ділити match_total на 2 як ind_total — команди набирають різну кількість очок."
+      }
+    },
+    "real_lines_only": true,
+    "match_total": [
+      {
+        "id": "match_total_match_157_5_1",
+        "market": "match_total",
+        "scope": "Match",
+        "line": 157.5,
+        "over_odd": 1.44,
+        "under_odd": 2.61,
+        "overOdd": 1.44,
+        "underOdd": 2.61,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "match_total_match_162_5_2",
+        "market": "match_total",
+        "scope": "Match",
+        "line": 162.5,
+        "over_odd": 1.85,
+        "under_odd": 1.85,
+        "overOdd": 1.85,
+        "underOdd": 1.85,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "match_total_match_167_5_3",
+        "market": "match_total",
+        "scope": "Match",
+        "line": 167.5,
+        "over_odd": 2.53,
+        "under_odd": 1.46,
+        "overOdd": 2.53,
+        "underOdd": 1.46,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      }
+    ],
+    "team_it": [
+      {
+        "id": "team_it_h1_37_5_15",
+        "market": "team_it",
+        "scope": "H1",
+        "line": 37.5,
+        "over_odd": 1.82,
+        "under_odd": 1.89,
+        "overOdd": 1.82,
+        "underOdd": 1.89,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true,
+        "team": "home"
+      },
+      {
+        "id": "team_it_h1_42_5_16",
+        "market": "team_it",
+        "scope": "H1",
+        "line": 42.5,
+        "over_odd": 1.72,
+        "under_odd": 2.01,
+        "overOdd": 1.72,
+        "underOdd": 2.01,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true,
+        "team": "away"
+      }
+    ],
+    "quarter_total": [],
+    "half_total": [
+      {
+        "id": "half_total_h1_80_5_13",
+        "market": "half_total",
+        "scope": "H1",
+        "line": 80.5,
+        "over_odd": 1.82,
+        "under_odd": 1.89,
+        "overOdd": 1.82,
+        "underOdd": 1.89,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "half_total_h1_82_5_14",
+        "market": "half_total",
+        "scope": "H1",
+        "line": 82.5,
+        "over_odd": 2.34,
+        "under_odd": 1.53,
+        "overOdd": 2.34,
+        "underOdd": 1.53,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      }
+    ],
+    "match_handicap": [
+      {
+        "scope": "Match",
+        "handicap": -4.5,
+        "homeHcpOdd": 3.03,
+        "awayHcpOdd": 1.33,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "scope": "Match",
+        "handicap": -3.5,
+        "homeHcpOdd": 2.69,
+        "awayHcpOdd": 1.41,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "scope": "Match",
+        "handicap": -1.5,
+        "homeHcpOdd": 2.15,
+        "awayHcpOdd": 1.63,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "scope": "Match",
+        "handicap": 1.5,
+        "homeHcpOdd": 1.85,
+        "awayHcpOdd": 1.85,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "scope": "Match",
+        "handicap": 4.5,
+        "homeHcpOdd": 1.46,
+        "awayHcpOdd": 2.53,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "scope": "Match",
+        "handicap": 6.5,
+        "homeHcpOdd": 1.31,
+        "awayHcpOdd": 3.18,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      }
+    ],
+    "match_1x2": [
+      {
+        "scope": "Match",
+        "homeOdd": 1.97,
+        "awayOdd": 1.81,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      }
+    ],
+    "other": [],
+    "home_ind_total": [
+      {
+        "id": "home_ind_total_match_75_5_4",
+        "market": "home_ind_total",
+        "scope": "Match",
+        "line": 75.5,
+        "over_odd": 1.31,
+        "under_odd": 3.18,
+        "overOdd": 1.31,
+        "underOdd": 3.18,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "home_ind_total_match_77_5_5",
+        "market": "home_ind_total",
+        "scope": "Match",
+        "line": 77.5,
+        "over_odd": 1.44,
+        "under_odd": 2.58,
+        "overOdd": 1.44,
+        "underOdd": 2.58,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "home_ind_total_match_80_5_6",
+        "market": "home_ind_total",
+        "scope": "Match",
+        "line": 80.5,
+        "over_odd": 1.82,
+        "under_odd": 1.89,
+        "overOdd": 1.82,
+        "underOdd": 1.89,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "home_ind_total_match_83_5_7",
+        "market": "home_ind_total",
+        "scope": "Match",
+        "line": 83.5,
+        "over_odd": 2.29,
+        "under_odd": 1.55,
+        "overOdd": 2.29,
+        "underOdd": 1.55,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "home_ind_total_match_85_5_8",
+        "market": "home_ind_total",
+        "scope": "Match",
+        "line": 85.5,
+        "over_odd": 2.8,
+        "under_odd": 1.38,
+        "overOdd": 2.8,
+        "underOdd": 1.38,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      }
+    ],
+    "away_ind_total": [
+      {
+        "id": "away_ind_total_match_78_5_9",
+        "market": "away_ind_total",
+        "scope": "Match",
+        "line": 78.5,
+        "over_odd": 1.44,
+        "under_odd": 2.58,
+        "overOdd": 1.44,
+        "underOdd": 2.58,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "away_ind_total_match_81_5_10",
+        "market": "away_ind_total",
+        "scope": "Match",
+        "line": 81.5,
+        "over_odd": 1.82,
+        "under_odd": 1.89,
+        "overOdd": 1.82,
+        "underOdd": 1.89,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "away_ind_total_match_84_5_11",
+        "market": "away_ind_total",
+        "scope": "Match",
+        "line": 84.5,
+        "over_odd": 2.38,
+        "under_odd": 1.51,
+        "overOdd": 2.38,
+        "underOdd": 1.51,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "away_ind_total_match_86_5_12",
+        "market": "away_ind_total",
+        "scope": "Match",
+        "line": 86.5,
+        "over_odd": 2.97,
+        "under_odd": 1.34,
+        "overOdd": 2.97,
+        "underOdd": 1.34,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      }
+    ]
+  },
+  "bookmaker_lines": {
+    "_schema": {
+      "_readme": "Кожен масив описує окремий тип ставки. scope вказує на який ігровий відрізок поширюється ставка: \"Match\"=весь матч, \"H1\"=перша половина(Q1+Q2), \"H2\"=друга половина(Q3+Q4), \"Q1\"/\"Q2\"/\"Q3\"/\"Q4\"=конкретна чверть. НІКОЛИ не використовуй дані з quarter_* для аналізу матчу в цілому і навпаки. Всі поля *Odd (homeOdd, awayOdd, overOdd, underOdd, homeHcpOdd, awayHcpOdd, yesOdd, noOdd) — це десяткові коефіцієнти букмекера: число на яке множиться сума ставки у разі виграшу (наприклад 1.83 означає прибуток 83% від суми ставки).",
+      "match_1x2": "Переможець ВСЬОГО матчу. scope завжди \"Match\". homeOdd/awayOdd.",
+      "match_handicap": "Азіатський гандикап на ВЕСЬ матч. scope=\"Match\". handicap<0 = фора хазяїв (вони фаворити). homeHcpOdd/awayHcpOdd.",
+      "match_total": "Тотал ВСЬОГО матчу (сума очок обох команд за всі чверті). scope=\"Match\". line=межа (типово 130–230), overOdd/underOdd. НЕ ПЛУТАТИ з home_ind_total/away_ind_total — тут СУМА обох команд, не окрема.",
+      "half_total": "Тотал за ПОЛОВИНУ матчу (2 чверті). scope=\"H1\" або \"H2\". line=межа, overOdd/underOdd.",
+      "quarter_total": "Тотал ТІЛЬКИ за одну чверть. scope=\"Q1\"/\"Q2\"/\"Q3\"/\"Q4\". НЕ ПЛУТАТИ з match_total — це набагато менше очок (30-60, не 130+). line=межа, overOdd/underOdd.",
+      "quarter_dnb": "\"Нічия без ставки\" за одну чверть. scope=Q1-Q4. При нічиї в чверті — ставка повертається. homeOdd/awayOdd.",
+      "quarter_1x2": "Переможець ОДНІЄЇ чверті. scope=Q1-Q4. homeOdd/drawOdd/awayOdd. drawOdd може бути null.",
+      "quarter_btts": "Чи наберуть ОБИДВІ команди мінімум threshold очок у чверті. scope=Q1-Q4. yesOdd/noOdd.",
+      "quarter_race": "\"Гонка до N очок\" — хто ПЕРШИМ набере target очок у конкретному ігровому відрізку. scope=Q1-Q4 або Match. target=кількість очок. homeOdd/awayOdd. Це НЕ тотал і НЕ переможець.",
+      "home_ind_total": "Індивідуальний тотал ТІЛЬКИ команди-хазяїна за ВЕСЬ матч. scope=\"Match\". line=межа (типово 55–115), overOdd/underOdd. КРИТИЧНО: це очки ОДНІЄЇ команди, НЕ сума двох. home_ind_total + away_ind_total ≈ match_total. Якщо бачиш line~65-100 — це ind_total, а НЕ match_total.",
+      "away_ind_total": "Індивідуальний тотал ТІЛЬКИ команди-гостей за ВЕСЬ матч. scope=\"Match\". line=межа (типово 55–115), overOdd/underOdd. КРИТИЧНО: це очки ОДНІЄЇ команди, НЕ сума двох. home_ind_total + away_ind_total ≈ match_total. Якщо бачиш line~65-100 — це ind_total, а НЕ match_total.",
+      "team_it": "Індивідуальний тотал команди (уніфікований масив для home+away). Поле team вказує яка команда: \"home\" або \"away\". line=межа, overOdd/underOdd. Аналогічні правила що й home_ind_total/away_ind_total.",
+      "win_margin": "Різниця очок переможця матчу (bucket-ставка). label=діапазон типу \"1-5\" або \"6-10\". odd=коефіцієнт.",
+      "last_digit": "Остання цифра рахунку або сума останніх цифр обох команд. scope=Match/H1/H2. Екзотичний ринок.",
+      "_disambiguation": {
+        "match_total_vs_ind_total": "match_total.line зазвичай 130–230 (сума двох команд). home_ind_total.line та away_ind_total.line зазвичай 55–115 (очки ОДНІЄЇ команди). Якщо line < 120 і scope=Match — швидше за все ind_total, а не match_total. Ніколи не порівнюй line з match_total і line з ind_total як одне й те саме число.",
+        "quarter_total_vs_match_total": "quarter_total.line зазвичай 30–60. match_total.line зазвичай 130–230. Різниця ~4x. scope у quarter_total завжди Q1/Q2/Q3/Q4, у match_total завжди Match.",
+        "team_it_vs_match_total": "team_it / home_ind_total / away_ind_total описують очки ОДНІЄЇ команди. match_total описує суму очок ОБОХ команд. Не підсумовуй ind_total як match_total і не ділити match_total на 2 як ind_total — команди набирають різну кількість очок."
+      }
+    },
+    "real_lines_only": true,
+    "match_total": [
+      {
+        "id": "match_total_match_157_5_1",
+        "market": "match_total",
+        "scope": "Match",
+        "line": 157.5,
+        "over_odd": 1.44,
+        "under_odd": 2.61,
+        "overOdd": 1.44,
+        "underOdd": 2.61,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "match_total_match_162_5_2",
+        "market": "match_total",
+        "scope": "Match",
+        "line": 162.5,
+        "over_odd": 1.85,
+        "under_odd": 1.85,
+        "overOdd": 1.85,
+        "underOdd": 1.85,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "match_total_match_167_5_3",
+        "market": "match_total",
+        "scope": "Match",
+        "line": 167.5,
+        "over_odd": 2.53,
+        "under_odd": 1.46,
+        "overOdd": 2.53,
+        "underOdd": 1.46,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      }
+    ],
+    "team_it": [
+      {
+        "id": "team_it_h1_37_5_15",
+        "market": "team_it",
+        "scope": "H1",
+        "line": 37.5,
+        "over_odd": 1.82,
+        "under_odd": 1.89,
+        "overOdd": 1.82,
+        "underOdd": 1.89,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true,
+        "team": "home"
+      },
+      {
+        "id": "team_it_h1_42_5_16",
+        "market": "team_it",
+        "scope": "H1",
+        "line": 42.5,
+        "over_odd": 1.72,
+        "under_odd": 2.01,
+        "overOdd": 1.72,
+        "underOdd": 2.01,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true,
+        "team": "away"
+      }
+    ],
+    "quarter_total": [],
+    "half_total": [
+      {
+        "id": "half_total_h1_80_5_13",
+        "market": "half_total",
+        "scope": "H1",
+        "line": 80.5,
+        "over_odd": 1.82,
+        "under_odd": 1.89,
+        "overOdd": 1.82,
+        "underOdd": 1.89,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "half_total_h1_82_5_14",
+        "market": "half_total",
+        "scope": "H1",
+        "line": 82.5,
+        "over_odd": 2.34,
+        "under_odd": 1.53,
+        "overOdd": 2.34,
+        "underOdd": 1.53,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      }
+    ],
+    "match_handicap": [
+      {
+        "scope": "Match",
+        "handicap": -4.5,
+        "homeHcpOdd": 3.03,
+        "awayHcpOdd": 1.33,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "scope": "Match",
+        "handicap": -3.5,
+        "homeHcpOdd": 2.69,
+        "awayHcpOdd": 1.41,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "scope": "Match",
+        "handicap": -1.5,
+        "homeHcpOdd": 2.15,
+        "awayHcpOdd": 1.63,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "scope": "Match",
+        "handicap": 1.5,
+        "homeHcpOdd": 1.85,
+        "awayHcpOdd": 1.85,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "scope": "Match",
+        "handicap": 4.5,
+        "homeHcpOdd": 1.46,
+        "awayHcpOdd": 2.53,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "scope": "Match",
+        "handicap": 6.5,
+        "homeHcpOdd": 1.31,
+        "awayHcpOdd": 3.18,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      }
+    ],
+    "match_1x2": [
+      {
+        "scope": "Match",
+        "homeOdd": 1.97,
+        "awayOdd": 1.81,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      }
+    ],
+    "other": [],
+    "home_ind_total": [
+      {
+        "id": "home_ind_total_match_75_5_4",
+        "market": "home_ind_total",
+        "scope": "Match",
+        "line": 75.5,
+        "over_odd": 1.31,
+        "under_odd": 3.18,
+        "overOdd": 1.31,
+        "underOdd": 3.18,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "home_ind_total_match_77_5_5",
+        "market": "home_ind_total",
+        "scope": "Match",
+        "line": 77.5,
+        "over_odd": 1.44,
+        "under_odd": 2.58,
+        "overOdd": 1.44,
+        "underOdd": 2.58,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "home_ind_total_match_80_5_6",
+        "market": "home_ind_total",
+        "scope": "Match",
+        "line": 80.5,
+        "over_odd": 1.82,
+        "under_odd": 1.89,
+        "overOdd": 1.82,
+        "underOdd": 1.89,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "home_ind_total_match_83_5_7",
+        "market": "home_ind_total",
+        "scope": "Match",
+        "line": 83.5,
+        "over_odd": 2.29,
+        "under_odd": 1.55,
+        "overOdd": 2.29,
+        "underOdd": 1.55,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "home_ind_total_match_85_5_8",
+        "market": "home_ind_total",
+        "scope": "Match",
+        "line": 85.5,
+        "over_odd": 2.8,
+        "under_odd": 1.38,
+        "overOdd": 2.8,
+        "underOdd": 1.38,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      }
+    ],
+    "away_ind_total": [
+      {
+        "id": "away_ind_total_match_78_5_9",
+        "market": "away_ind_total",
+        "scope": "Match",
+        "line": 78.5,
+        "over_odd": 1.44,
+        "under_odd": 2.58,
+        "overOdd": 1.44,
+        "underOdd": 2.58,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "away_ind_total_match_81_5_10",
+        "market": "away_ind_total",
+        "scope": "Match",
+        "line": 81.5,
+        "over_odd": 1.82,
+        "under_odd": 1.89,
+        "overOdd": 1.82,
+        "underOdd": 1.89,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "away_ind_total_match_84_5_11",
+        "market": "away_ind_total",
+        "scope": "Match",
+        "line": 84.5,
+        "over_odd": 2.38,
+        "under_odd": 1.51,
+        "overOdd": 2.38,
+        "underOdd": 1.51,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "away_ind_total_match_86_5_12",
+        "market": "away_ind_total",
+        "scope": "Match",
+        "line": 86.5,
+        "over_odd": 2.97,
+        "under_odd": 1.34,
+        "overOdd": 2.97,
+        "underOdd": 1.34,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      }
+    ]
+  },
+  "raw_lines": {
+    "match_total": [
+      {
+        "id": "match_total_match_157_5_1",
+        "market": "match_total",
+        "scope": "Match",
+        "line": 157.5,
+        "over_odd": 1.44,
+        "under_odd": 2.61,
+        "overOdd": 1.44,
+        "underOdd": 2.61,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "match_total_match_162_5_2",
+        "market": "match_total",
+        "scope": "Match",
+        "line": 162.5,
+        "over_odd": 1.85,
+        "under_odd": 1.85,
+        "overOdd": 1.85,
+        "underOdd": 1.85,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "match_total_match_167_5_3",
+        "market": "match_total",
+        "scope": "Match",
+        "line": 167.5,
+        "over_odd": 2.53,
+        "under_odd": 1.46,
+        "overOdd": 2.53,
+        "underOdd": 1.46,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      }
+    ],
+    "team_it": [
+      {
+        "id": "team_it_h1_37_5_15",
+        "market": "team_it",
+        "scope": "H1",
+        "line": 37.5,
+        "over_odd": 1.82,
+        "under_odd": 1.89,
+        "overOdd": 1.82,
+        "underOdd": 1.89,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true,
+        "team": "home"
+      },
+      {
+        "id": "team_it_h1_42_5_16",
+        "market": "team_it",
+        "scope": "H1",
+        "line": 42.5,
+        "over_odd": 1.72,
+        "under_odd": 2.01,
+        "overOdd": 1.72,
+        "underOdd": 2.01,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true,
+        "team": "away"
+      }
+    ],
+    "quarter_total": [],
+    "half_total": [
+      {
+        "id": "half_total_h1_80_5_13",
+        "market": "half_total",
+        "scope": "H1",
+        "line": 80.5,
+        "over_odd": 1.82,
+        "under_odd": 1.89,
+        "overOdd": 1.82,
+        "underOdd": 1.89,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "half_total_h1_82_5_14",
+        "market": "half_total",
+        "scope": "H1",
+        "line": 82.5,
+        "over_odd": 2.34,
+        "under_odd": 1.53,
+        "overOdd": 2.34,
+        "underOdd": 1.53,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      }
+    ],
+    "match_handicap": [
+      {
+        "scope": "Match",
+        "handicap": -4.5,
+        "homeHcpOdd": 3.03,
+        "awayHcpOdd": 1.33,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "scope": "Match",
+        "handicap": -3.5,
+        "homeHcpOdd": 2.69,
+        "awayHcpOdd": 1.41,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "scope": "Match",
+        "handicap": -1.5,
+        "homeHcpOdd": 2.15,
+        "awayHcpOdd": 1.63,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "scope": "Match",
+        "handicap": 1.5,
+        "homeHcpOdd": 1.85,
+        "awayHcpOdd": 1.85,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "scope": "Match",
+        "handicap": 4.5,
+        "homeHcpOdd": 1.46,
+        "awayHcpOdd": 2.53,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "scope": "Match",
+        "handicap": 6.5,
+        "homeHcpOdd": 1.31,
+        "awayHcpOdd": 3.18,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      }
+    ],
+    "match_1x2": [
+      {
+        "scope": "Match",
+        "homeOdd": 1.97,
+        "awayOdd": 1.81,
+        "bookmaker": "unknown",
+        "source": "USER_DOCX",
+        "is_real_bookmaker_line": true
+      }
+    ],
+    "other": [],
+    "home_ind_total": [
+      {
+        "id": "home_ind_total_match_75_5_4",
+        "market": "home_ind_total",
+        "scope": "Match",
+        "line": 75.5,
+        "over_odd": 1.31,
+        "under_odd": 3.18,
+        "overOdd": 1.31,
+        "underOdd": 3.18,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "home_ind_total_match_77_5_5",
+        "market": "home_ind_total",
+        "scope": "Match",
+        "line": 77.5,
+        "over_odd": 1.44,
+        "under_odd": 2.58,
+        "overOdd": 1.44,
+        "underOdd": 2.58,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "home_ind_total_match_80_5_6",
+        "market": "home_ind_total",
+        "scope": "Match",
+        "line": 80.5,
+        "over_odd": 1.82,
+        "under_odd": 1.89,
+        "overOdd": 1.82,
+        "underOdd": 1.89,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "home_ind_total_match_83_5_7",
+        "market": "home_ind_total",
+        "scope": "Match",
+        "line": 83.5,
+        "over_odd": 2.29,
+        "under_odd": 1.55,
+        "overOdd": 2.29,
+        "underOdd": 1.55,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "home_ind_total_match_85_5_8",
+        "market": "home_ind_total",
+        "scope": "Match",
+        "line": 85.5,
+        "over_odd": 2.8,
+        "under_odd": 1.38,
+        "overOdd": 2.8,
+        "underOdd": 1.38,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      }
+    ],
+    "away_ind_total": [
+      {
+        "id": "away_ind_total_match_78_5_9",
+        "market": "away_ind_total",
+        "scope": "Match",
+        "line": 78.5,
+        "over_odd": 1.44,
+        "under_odd": 2.58,
+        "overOdd": 1.44,
+        "underOdd": 2.58,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "away_ind_total_match_81_5_10",
+        "market": "away_ind_total",
+        "scope": "Match",
+        "line": 81.5,
+        "over_odd": 1.82,
+        "under_odd": 1.89,
+        "overOdd": 1.82,
+        "underOdd": 1.89,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "away_ind_total_match_84_5_11",
+        "market": "away_ind_total",
+        "scope": "Match",
+        "line": 84.5,
+        "over_odd": 2.38,
+        "under_odd": 1.51,
+        "overOdd": 2.38,
+        "underOdd": 1.51,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      },
+      {
+        "id": "away_ind_total_match_86_5_12",
+        "market": "away_ind_total",
+        "scope": "Match",
+        "line": 86.5,
+        "over_odd": 2.97,
+        "under_odd": 1.34,
+        "overOdd": 2.97,
+        "underOdd": 1.34,
+        "source": "USER_DOCX",
+        "bookmaker": "unknown",
+        "is_real_bookmaker_line": true
+      }
+    ]
+  },
+  "live_team_stats": {
+    "home": {
+      "FGA": null,
+      "FGM": null,
+      "2PA": null,
+      "2PM": null,
+      "3PA": null,
+      "3PM": null,
+      "FTA": null,
+      "FTM": null,
+      "ORB": null,
+      "DRB": null,
+      "TO": null,
+      "FOULS": null
+    },
+    "away": {
+      "FGA": null,
+      "FGM": null,
+      "2PA": null,
+      "2PM": null,
+      "3PA": null,
+      "3PM": null,
+      "FTA": null,
+      "FTM": null,
+      "ORB": null,
+      "DRB": null,
+      "TO": null,
+      "FOULS": null
+    }
+  },
+  "raw_data": {
+    "main_match": {
+      "src": "DOCX_ONLY",
+      "mid": "DOCX_616b53da93",
+      "st": "LIVE_TIME_UNKNOWN",
+      "tour": "WNBA",
+      "ht": "Атланта Дрім Ж",
+      "at": "Фінікс Меркурі Ж",
+      "hs": 21,
+      "as_": 28,
+      "tot": 49,
+      "q1h": 13,
+      "q1a": 25,
+      "q1t": 38,
+      "q2h": 8,
+      "q2a": 3,
+      "q2t": 11
+    },
+    "team_a_hist": [],
+    "team_b_hist": [],
+    "h2h_hist": [],
+    "raw_block": []
+  },
+  "data_quality": {
+    "conversion_ready": false,
+    "calculator_schema_ready": true,
+    "team_a_valid_games": 0,
+    "team_b_valid_games": 0,
+    "pooled_valid_games": 0,
+    "h2h_valid_games": 0,
+    "market_line_rows": 16,
+    "current_match_excluded": true,
+    "technical_games_excluded_by_calculator": true,
+    "warnings": [
+      "MISSING_LAST35_TEAM_A",
+      "MISSING_LAST35_TEAM_B",
+      "MISSING_H2H",
+      "MISSING_EXACT_LIVE_CLOCK"
+    ]
+  },
+  "logic": {
+    "calculator": "super_basket_vps_system_v5.0",
+    "history_source": null,
+    "lines_source": "Atlanta_Dream_W_vs_Phoenix_Mercury_W(3).docx",
+    "line_policy": "only real attached bookmaker lines; no synthetic lines",
+    "quarter_minutes_explicit": 10
+  },
+  "conversion_info": {
+    "status": "INCOMPLETE",
+    "history_source": null,
+    "lines_source": "Atlanta_Dream_W_vs_Phoenix_Mercury_W(3).docx",
+    "warnings": [
+      "MISSING_LAST35_TEAM_A",
+      "MISSING_LAST35_TEAM_B",
+      "MISSING_H2H",
+      "MISSING_EXACT_LIVE_CLOCK"
+    ]
+  }
+}

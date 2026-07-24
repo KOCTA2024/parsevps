@@ -11,7 +11,8 @@
  * Три контрольні точки на матч:
  *   Checkpoint #1 (після 1-ї чверті) — старт вікна: kickoff + Q (NBA: +12 хв, default: +10 хв)
  *   Checkpoint #2 (half-time)        — старт вікна: kickoff + 2Q + коротка пауза
- *   Checkpoint #3 (після 3-ї чверті) — старт вікна: kickoff + 3Q + коротка пауза + half-time пауза
+ *   Checkpoint #3 (4-та хвилина Q4) — вікно відкривається після Q3,
+ *     але задача ставиться в чергу лише коли Q4 liveMinute >= 4
  * (точні хвилини рахуються кумулятивно в buildCheckpointOffsets(), з довжини
  * чверті й тривалості перерв — не "плоскими" 2×Q/3×Q, бо ті ігнорують самі
  * перерви між чвертями)
@@ -104,6 +105,8 @@ const MATCHES_FILE = process.env.MATCHES_FILE
 const NBA_PATTERN = /\bNBA\b|НБА|12[\s-]?min/i;
 
 const POLL_INTERVAL_MS   = Number(process.env.STAGE_POLL_INTERVAL_MS) || 60_000;      // 1 хв
+const Q2_TRIGGER_MINUTE  = Number(process.env.Q2_TRIGGER_MINUTE) || 2;
+const Q4_TRIGGER_MINUTE  = Number(process.env.Q4_TRIGGER_MINUTE) || 4;
 // Було 15 хв — зарано здавались, якщо матч стартував із запізненням щодо
 // kickoff у фіді (реальний Q1/пауза розтягувались довше вікна). Підняли дефолт.
 // Було 25 хв. Тепер, коли час у 'not_started' більше не витрачає це вікно
@@ -212,11 +215,12 @@ const CHECKPOINTS_NBA     = buildCheckpointOffsets(QUARTER_MIN_NBA);
 // вікна відкривались із запізненням, а freeze-фолбек чекав "зависання" на
 // 11'/12', яке ніколи не настає (реальне зависання — на 9'/10').
 const NBA_EXCLUDE_PATTERN = /літня|летняя|summer[\s-]?league|жіноч|женск|women|WNBA/i;
+const TWELVE_MINUTE_PATTERN = /\bNBA\b|НБА|\bPBA\b|Philippine Basketball Association|12[\s-]?min/i;
 
 function quarterMinFor(league) {
   const l = league || '';
   if (NBA_EXCLUDE_PATTERN.test(l)) return QUARTER_MIN_DEFAULT;
-  return NBA_PATTERN.test(l) ? QUARTER_MIN_NBA : QUARTER_MIN_DEFAULT;
+  return TWELVE_MINUTE_PATTERN.test(l) ? QUARTER_MIN_NBA : QUARTER_MIN_DEFAULT;
 }
 
 function offsetsFor(league) {
@@ -263,6 +267,25 @@ function checkpointProgressState(stage, checkpointIndex) {
   if (!Number.isInteger(completed)) return 'UNKNOWN';
   if (completed === target) return 'TARGET';
   if (completed > target) return 'STALE';
+  return 'WAIT';
+}
+
+// Checkpoint #1 is deliberately not fired at the Q1 break or at minute 1 of
+// Q2. The first useful snapshot is minute 2 (normally observed at minute 2 or
+// 3 with a one-minute polling interval). A later Q2 tick is still accepted so
+// a transient feed/network delay cannot lose the checkpoint completely.
+function checkpoint1Q2TriggerState(stage, triggerMinute = 2) {
+  const completed = stage?.completedQuarters;
+  if (stage?.status === 'finished' ||
+      (Number.isInteger(completed) && completed >= 2)) {
+    return 'STALE';
+  }
+  if (stage?.status === 'live' &&
+      stage?.currentQuarter === 2 &&
+      Number.isFinite(stage?.liveMinute)) {
+    return stage.liveMinute >= triggerMinute ? 'TARGET' : 'WAIT';
+  }
+  if (stage?.status === 'break' || completed === 1) return 'ARMED';
   return 'WAIT';
 }
 
@@ -389,7 +412,11 @@ async function enqueueAnalysis(match, checkpointIndex) {
   // сприйме 2-гу й 3-тю перерву того ж matchId як дублікат 1-ї (за jobId).
   const jobId = `${id}_break${checkpointIndex + 1}`;
 
-  const triggerLabel = checkpointIndex === 0 ? 'Q2 start' : `Break #${checkpointIndex + 1}`;
+  const triggerLabel = checkpointIndex === 0
+    ? `Q2 minute ${Q2_TRIGGER_MINUTE}+`
+    : checkpointIndex === 2
+      ? `Q4 minute ${Q4_TRIGGER_MINUTE}`
+      : `Break #${checkpointIndex + 1}`;
 
   try {
     const job = await queue.add('analyse', jobPayload, { jobId, delay: 0 });
@@ -417,7 +444,7 @@ async function enqueueAnalysis(match, checkpointIndex) {
  * Викликається рівно в момент відкриття вікна (kickoff + offset).
  * Раз на POLL_INTERVAL_MS питає стадію матчу, поки:
  *   - не побачить "break"     → ставить job і зупиняється;               (Checkpoint #2, #3)
- *   - не побачить скидання liveMinute (нова чверть)  → ставить job;      (Checkpoint #1, див. нижче)
+ *   - після скидання liveMinute дочекається 2-ї хвилини Q2 → ставить job; (Checkpoint #1)
  *   - не побачить "finished"  → матч уже завершився, чекпоінт більше не актуальний;
  *   - не вичерпає CHECK_WINDOW_MS → здається, лишає лог warning.
  *
@@ -426,9 +453,9 @@ async function enqueueAnalysis(match, checkpointIndex) {
  * аж до кінця вікна), тож класичне очікування break тут ніколи не спрацює.
  * Єдина ознака, яку фід реально віддає, — це liveMinute, що рахує хвилини
  * В МЕЖАХ поточної чверті і СКИДАЄТЬСЯ на початку нової (напр. 10' → 1').
- * Тому для Checkpoint #1 замість "status === 'break'" перевіряємо, що
- * liveMinute на черговому тіку (раз на хвилину, як і раніше) став МЕНШИМ
- * за попередній — це і є ознака старту Q2.
+ * Тому для Checkpoint #1 скидання liveMinute лише ОЗБРОЮЄ watcher. Job
+ * ставиться не раніше Q2 liveMinute>=Q2_TRIGGER_MINUTE (дефолт 2), тобто
+ * за нормального хвилинного polling — на 2-й або 3-й хвилині Q2.
  */
 function watchCheckpoint(match, checkpointIndex, sportId, quarterMin) {
   const { id } = match;
@@ -439,6 +466,7 @@ function watchCheckpoint(match, checkpointIndex, sportId, quarterMin) {
   let softWindowExtensions = 0;
   let stopped = false;
   let prevLiveMinute = null;
+  let checkpoint1FallbackArmed = false;
   let stallSinceMs = null;
   let timer = null;
 
@@ -508,6 +536,64 @@ function watchCheckpoint(match, checkpointIndex, sportId, quarterMin) {
     log(id, `Checkpoint #${checkpointIndex + 1} — stage: ${stage.status}` +
             (stage.liveMinute !== null ? ` (${stage.liveMinute}')` : '') + progressText);
 
+    // Q1 completion only arms Checkpoint #1. Wait for minute 2+ of Q2 so the
+    // parser receives a meaningful early-Q2 snapshot rather than minute 1.
+    if (checkpointIndex === 0) {
+      const q2State = checkpoint1Q2TriggerState(stage, Q2_TRIGGER_MINUTE);
+      if (q2State === 'STALE') {
+        finishWatcher();
+        log(id, `↷ Checkpoint #1 skipped: Q2 minute ${Q2_TRIGGER_MINUTE}+ was not observed before Q2 ended.`);
+        settleCheckpoint1(id);
+        return;
+      }
+      if (q2State === 'TARGET') {
+        await queueTarget(`Q2 liveMinute=${stage.liveMinute}' (target >=${Q2_TRIGGER_MINUTE}')`);
+        return;
+      }
+      if (q2State === 'ARMED') checkpoint1FallbackArmed = true;
+
+      // When df_sur exposes quarter progress/currentQuarter it is
+      // authoritative: do not let the generic completedQ=1 boundary or an
+      // explicit Q1 break enqueue the job prematurely.
+      if (Number.isInteger(stage.completedQuarters) ||
+          stage.currentQuarter !== null && stage.currentQuarter !== undefined ||
+          stage.status === 'break') {
+        timer = setTimeout(poll, POLL_INTERVAL_MS);
+        return;
+      }
+    }
+
+    // Checkpoint #3 is intentionally delayed until four minutes have been
+    // played in Q4. A Q3 break/completedQ=3 only arms the watcher; it must not
+    // enqueue analysis. currentQuarter comes from the quarter-score feed, so a
+    // generic break or a minute value from an earlier quarter cannot fire it.
+    if (checkpointIndex === 2) {
+      if (stage.status === 'finished' ||
+          (Number.isInteger(stage.completedQuarters) && stage.completedQuarters >= 4)) {
+        finishWatcher();
+        log(id, `↷ Checkpoint #3 skipped: Q4 minute ${Q4_TRIGGER_MINUTE} was not observed before match end.`);
+        return;
+      }
+
+      const q4MinuteReached = stage.status === 'live' &&
+        stage.currentQuarter === 4 &&
+        stage.liveMinute !== null &&
+        stage.liveMinute >= Q4_TRIGGER_MINUTE;
+      if (q4MinuteReached) {
+        await queueTarget(`Q4 liveMinute=${stage.liveMinute}' (target >=${Q4_TRIGGER_MINUTE}')`);
+        return;
+      }
+
+      if (liveWaitStartedAt !== null && Date.now() - liveWaitStartedAt > HARD_CHECK_WINDOW_MS) {
+        finishWatcher();
+        log(id, `⏱ Checkpoint #3 hard timeout while waiting for Q4 minute ${Q4_TRIGGER_MINUTE} — giving up.`);
+        return;
+      }
+
+      timer = setTimeout(poll, POLL_INTERVAL_MS);
+      return;
+    }
+
     // Primary trigger: actual quarter-score progress. This prevents a delayed
     // match's Q1 break from being mistaken for HT/Q3 and also catches a missed
     // break as soon as the next quarter has a score.
@@ -570,7 +656,20 @@ function watchCheckpoint(match, checkpointIndex, sportId, quarterMin) {
     // Minute-only fallback is allowed only when df_sur cannot tell us the
     // completed-quarter count. With reliable progress, target matching above is
     // authoritative and prevents cross-quarter false triggers.
-    if ((minuteReset || minuteStalled) && !stage.quarterProgressReliable) {
+    if (checkpointIndex === 0 && !stage.quarterProgressReliable) {
+      if (minuteReset || minuteStalled) checkpoint1FallbackArmed = true;
+      if (checkpoint1FallbackArmed &&
+          stage.status === 'live' &&
+          Number.isFinite(stage.liveMinute) &&
+          stage.liveMinute >= Q2_TRIGGER_MINUTE &&
+          (quarterMin == null || stage.liveMinute < quarterMin - 1)) {
+        const reason = minuteReset
+          ? `liveMinute reset to ${stage.liveMinute}' and already reached Q2 target minute`
+          : `Q2 fallback armed; liveMinute=${stage.liveMinute}' (target >=${Q2_TRIGGER_MINUTE}')`;
+        await queueTarget(`${reason}; quarter-score feed unavailable`);
+        return;
+      }
+    } else if ((minuteReset || minuteStalled) && !stage.quarterProgressReliable) {
       const reason = minuteReset
         ? `liveMinute reset (${prev}' → ${stage.liveMinute}') with no quarter-score data`
         : `liveMinute stalled at ${stage.liveMinute}' ≥${STALL_CONFIRM_MS / 60_000} min with no quarter-score data`;
@@ -912,6 +1011,7 @@ async function main() {
   console.log(
     `[stage-monitor] Started. Watching "${MATCHES_FILE}" | ` +
     `poll every ${POLL_INTERVAL_MS / 1000}s | check window ${CHECK_WINDOW_MS / 60_000} min | ` +
+    `Checkpoint #1 at Q2 minute ${Q2_TRIGGER_MINUTE}+ | ` +
     `stall-confirm fallback ${STALL_CONFIRM_MS / 60_000} min | ` +
     `soft window ${CHECK_WINDOW_MS / 60_000} min (progress-aware) | hard max ${HARD_CHECK_WINDOW_MS / 60_000} min | ` +
     `rescanning matches.json every ${RESCAN_INTERVAL_MS / 60_000} min | ` +

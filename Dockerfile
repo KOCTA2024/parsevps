@@ -2,6 +2,11 @@
 # зависимости для Chromium (иначе придётся ставить ~50 либ вручную)
 FROM mcr.microsoft.com/playwright:v1.56.0-noble
 
+# Keep all relative application paths under the persistent /app mounts used by
+# docker-compose.  Without this, the image starts in / and writes src/data to
+# the container's ephemeral /src/data directory.
+WORKDIR /app
+
 # Python + curl (curl нужен scheduler-контейнеру для скачивания supercrond)
 # python3-pip — нужен для super_basket_vps_system.py (openai + pydantic, GPT-review сигналов;
 # openpyxl — экспорт БД в Excel по команде /db в телеграм-боте)

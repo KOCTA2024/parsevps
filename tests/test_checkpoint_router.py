@@ -30,7 +30,7 @@ blocked = ['MATCH_TOTAL', 'TEAM_IT_MATCH', 'H2_TOTAL', 'TEAM_IT_H2', 'CURRENT_QU
 for t in blocked:
     result = mod._router(market(t), dict(base))
     assert result['hard_block'] is True, (t, result)
-    assert result['reason'] == 'CHECKPOINT1_ONLY_H1_TOTAL_AND_H1_TEAM_IT', (t, result)
+    assert result['reason'] == 'PRODUCTION_ROUTER_BLOCK_AFTER_Q1_ONLY_H1_TOTAL_AND_TEAM_IT_H1', (t, result)
     print(f'PASS: checkpoint 1 blocks {t}')
 
 for t in ['H1_TOTAL', 'TEAM_IT_H1']:
@@ -56,3 +56,43 @@ good = next(item for item in markets if item['side'] == 'UNDER')
 assert 'ODDS_ABOVE_MAXIMUM' in bad['parser_issues'], bad
 assert good['eligible_market'] is True, good
 print('PASS: malformed odds above configured maximum are blocked')
+
+rejected_under = {
+    'market_type': 'MATCH_TOTAL', 'team': None, 'segment': 'MATCH',
+    'side': 'UNDER', 'line': 182.5, 'odds': 1.89, 'bookmaker': 'BETKING',
+    'offers': [], 'parser_issues': [], 'router': {'hard_block': False},
+    'system_action': 'PASS', 'system_status': 'PASS', 'stake': '0%',
+    'p_final': 0.6919, 'p_final_system': 0.6919,
+    'blockers': [{'rule_id': 'STAT_GATE_DIRECTLY_AGAINST'}],
+    'caps': [{'rule_id': 'FAKE_UNDER'}],
+}
+weak_over = {
+    'market_type': 'MATCH_TOTAL', 'team': None, 'segment': 'MATCH',
+    'side': 'OVER', 'line': 182.5, 'odds': 1.89, 'bookmaker': 'BETKING',
+    'offers': [], 'parser_issues': [], 'router': {'hard_block': False},
+    'system_action': 'PASS', 'system_status': 'PASS', 'stake': '0%',
+    'p_final': 0.3081, 'p_final_system': 0.3081,
+    'blockers': [], 'caps': [],
+}
+selected, closest = mod.select_one_decision([weak_over, rejected_under], 'action')
+assert selected is None
+assert closest is rejected_under, closest
+decision = mod.build_decision(None, closest, {'input_snapshot_hash': 'test'}, 'action')
+assert decision['action'] == 'PASS'
+assert decision['market']['side'] == 'UNDER'
+assert decision['probabilities']['p_final'] == 0.6919
+assert decision['reason_codes'] == ['STAT_GATE_DIRECTLY_AGAINST', 'FAKE_UNDER']
+assert 'Under 182.5 @1.89' in decision['explanation_uk']
+assert 'P_final: 69.19%' in decision['explanation_uk']
+print('PASS: PASS fallback reports strongest rejected side, not weak blocker-free opposite')
+
+assert mod.normalized_action(0.5999, [], 'action', 0.95)[0] == 'PASS'
+assert mod.normalized_action(0.60, [], 'action', 0.80)[0] == 'PASS'
+assert mod.normalized_action(0.60, [], 'action', 0.8001)[:2] == (
+    'RISK', 'RISK ENTRY — P_HIST ABOVE 80%',
+)
+assert mod.normalized_action(0.6499, [], 'action', 0.81)[0] == 'RISK'
+assert mod.normalized_action(0.65, [], 'action', 0.10)[0] == 'RISK'
+assert mod.normalized_action(0.64, [{'rule_id': 'TEST_BLOCKER'}], 'action', 0.99)[0] == 'PASS'
+assert mod.normalized_action(0.64, [], 'strict', 0.99)[0] == 'PASS'
+print('PASS: RISK is >=65%, plus 60-64.99% only when P_hist is strictly above 80%')

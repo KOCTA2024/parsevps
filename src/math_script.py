@@ -168,6 +168,12 @@ def load_lines(path: str) -> dict:
                 file=sys.stderr,
             )
         return {
+            # Preserve the line parser envelope verbatim. These fields carry
+            # source/match/timestamp provenance and the parser schema version;
+            # dropping them made downstream freshness and traceability checks
+            # impossible even though the market rows themselves survived.
+            "meta":             dict(data.get("meta") or {}),
+            "_schema":          data.get("_schema"),
             "match_total":    _rows("match_total"),
             "half_total":     half_total_clean,
             "quarter_total":  _rows("quarter_total"),
@@ -179,6 +185,7 @@ def load_lines(path: str) -> dict:
         }
     except (FileNotFoundError, json.JSONDecodeError, Exception):
         return {
+            "meta": {}, "_schema": None,
             "match_total": [], "half_total": [], "quarter_total": [],
             "match_handicap": [], "match_1x2": [], "other": [],
             "home_ind_total": [], "away_ind_total": [],
@@ -2098,12 +2105,52 @@ def expected_score_projection(main: dict, rows_a: list, rows_b: list,
 
     center_h2_a = round(0.60*avg_h2_a + 0.40*avg_opp_h2_a, 1)
     center_h2_b = round(0.60*avg_h2_b + 0.40*avg_opp_h2_b, 1)
-    center_q3_a = round(0.60*avg_q3_a + 0.40*statistics.mean([r["q3_opp"] for r in rows_b] or [avg_q3_a]), 1)
-    center_q3_b = round(0.60*avg_q3_b + 0.40*statistics.mean([r["q3_opp"] for r in rows_a] or [avg_q3_b]), 1)
+    # Quarter centers are needed by the downstream calculator for q1..q4, not
+    # only q3.  Blend each team's own scoring with the opponent's allowance.
+    quarter_centers = {}
+    for qn in range(1, 5):
+        key_team = f"q{qn}_team"
+        key_opp = f"q{qn}_opp"
+        own_a = [r[key_team] for r in rows_a if r.get(key_team) is not None]
+        own_b = [r[key_team] for r in rows_b if r.get(key_team) is not None]
+        allowed_a = [r[key_opp] for r in rows_b if r.get(key_opp) is not None]
+        allowed_b = [r[key_opp] for r in rows_a if r.get(key_opp) is not None]
+        avg_a = statistics.mean(own_a) if own_a else 20.0
+        avg_b = statistics.mean(own_b) if own_b else 20.0
+        center_a = 0.60 * avg_a + 0.40 * (statistics.mean(allowed_a) if allowed_a else avg_a)
+        center_b = 0.60 * avg_b + 0.40 * (statistics.mean(allowed_b) if allowed_b else avg_b)
+        std_a = statistics.stdev(own_a) if len(own_a) > 1 else 5.0
+        std_b = statistics.stdev(own_b) if len(own_b) > 1 else 5.0
+        quarter_centers[qn] = {
+            "team_a_center": round(center_a, 1),
+            "team_b_center": round(center_b, 1),
+            "total_center": round(center_a + center_b, 1),
+            "total_std": round((std_a ** 2 + std_b ** 2) ** 0.5, 2),
+            "low": round(center_a + center_b - 6, 1),
+            "high": round(center_a + center_b + 6, 1),
+        }
 
-    q3_total_center = round(center_q3_a + center_q3_b, 1)
-    match_total_center = round(hs + aws + center_h2_a + center_h2_b, 1)
-    margin_center = round((hs + center_h2_a) - (aws + center_h2_b), 1)
+    center_q3_a = quarter_centers[3]["team_a_center"]
+    center_q3_b = quarter_centers[3]["team_b_center"]
+    q3_total_center = quarter_centers[3]["total_center"]
+
+    # The old code always added a complete historical H2 to the *current*
+    # score.  At Q3/Q4 that double-counted points already scored and produced
+    # impossible 220-320 point projections.  Add only the fraction of each
+    # quarter that is still unplayed.
+    q_duration = quarter_duration_minutes(main.get("tour", ""))
+    min_played = max(0.0, min(4.0 * q_duration, parse_minutes_played(main.get("st", ""), main.get("tour", ""))))
+    remaining_a = 0.0
+    remaining_b = 0.0
+    for qn, center in quarter_centers.items():
+        quarter_start = (qn - 1) * q_duration
+        remaining_fraction = max(0.0, min(1.0, (qn * q_duration - min_played) / q_duration))
+        remaining_a += center["team_a_center"] * remaining_fraction
+        remaining_b += center["team_b_center"] * remaining_fraction
+    match_team_a_center = hs + remaining_a
+    match_team_b_center = aws + remaining_b
+    match_total_center = round(match_team_a_center + match_team_b_center, 1)
+    margin_center = round(match_team_a_center - match_team_b_center, 1)
 
     # Std for range
     h2_std_a = statistics.stdev(h2_pts_a) if len(h2_pts_a) > 1 else 8
@@ -2144,19 +2191,12 @@ def expected_score_projection(main: dict, rows_a: list, rows_b: list,
                 line, match_total_center, total_std, "under"
             )
 
+    quarter_centers[3].update(q3_model_probs)
     return {
-        "q3": {
-            "team_a_center": center_q3_a,
-            "team_b_center": center_q3_b,
-            "total_center": q3_total_center,
-            "total_std": round(q3_total_std, 2),
-            "low": round(q3_total_center - 6, 1),
-            "high": round(q3_total_center + 6, 1),
-            **q3_model_probs,
-        },
+        **{f"q{qn}": values for qn, values in quarter_centers.items()},
         "match": {
-            "team_a_final_center": round(hs + center_h2_a, 1),
-            "team_b_final_center": round(aws + center_h2_b, 1),
+            "team_a_final_center": round(match_team_a_center, 1),
+            "team_b_final_center": round(match_team_b_center, 1),
             "final_total_center": match_total_center,
             "final_margin_center": margin_center,
             "total_std": round(total_std, 2),
@@ -2719,7 +2759,7 @@ def quarter_duration_minutes(tour: str) -> int:
     Priority:
       1. Explicit ``match.rules.quarter_minutes`` override.
       2. WNBA / NBA Summer League / configured preseason aliases -> 10 min.
-      3. NBA / NBA G League -> 12 min.
+      3. NBA / NBA G League / Philippine PBA -> 12 min.
       4. FIBA-style/default competitions -> 10 min.
 
     Important: WNBA and Summer League checks must run before the generic NBA
@@ -2753,7 +2793,13 @@ def quarter_duration_minutes(tour: str) -> int:
     )):
         return 10
 
-    # Regular NBA and NBA G League use 12-minute quarters.
+    # Regular NBA, NBA G League and the Philippine Basketball Association
+    # (PBA Governors'/Commissioner's/Philippine Cup) use 12-minute quarters.
+    # Use a word boundary for PBA so an unrelated tournament containing those
+    # three letters is not classified as 4x12.
+    if re.search(r'\bPBA\b', t) or "PHILIPPINE BASKETBALL ASSOCIATION" in t:
+        return 12
+
     if any(k in t for k in (
         "G LEAGUE", "G-LEAGUE", "GLEAGUE",
         "NBA", "НБА",
@@ -3781,6 +3827,17 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
     # Quarter minute = minutes played within the current quarter
     _quarter_min_played_f = round(_total_min_played - _n_completed * _q_dur, 1) if _q_num >= 1 else 0.0
     _quarter_min_left_f   = round(max(0.0, float(_q_dur) - _quarter_min_played_f), 1)
+    # Canonical period clock fields for downstream consumers.
+    _period_minute_played = (
+        int(_quarter_min_played_f)
+        if float(_quarter_min_played_f).is_integer()
+        else _quarter_min_played_f
+    )
+    _period_minute_left = (
+        int(_quarter_min_left_f)
+        if float(_quarter_min_left_f).is_integer()
+        else _quarter_min_left_f
+    )
 
     # Build final JSON package
     return {
@@ -3800,8 +3857,9 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
             "margin_team_a": margin_team_a,
             "url": main.get("url", ""),
             # ── Minute tracking ──────────────────────────────────────────
-            "quarter_min_played": _quarter_min_played_f,
-            "quarter_min_left":   _quarter_min_left_f,
+            "period":               _q_num,
+            "period_minute_played": _period_minute_played,
+            "period_minute_left":   _period_minute_left,
             "total_min_played":   _total_min_played_f,
             "total_min_left":     _total_min_left_f,
             # ── Idle period (days since last match per team) ──────────────
@@ -6854,8 +6912,24 @@ def build_result_json(match_result: dict, lines_data: dict = None,
     lc_away      = lc.get("away", {})
 
     # ── live_calibrated validity guard ───────────────────────────────────
-    _lc_status      = lc.get("status", "")
-    _lc_is_valid    = _lc_status not in ("FINISHED", "NO_DATA")
+    _lc_status = lc.get("status", "")
+    _lc_total = safe_float(lc.get("LiveCalibrated_Total"), None)
+    _lc_home = safe_float((lc.get("home") or {}).get("LiveCalibrated"), None)
+    _lc_away = safe_float((lc.get("away") or {}).get("LiveCalibrated"), None)
+    _score_parts = str(meta.get("score") or "0-0").split("-", 1)
+    _current_home = safe_float(_score_parts[0], 0.0)
+    _current_away = safe_float(_score_parts[1], 0.0) if len(_score_parts) == 2 else 0.0
+    _lc_is_valid = (
+        _lc_status not in ("FINISHED", "NO_DATA")
+        and _lc_total is not None
+        and _lc_home is not None
+        and _lc_away is not None
+        and _lc_total >= _current_home + _current_away
+        and _lc_home >= _current_home
+        and _lc_away >= _current_away
+    )
+    if _lc_status not in ("FINISHED", "NO_DATA") and not _lc_is_valid:
+        _lc_status = "BELOW_CURRENT_SCORE"
     _lines_stale_w  = r.get("lines_stale_warning")  # may be None
 
     # ── data_quality (верхний уровень, новая структура) ───────────────────
@@ -6976,6 +7050,8 @@ def build_result_json(match_result: dict, lines_data: dict = None,
                 "team_it_vs_match_total": "team_it / home_ind_total / away_ind_total описують очки ОДНІЄЇ команди. match_total описує суму очок ОБОХ команд. Не підсумовуй ind_total як match_total і не ділити match_total на 2 як ind_total — команди набирають різну кількість очок."
             }
         },
+        "_source_meta": dict(raw_lines.get("meta") or {}),
+        "_source_schema": raw_lines.get("_schema"),
         "real_lines_only": True,
         # новые категоризированные ключи
         "match_total":   _enrich_match_total(raw_lines.get("match_total", [])),
@@ -7024,8 +7100,31 @@ def build_result_json(match_result: dict, lines_data: dict = None,
                 pass
         return {"home": None, "away": None, "total": None}
 
-    q1_data = _parse_q(q1_str)
-    q2_data = _parse_q(q2_str)
+    raw_main = ((parsed or {}).get("main_match") or {})
+
+    def _optional_int(value):
+        if value is None or value == "":
+            return None
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return None
+
+    def _quarter_from_main(number, fallback=None):
+        home = _optional_int(raw_main.get(f"q{number}h"))
+        away = _optional_int(raw_main.get(f"q{number}a"))
+        if home is None and away is None and fallback is not None:
+            return fallback
+        return {
+            "home": home,
+            "away": away,
+            "total": home + away if home is not None and away is not None else None,
+        }
+
+    q1_data = _quarter_from_main(1, _parse_q(q1_str))
+    q2_data = _quarter_from_main(2, _parse_q(q2_str))
+    q3_data = _quarter_from_main(3)
+    q4_data = _quarter_from_main(4)
 
     # period и минуты — берём из live_calibrated (там уже посчитано)
     _lc_min_played = lc.get("min_played")
@@ -7073,7 +7172,8 @@ def build_result_json(match_result: dict, lines_data: dict = None,
         "quarters": {
             "q1": q1_data,
             "q2": q2_data,
-            "q3_live": {"home": None, "away": None, "total": None},
+            "q3": q3_data,
+            "q4": q4_data,
         },
         "series_context": {
             "is_playoff":    None,
@@ -7170,7 +7270,8 @@ def build_result_json(match_result: dict, lines_data: dict = None,
     proj = r.get("projection", {})
     pre  = r.get("pre_match_stat", {})
     proj_match = proj.get("match", {})
-    proj_q3    = proj.get("q3", {})
+    proj_quarters = {f"q{number}": proj.get(f"q{number}", {}) for number in range(1, 5)}
+    proj_q3 = proj_quarters["q3"]
     projections = {
         "pre_match_stat": {
             "home_final": pre.get("team_a", {}).get("PreFinal"),
@@ -7200,7 +7301,7 @@ def build_result_json(match_result: dict, lines_data: dict = None,
         },
         "lines_stale_warning": _lines_stale_w,
         # полный объект projection сохраняється
-        "q3": proj_q3,
+        **proj_quarters,
         "thresholds": r.get("thresholds", {}),
     }
 
@@ -7446,10 +7547,11 @@ def build_result_json(match_result: dict, lines_data: dict = None,
             "h1_total":   meta.get("h1_total"),
             "current_total": meta.get("current_total"),
             # ── Minute tracking ─────────────────────────────────────────
-            "quarter_min_played": meta.get("quarter_min_played"),
-            "quarter_min_left":   meta.get("quarter_min_left"),
-            "total_min_played":   meta.get("total_min_played"),
-            "total_min_left":     meta.get("total_min_left"),
+            "period":               meta.get("period"),
+            "period_minute_played": meta.get("period_minute_played"),
+            "period_minute_left":   meta.get("period_minute_left"),
+            "total_min_played":     meta.get("total_min_played"),
+            "total_min_left":       meta.get("total_min_left"),
             # ── Idle period ──────────────────────────────────────────────
             "idle_period": meta.get("idle_period") or r.get("idle_period"),
             # ── Season boundary ──────────────────────────────────────────
@@ -7462,6 +7564,8 @@ def build_result_json(match_result: dict, lines_data: dict = None,
 
         # ── raw_lines — сырые линии от букмекера (до обогащения) ────────────
         "raw_lines": {
+            "meta":             dict(raw_lines.get("meta") or {}),
+            "_schema":          raw_lines.get("_schema"),
             "match_total":    raw_lines.get("match_total", []),
             "team_it":        raw_lines.get("team_it", []),
             "quarter_total":  raw_lines.get("quarter_total", []),
@@ -7541,9 +7645,17 @@ _V5_STAT_KEYS = ("FGM", "FGA", "2PM", "2PA", "3PM", "3PA", "FTM", "FTA",
 
 
 def is_v5_parser_json(data) -> bool:
-    """True if `data` is a top-level JSON object in the new ТЗ v5.0 format
-    (has schema_version + match), as opposed to the legacy raw list format."""
-    return isinstance(data, dict) and "schema_version" in data and isinstance(data.get("match"), dict)
+    """True only for a raw ТЗ v5 parser snapshot, never our own output JSON."""
+    if not isinstance(data, dict) or not isinstance(data.get("match"), dict):
+        return False
+    match = data["match"]
+    return (
+        "schema_version" in data
+        and isinstance(data.get("bookmaker_offers"), list)
+        and isinstance(data.get("history"), dict)
+        and bool(match.get("home_team"))
+        and bool(match.get("away_team"))
+    )
 
 
 def _v5_map_stats(stats: Optional[dict], prefix: str) -> dict:
@@ -7735,7 +7847,7 @@ def load_v5_json(path: str) -> dict:
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
     if not is_v5_parser_json(data):
-        raise ValueError(f"{path} is not a ТЗ v5.0 parser JSON (missing schema_version/match)")
+        raise ValueError(f"{path} is not a raw ТЗ v5.0 parser JSON")
 
     main_match = _v5_build_main_record(data)
     history = data.get("history") or {}
@@ -7761,6 +7873,10 @@ def build_lines_data_from_v5(data: dict) -> dict:
     against stale/duplicate offers with a market-key dedupe keeping best odds).
     """
     lines_data = {
+        "meta": dict(data.get("meta") or {}),
+        "_schema": data.get("_schema") or {
+            "source_schema_version": data.get("schema_version"),
+        },
         "match_total": [], "half_total": [], "quarter_total": [],
         "match_handicap": [], "match_1x2": [], "other": [],
         "home_ind_total": [], "away_ind_total": [],
@@ -8026,8 +8142,9 @@ def main():
             match_id = (_peek.get("match") or {}).get("id") or Path(h2h_path).stem
         else:
             print(
-                "[math_script] ERROR: single-file mode requires a ТЗ v5.0 "
-                "snapshot (schema_version + match); got legacy format needing "
+                "[math_script] ERROR: single-file mode requires a raw ТЗ v5.0 "
+                "snapshot (schema_version, match teams, history and bookmaker_offers); "
+                "got a legacy or already-calculated file needing "
                 "--targets <h2h_file> <line_result_file>.",
                 file=sys.stderr,
             )

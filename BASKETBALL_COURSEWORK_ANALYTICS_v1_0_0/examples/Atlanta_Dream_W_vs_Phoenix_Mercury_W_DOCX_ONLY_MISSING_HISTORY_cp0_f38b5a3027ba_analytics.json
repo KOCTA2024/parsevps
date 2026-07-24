@@ -1,0 +1,126 @@
+{
+  "coursework_basketball_analytics": {
+    "system_version": "1.0.0",
+    "research_context": true,
+    "created_at": "2026-07-21T13:26:04+00:00",
+    "input_hash": "f38b5a3027bab9c558785a8bb60d45b97e1759ce1af51392cda65f40dc483d68",
+    "run_key": "ACADEMIC-F5630A8C43B78A0EBBCF34F8",
+    "match": {
+      "match_id": "DOCX_616b53da93",
+      "name": "Атланта Дрім Ж vs Фінікс Меркурі Ж",
+      "home_team": "Атланта Дрім Ж",
+      "away_team": "Фінікс Меркурі Ж",
+      "quarter_minutes": 10,
+      "regulation_minutes": 40
+    },
+    "checkpoint": 0,
+    "snapshot_state": {
+      "elapsed_minutes": 0.0,
+      "current_quarter": 2,
+      "current_quarter_minutes_left": 10.0,
+      "score": {
+        "home": 21.0,
+        "away": 28.0,
+        "total": 49.0
+      },
+      "finished": false
+    },
+    "data_readiness": "INSUFFICIENT_DATA",
+    "data_quality": {
+      "schema_errors": [],
+      "same_format_history_n": 0,
+      "ignored_non_sport_sections": true
+    },
+    "remaining_plan": {
+      "future_quarters": [
+        2,
+        3,
+        4
+      ],
+      "current_quarter": 2,
+      "current_quarter_remaining_ratio": 1.0,
+      "partial_current_quarter": false
+    },
+    "forecast": {
+      "current_total_points": 49.0,
+      "historical_remaining_distribution": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "standard_deviation": null,
+        "p10": null,
+        "p25": null,
+        "p75": null,
+        "p90": null,
+        "minimum": null,
+        "maximum": null
+      },
+      "forecast_final_total_points": null,
+      "central_interval_p10_p90": [
+        null,
+        null
+      ],
+      "formula": "current_total_points + median(historical_remaining_points)",
+      "already_scored_points_added_once": true,
+      "approximation_used": false
+    },
+    "quarter_profiles": {
+      "Q2": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "standard_deviation": null,
+        "p10": null,
+        "p25": null,
+        "p75": null,
+        "p90": null,
+        "minimum": null,
+        "maximum": null
+      },
+      "Q3": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "standard_deviation": null,
+        "p10": null,
+        "p25": null,
+        "p75": null,
+        "p90": null,
+        "minimum": null,
+        "maximum": null
+      },
+      "Q4": {
+        "n": 0,
+        "mean": null,
+        "median": null,
+        "standard_deviation": null,
+        "p10": null,
+        "p25": null,
+        "p75": null,
+        "p90": null,
+        "minimum": null,
+        "maximum": null
+      }
+    },
+    "history_audit": {
+      "n_raw": 0,
+      "n_unique_complete": 0,
+      "n_same_format": 0,
+      "sample_game_ids": [],
+      "excluded": {
+        "current_match": 0,
+        "technical_result": 0,
+        "duplicate": 0,
+        "incomplete_quarters": 0
+      }
+    },
+    "external_delivery": {
+      "enabled": false,
+      "reason": "COURSEWORK_OFFLINE_ONLY"
+    },
+    "integrity_report": {
+      "all_passed": true,
+      "errors": []
+    }
+  }
+}

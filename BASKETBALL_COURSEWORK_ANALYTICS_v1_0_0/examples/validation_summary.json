@@ -1,0 +1,37 @@
+{
+  "system_version": "1.0.0",
+  "research_context": true,
+  "requested_count": 5,
+  "worker_count": 4,
+  "processed_count": 5,
+  "failed_count": 0,
+  "integrity_passed_count": 5,
+  "external_delivery_enabled": false,
+  "fixtures": [
+    {
+      "name": "Aris_vs_AEK_Athens_GMWxPqlg.json",
+      "checkpoint": 2,
+      "data_readiness": "READY"
+    },
+    {
+      "name": "Hoventut_vs_Burgos_zXTEuz1D.json",
+      "checkpoint": 2,
+      "data_readiness": "READY"
+    },
+    {
+      "name": "KK_Split_vs_KK_Zabok_ABY9CUR1.json",
+      "checkpoint": 2,
+      "data_readiness": "READY"
+    },
+    {
+      "name": "New_York_Liberty_W_vs_Dallas_Wings_W_AiEBDgEk.json",
+      "checkpoint": 2,
+      "data_readiness": "READY"
+    },
+    {
+      "name": "Atlanta_Dream_W_vs_Phoenix_Mercury_W_DOCX_ONLY_MISSING_HISTORY.json",
+      "checkpoint": 0,
+      "data_readiness": "INSUFFICIENT_DATA"
+    }
+  ]
+}

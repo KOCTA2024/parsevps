@@ -1,0 +1,1276 @@
+{
+  "xlsx": "/app/state/super_basket_detailed_log.xlsx",
+  "total_rows": 53,
+  "source_files_found": 53,
+  "successful": 53,
+  "missing_source": 0,
+  "errors": 0,
+  "original_actions": {
+    "PASS": 52,
+    "RISK": 1
+  },
+  "current_actions": {
+    "PASS": 53
+  },
+  "action_changes": [
+    {
+      "row": 23,
+      "timestamp_utc": "2026-07-22T12:22:56+00:00",
+      "match_id": "GUY8uh03",
+      "match_name": "Сан-Мігель Бірмен vs Конвердж ФайберЕксерс",
+      "checkpoint": 2,
+      "source_file": "/app/state/match_files/San-Migel_Birmen_vs_Konverdzh_FajberEksers_GUY8uh03_q2_result.json",
+      "original_action": "RISK",
+      "original_p_final": 0.79,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": 0.02848461440146211,
+      "market": {
+        "market_type": "MATCH_TOTAL",
+        "team": null,
+        "segment": "MATCH",
+        "side": "OVER",
+        "line": 240.5,
+        "odds": 1.87,
+        "bookmaker": "BETKING",
+        "offers": [
+          {
+            "market_id": "mt_240_5_0_over_1",
+            "bookmaker": "BETKING",
+            "odds": 1.87,
+            "source_market_id": "mt_240_5_0"
+          }
+        ]
+      },
+      "reason_codes": [
+        "Q4_OVER_CONFIRMATION_FAILED",
+        "NO_STATS_FALLBACK"
+      ],
+      "action_changed": true
+    }
+  ],
+  "active_signals": [],
+  "error_rows": [],
+  "rows": [
+    {
+      "row": 2,
+      "timestamp_utc": "2026-07-21T10:44:55+00:00",
+      "match_id": "Iy6YM2Vq",
+      "match_name": "Маніла Батанг Кіапо vs Рісаль Голден Кулерс",
+      "checkpoint": 1,
+      "source_file": "/app/state/match_files/Manila_Batang_Kiapo_vs_Risal_Golden_Kulers_Iy6YM2Vq_q1_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 3,
+      "timestamp_utc": "2026-07-21T10:53:56+00:00",
+      "match_id": "nehqPWFM",
+      "match_name": "Мералко Болтс vs Блеквотер Боссінг",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Meralko_Bolts_vs_Blekvoter_Bossing_nehqPWFM_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": 0.2177094155225257,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": 0.12060210534734933,
+      "market": {
+        "market_type": "MATCH_TOTAL",
+        "team": null,
+        "segment": "MATCH",
+        "side": "OVER",
+        "line": 238.5,
+        "odds": 1.95,
+        "bookmaker": "BETKING",
+        "offers": [
+          {
+            "market_id": "mt_238_5_0_over_1",
+            "bookmaker": "BETKING",
+            "odds": 1.95,
+            "source_market_id": "mt_238_5_0"
+          }
+        ]
+      },
+      "reason_codes": [
+        "Q4_OVER_CONFIRMATION_FAILED",
+        "NO_STATS_FALLBACK"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 4,
+      "timestamp_utc": "2026-07-21T11:04:19+00:00",
+      "match_id": "nehqPWFM",
+      "match_name": "Мералко Болтс vs Блеквотер Боссінг",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Meralko_Bolts_vs_Blekvoter_Bossing_nehqPWFM_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": 0.1282840885453785,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": 0.12060210534734933,
+      "market": {
+        "market_type": "MATCH_TOTAL",
+        "team": null,
+        "segment": "MATCH",
+        "side": "OVER",
+        "line": 238.5,
+        "odds": 1.95,
+        "bookmaker": "BETKING",
+        "offers": [
+          {
+            "market_id": "mt_238_5_0_over_1",
+            "bookmaker": "BETKING",
+            "odds": 1.95,
+            "source_market_id": "mt_238_5_0"
+          }
+        ]
+      },
+      "reason_codes": [
+        "Q4_OVER_CONFIRMATION_FAILED",
+        "NO_STATS_FALLBACK"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 5,
+      "timestamp_utc": "2026-07-21T11:04:53+00:00",
+      "match_id": "Iy6YM2Vq",
+      "match_name": "Маніла Батанг Кіапо vs Рісаль Голден Кулерс",
+      "checkpoint": 2,
+      "source_file": "/app/state/match_files/Manila_Batang_Kiapo_vs_Risal_Golden_Kulers_Iy6YM2Vq_q2_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 6,
+      "timestamp_utc": "2026-07-21T11:27:49+00:00",
+      "match_id": "ADqqjYEE",
+      "match_name": "Андорра U18 vs Косово U18",
+      "checkpoint": 1,
+      "source_file": "/app/state/match_files/Andorra_U18_vs_Kosovo_U18_ADqqjYEE_q1_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 7,
+      "timestamp_utc": "2026-07-21T11:36:54+00:00",
+      "match_id": "Iy6YM2Vq",
+      "match_name": "Маніла Батанг Кіапо vs Рісаль Голден Кулерс",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Manila_Batang_Kiapo_vs_Risal_Golden_Kulers_Iy6YM2Vq_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 8,
+      "timestamp_utc": "2026-07-21T11:48:59+00:00",
+      "match_id": "ADqqjYEE",
+      "match_name": "Андорра U18 vs Косово U18",
+      "checkpoint": 2,
+      "source_file": "/app/state/match_files/Andorra_U18_vs_Kosovo_U18_ADqqjYEE_q2_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 9,
+      "timestamp_utc": "2026-07-21T12:11:53+00:00",
+      "match_id": "GArFJAwp",
+      "match_name": "Фенікс Ф'юелмастерс vs Рейн-о-Шайн Еласто Пейнтерс",
+      "checkpoint": 1,
+      "source_file": "/app/state/match_files/Feniks_F_yuelmasters_vs_Rejn-o-Shajn_Elasto_Pejnters_GArFJAwp_q1_result.json",
+      "original_action": "PASS",
+      "original_p_final": 0.79,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": 0.5,
+      "market": {
+        "market_type": "MATCH_TOTAL",
+        "team": null,
+        "segment": "MATCH",
+        "side": "OVER",
+        "line": 222.5,
+        "odds": 1.87,
+        "bookmaker": "BETKING",
+        "offers": [
+          {
+            "market_id": "mt_222_5_0_over_1",
+            "bookmaker": "BETKING",
+            "odds": 1.87,
+            "source_market_id": "mt_222_5_0"
+          }
+        ]
+      },
+      "reason_codes": [
+        "PRODUCTION_ROUTER_BLOCK"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 10,
+      "timestamp_utc": "2026-07-21T12:27:40+00:00",
+      "match_id": "ADqqjYEE",
+      "match_name": "Андорра U18 vs Косово U18",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Andorra_U18_vs_Kosovo_U18_ADqqjYEE_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 11,
+      "timestamp_utc": "2026-07-21T12:28:02+00:00",
+      "match_id": "jorqt3MO",
+      "match_name": "Мальта U18 W vs Албанія U18 W",
+      "checkpoint": 1,
+      "source_file": "/app/state/match_files/Malta_U18_W_vs_Albaniya_U18_W_jorqt3MO_q1_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 12,
+      "timestamp_utc": "2026-07-21T12:39:57+00:00",
+      "match_id": "jk4tLt0d",
+      "match_name": "Батаан Райзерс vs Паранаке Петріотс",
+      "checkpoint": 1,
+      "source_file": "/app/state/match_files/Bataan_Rajzers_vs_Paranake_Petriots_jk4tLt0d_q1_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 13,
+      "timestamp_utc": "2026-07-21T12:43:10+00:00",
+      "match_id": "GArFJAwp",
+      "match_name": "Фенікс Ф'юелмастерс vs Рейн-о-Шайн Еласто Пейнтерс",
+      "checkpoint": 2,
+      "source_file": "/app/state/match_files/Feniks_F_yuelmasters_vs_Rejn-o-Shajn_Elasto_Pejnters_GArFJAwp_q2_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 14,
+      "timestamp_utc": "2026-07-21T12:51:11+00:00",
+      "match_id": "jorqt3MO",
+      "match_name": "Мальта U18 W vs Албанія U18 W",
+      "checkpoint": 2,
+      "source_file": "/app/state/match_files/Malta_U18_W_vs_Albaniya_U18_W_jorqt3MO_q2_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 15,
+      "timestamp_utc": "2026-07-21T13:01:17+00:00",
+      "match_id": "jk4tLt0d",
+      "match_name": "Батаан Райзерс vs Паранаке Петріотс",
+      "checkpoint": 2,
+      "source_file": "/app/state/match_files/Bataan_Rajzers_vs_Paranake_Petriots_jk4tLt0d_q2_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 16,
+      "timestamp_utc": "2026-07-21T13:27:21+00:00",
+      "match_id": "GArFJAwp",
+      "match_name": "Фенікс Ф'юелмастерс vs Рейн-о-Шайн Еласто Пейнтерс",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Feniks_F_yuelmasters_vs_Rejn-o-Shajn_Elasto_Pejnters_GArFJAwp_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": 0.2533000580705562,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": 0.32070100644258887,
+      "market": {
+        "market_type": "TEAM_IT_MATCH",
+        "team": "Рейн-о-Шайн Еласто Пейнтерс",
+        "segment": "MATCH",
+        "side": "OVER",
+        "line": 105.5,
+        "odds": 1.9,
+        "bookmaker": "BETKING",
+        "offers": [
+          {
+            "market_id": "away_ind_total_MATCH_105_5_5_over_5",
+            "bookmaker": "BETKING",
+            "odds": 1.9,
+            "source_market_id": null
+          }
+        ]
+      },
+      "reason_codes": [
+        "TEAM_IT_WEAKEST_BLOCK",
+        "Q4_OVER_CONFIRMATION_FAILED",
+        "NO_STATS_FALLBACK",
+        "TEAM_IT_WEAKEST_BELOW_70"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 17,
+      "timestamp_utc": "2026-07-21T13:29:39+00:00",
+      "match_id": "jorqt3MO",
+      "match_name": "Мальта U18 W vs Албанія U18 W",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Malta_U18_W_vs_Albaniya_U18_W_jorqt3MO_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 18,
+      "timestamp_utc": "2026-07-21T13:30:30+00:00",
+      "match_id": "jk4tLt0d",
+      "match_name": "Батаан Райзерс vs Паранаке Петріотс",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Bataan_Rajzers_vs_Paranake_Petriots_jk4tLt0d_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 19,
+      "timestamp_utc": "2026-07-21T14:04:37+00:00",
+      "match_id": "r7icSUM7",
+      "match_name": "Гібралтар U18 vs Вірменія U18",
+      "checkpoint": 1,
+      "source_file": "/app/state/match_files/Gibraltar_U18_vs_Virmeniya_U18_r7icSUM7_q1_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 20,
+      "timestamp_utc": "2026-07-21T14:31:52+00:00",
+      "match_id": "r7icSUM7",
+      "match_name": "Гібралтар U18 vs Вірменія U18",
+      "checkpoint": 2,
+      "source_file": "/app/state/match_files/Gibraltar_U18_vs_Virmeniya_U18_r7icSUM7_q2_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 21,
+      "timestamp_utc": "2026-07-21T14:52:30+00:00",
+      "match_id": "6cIh067t",
+      "match_name": "Вірменія U18 W vs Гібралтар U18 W",
+      "checkpoint": 1,
+      "source_file": "/app/state/match_files/Virmeniya_U18_W_vs_Gibraltar_U18_W_6cIh067t_q1_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 22,
+      "timestamp_utc": "2026-07-21T15:10:15+00:00",
+      "match_id": "r7icSUM7",
+      "match_name": "Гібралтар U18 vs Вірменія U18",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Gibraltar_U18_vs_Virmeniya_U18_r7icSUM7_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 23,
+      "timestamp_utc": "2026-07-22T12:22:56+00:00",
+      "match_id": "GUY8uh03",
+      "match_name": "Сан-Мігель Бірмен vs Конвердж ФайберЕксерс",
+      "checkpoint": 2,
+      "source_file": "/app/state/match_files/San-Migel_Birmen_vs_Konverdzh_FajberEksers_GUY8uh03_q2_result.json",
+      "original_action": "RISK",
+      "original_p_final": 0.79,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": 0.02848461440146211,
+      "market": {
+        "market_type": "MATCH_TOTAL",
+        "team": null,
+        "segment": "MATCH",
+        "side": "OVER",
+        "line": 240.5,
+        "odds": 1.87,
+        "bookmaker": "BETKING",
+        "offers": [
+          {
+            "market_id": "mt_240_5_0_over_1",
+            "bookmaker": "BETKING",
+            "odds": 1.87,
+            "source_market_id": "mt_240_5_0"
+          }
+        ]
+      },
+      "reason_codes": [
+        "Q4_OVER_CONFIRMATION_FAILED",
+        "NO_STATS_FALLBACK"
+      ],
+      "action_changed": true
+    },
+    {
+      "row": 24,
+      "timestamp_utc": "2026-07-22T12:32:47+00:00",
+      "match_id": "KKO8dO65",
+      "match_name": "Албанія U18 W vs Кіпр U18 W",
+      "checkpoint": 1,
+      "source_file": "/app/state/match_files/Albaniya_U18_W_vs_Kipr_U18_W_KKO8dO65_q1_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 25,
+      "timestamp_utc": "2026-07-22T12:38:20+00:00",
+      "match_id": "hKZxu86D",
+      "match_name": "Вірменія U18 vs Андорра U18",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Virmeniya_U18_vs_Andorra_U18_hKZxu86D_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 26,
+      "timestamp_utc": "2026-07-22T12:52:31+00:00",
+      "match_id": "KKO8dO65",
+      "match_name": "Албанія U18 W vs Кіпр U18 W",
+      "checkpoint": 1,
+      "source_file": "/app/state/match_files/Albaniya_U18_W_vs_Kipr_U18_W_KKO8dO65_q1_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 27,
+      "timestamp_utc": "2026-07-22T12:52:39+00:00",
+      "match_id": "hKZxu86D",
+      "match_name": "Вірменія U18 vs Андорра U18",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Virmeniya_U18_vs_Andorra_U18_hKZxu86D_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 28,
+      "timestamp_utc": "2026-07-22T12:54:48+00:00",
+      "match_id": "GUY8uh03",
+      "match_name": "Сан-Мігель Бірмен vs Конвердж ФайберЕксерс",
+      "checkpoint": 2,
+      "source_file": "/app/state/match_files/San-Migel_Birmen_vs_Konverdzh_FajberEksers_GUY8uh03_q2_result.json",
+      "original_action": "PASS",
+      "original_p_final": 0.02873394098497118,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": 0.02848461440146211,
+      "market": {
+        "market_type": "MATCH_TOTAL",
+        "team": null,
+        "segment": "MATCH",
+        "side": "OVER",
+        "line": 240.5,
+        "odds": 1.87,
+        "bookmaker": "BETKING",
+        "offers": [
+          {
+            "market_id": "mt_240_5_0_over_1",
+            "bookmaker": "BETKING",
+            "odds": 1.87,
+            "source_market_id": "mt_240_5_0"
+          }
+        ]
+      },
+      "reason_codes": [
+        "Q4_OVER_CONFIRMATION_FAILED",
+        "NO_STATS_FALLBACK"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 29,
+      "timestamp_utc": "2026-07-22T12:57:07+00:00",
+      "match_id": "KKO8dO65",
+      "match_name": "Албанія U18 W vs Кіпр U18 W",
+      "checkpoint": 2,
+      "source_file": "/app/state/match_files/Albaniya_U18_W_vs_Kipr_U18_W_KKO8dO65_q2_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 30,
+      "timestamp_utc": "2026-07-22T13:11:22+00:00",
+      "match_id": "GUY8uh03",
+      "match_name": "Сан-Мігель Бірмен vs Конвердж ФайберЕксерс",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/San-Migel_Birmen_vs_Konverdzh_FajberEksers_GUY8uh03_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": 0.217773245516045,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": 0.26390331703019476,
+      "market": {
+        "market_type": "MATCH_TOTAL",
+        "team": null,
+        "segment": "MATCH",
+        "side": "OVER",
+        "line": 249.5,
+        "odds": 1.83,
+        "bookmaker": "BETKING",
+        "offers": [
+          {
+            "market_id": "mt_249_5_0_over_1",
+            "bookmaker": "BETKING",
+            "odds": 1.83,
+            "source_market_id": "mt_249_5_0"
+          }
+        ]
+      },
+      "reason_codes": [
+        "NO_SAME_FORMAT_HISTORY",
+        "Q4_OVER_CONFIRMATION_FAILED",
+        "NO_STATS_FALLBACK"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 31,
+      "timestamp_utc": "2026-07-22T13:18:24+00:00",
+      "match_id": "bZcru2iS",
+      "match_name": "Булакан Куяс vs Кесон Гаскерс",
+      "checkpoint": 1,
+      "source_file": "/app/state/match_files/Bulakan_Kuyas_vs_Keson_Gaskers_bZcru2iS_q1_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 32,
+      "timestamp_utc": "2026-07-22T13:27:30+00:00",
+      "match_id": "bZcru2iS",
+      "match_name": "Булакан Куяс vs Кесон Гаскерс",
+      "checkpoint": 2,
+      "source_file": "/app/state/match_files/Bulakan_Kuyas_vs_Keson_Gaskers_bZcru2iS_q2_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 33,
+      "timestamp_utc": "2026-07-22T13:48:41+00:00",
+      "match_id": "KKO8dO65",
+      "match_name": "Албанія U18 W vs Кіпр U18 W",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Albaniya_U18_W_vs_Kipr_U18_W_KKO8dO65_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 34,
+      "timestamp_utc": "2026-07-22T13:53:16+00:00",
+      "match_id": "j9IfckMs",
+      "match_name": "Молдова U18 vs Сан-Марино U18",
+      "checkpoint": 1,
+      "source_file": "/app/state/match_files/Moldova_U18_vs_San-Maryno_U18_j9IfckMs_q1_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 35,
+      "timestamp_utc": "2026-07-22T14:04:35+00:00",
+      "match_id": "bZcru2iS",
+      "match_name": "Булакан Куяс vs Кесон Гаскерс",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Bulakan_Kuyas_vs_Keson_Gaskers_bZcru2iS_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 36,
+      "timestamp_utc": "2026-07-22T14:14:53+00:00",
+      "match_id": "j9IfckMs",
+      "match_name": "Молдова U18 vs Сан-Марино U18",
+      "checkpoint": 2,
+      "source_file": "/app/state/match_files/Moldova_U18_vs_San-Maryno_U18_j9IfckMs_q2_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 37,
+      "timestamp_utc": "2026-07-22T14:57:56+00:00",
+      "match_id": "j9IfckMs",
+      "match_name": "Молдова U18 vs Сан-Марино U18",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Moldova_U18_vs_San-Maryno_U18_j9IfckMs_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 38,
+      "timestamp_utc": "2026-07-22T15:02:42+00:00",
+      "match_id": "hYMGf2yI",
+      "match_name": "Грузія U18 W vs Вірменія U18 W",
+      "checkpoint": 1,
+      "source_file": "/app/state/match_files/Gruziya_U18_W_vs_Virmeniya_U18_W_hYMGf2yI_q1_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 39,
+      "timestamp_utc": "2026-07-22T15:33:00+00:00",
+      "match_id": "hYMGf2yI",
+      "match_name": "Грузія U18 W vs Вірменія U18 W",
+      "checkpoint": 2,
+      "source_file": "/app/state/match_files/Gruziya_U18_W_vs_Virmeniya_U18_W_hYMGf2yI_q2_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 40,
+      "timestamp_utc": "2026-07-22T16:22:36+00:00",
+      "match_id": "KQRO2BbK",
+      "match_name": "Албанія U18 vs Мальта U18",
+      "checkpoint": 1,
+      "source_file": "/app/state/match_files/Albaniya_U18_vs_Malta_U18_KQRO2BbK_q1_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 41,
+      "timestamp_utc": "2026-07-22T16:25:30+00:00",
+      "match_id": "hYMGf2yI",
+      "match_name": "Грузія U18 W vs Вірменія U18 W",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Gruziya_U18_W_vs_Virmeniya_U18_W_hYMGf2yI_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 42,
+      "timestamp_utc": "2026-07-22T16:43:37+00:00",
+      "match_id": "KQRO2BbK",
+      "match_name": "Албанія U18 vs Мальта U18",
+      "checkpoint": 2,
+      "source_file": "/app/state/match_files/Albaniya_U18_vs_Malta_U18_KQRO2BbK_q2_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 43,
+      "timestamp_utc": "2026-07-22T17:27:45+00:00",
+      "match_id": "KQRO2BbK",
+      "match_name": "Албанія U18 vs Мальта U18",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Albaniya_U18_vs_Malta_U18_KQRO2BbK_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 44,
+      "timestamp_utc": "2026-07-22T17:34:37+00:00",
+      "match_id": "0bQOht6U",
+      "match_name": "Гібралтар U18 W vs Косово U18 W",
+      "checkpoint": 1,
+      "source_file": "/app/state/match_files/Gibraltar_U18_W_vs_Kosovo_U18_W_0bQOht6U_q1_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 45,
+      "timestamp_utc": "2026-07-22T17:54:53+00:00",
+      "match_id": "0bQOht6U",
+      "match_name": "Гібралтар U18 W vs Косово U18 W",
+      "checkpoint": 2,
+      "source_file": "/app/state/match_files/Gibraltar_U18_W_vs_Kosovo_U18_W_0bQOht6U_q2_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 46,
+      "timestamp_utc": "2026-07-22T18:38:20+00:00",
+      "match_id": "0bQOht6U",
+      "match_name": "Гібралтар U18 W vs Косово U18 W",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Gibraltar_U18_W_vs_Kosovo_U18_W_0bQOht6U_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 47,
+      "timestamp_utc": "2026-07-22T18:55:37+00:00",
+      "match_id": "K6yVtUy1",
+      "match_name": "Косово U18 vs Гібралтар U18",
+      "checkpoint": 1,
+      "source_file": "/app/state/match_files/Kosovo_U18_vs_Gibraltar_U18_K6yVtUy1_q1_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 48,
+      "timestamp_utc": "2026-07-22T19:19:57+00:00",
+      "match_id": "K6yVtUy1",
+      "match_name": "Косово U18 vs Гібралтар U18",
+      "checkpoint": 2,
+      "source_file": "/app/state/match_files/Kosovo_U18_vs_Gibraltar_U18_K6yVtUy1_q2_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 49,
+      "timestamp_utc": "2026-07-22T19:47:53+00:00",
+      "match_id": "zoxtV4xf",
+      "match_name": "Сіетл Сторм Ж vs Міннесота Лінкс Ж",
+      "checkpoint": 2,
+      "source_file": "/app/state/match_files/Sietl_Storm_Zh_vs_Minnesota_Links_Zh_zoxtV4xf_q2_result.json",
+      "original_action": "PASS",
+      "original_p_final": 0.4182843419664754,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": 0.5836949305492183,
+      "market": {
+        "market_type": "MATCH_TOTAL",
+        "team": null,
+        "segment": "MATCH",
+        "side": "UNDER",
+        "line": 175.5,
+        "odds": 1.85,
+        "bookmaker": "BETKING",
+        "offers": [
+          {
+            "market_id": "mt_175_5_0_under_2",
+            "bookmaker": "BETKING",
+            "odds": 1.85,
+            "source_market_id": "mt_175_5_0"
+          }
+        ]
+      },
+      "reason_codes": [
+        "STAT_GATE_DIRECTLY_AGAINST"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 50,
+      "timestamp_utc": "2026-07-22T20:01:56+00:00",
+      "match_id": "SKYXWQ7s",
+      "match_name": "Лос-Анджелес Спаркс Ж vs Фінікс Мерк'юрі Ж",
+      "checkpoint": 2,
+      "source_file": "/app/state/match_files/Los-Andzheles_Sparks_Zh_vs_Finiks_Merk_yuri_Zh_SKYXWQ7s_q2_result.json",
+      "original_action": "PASS",
+      "original_p_final": 0.5490123800074026,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": 0.55,
+      "market": {
+        "market_type": "TEAM_IT_MATCH",
+        "team": "Лос-Анджелес Спаркс Ж",
+        "segment": "MATCH",
+        "side": "OVER",
+        "line": 81.5,
+        "odds": 1.47,
+        "bookmaker": "BETKING",
+        "offers": [
+          {
+            "market_id": "home_ind_total_MATCH_81_5_11_over_11",
+            "bookmaker": "BETKING",
+            "odds": 1.47,
+            "source_market_id": null
+          }
+        ]
+      },
+      "reason_codes": [
+        "TEAM_IT_WEAKEST_BLOCK",
+        "TEAM_IT_WEAKEST_BELOW_70"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 51,
+      "timestamp_utc": "2026-07-22T20:06:25+00:00",
+      "match_id": "K6yVtUy1",
+      "match_name": "Косово U18 vs Гібралтар U18",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Kosovo_U18_vs_Gibraltar_U18_K6yVtUy1_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": null,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": null,
+      "market": null,
+      "reason_codes": [
+        "NO_SUPPORTED_REAL_LINES"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 52,
+      "timestamp_utc": "2026-07-22T20:13:53+00:00",
+      "match_id": "YFEikeoC",
+      "match_name": "Аль-Ріяді vs Аль-Хекмех Бейрут",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Al-Riyadi_vs_Al-Khekmekh_Bejrut_YFEikeoC_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": 0.2708725926693269,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": 0.2712966714589156,
+      "market": {
+        "market_type": "TEAM_IT_MATCH",
+        "team": "Аль-Ріяді",
+        "segment": "MATCH",
+        "side": "OVER",
+        "line": 94.5,
+        "odds": 1.8,
+        "bookmaker": "BETKING",
+        "offers": [
+          {
+            "market_id": "home_ind_total_MATCH_94_5_7_over_7",
+            "bookmaker": "BETKING",
+            "odds": 1.8,
+            "source_market_id": null
+          }
+        ]
+      },
+      "reason_codes": [
+        "TEAM_IT_WEAKEST_BLOCK",
+        "NO_STATS_FALLBACK",
+        "TEAM_IT_WEAKEST_BELOW_70"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 53,
+      "timestamp_utc": "2026-07-22T20:33:49+00:00",
+      "match_id": "zoxtV4xf",
+      "match_name": "Сіетл Сторм Ж vs Міннесота Лінкс Ж",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Sietl_Storm_Zh_vs_Minnesota_Links_Zh_zoxtV4xf_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": 0.3433967877972613,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": 0.55,
+      "market": {
+        "market_type": "TEAM_IT_MATCH",
+        "team": "Сіетл Сторм Ж",
+        "segment": "MATCH",
+        "side": "UNDER",
+        "line": 78.5,
+        "odds": 1.75,
+        "bookmaker": "BETKING",
+        "offers": [
+          {
+            "market_id": "home_ind_total_MATCH_78_5_6_under_6",
+            "bookmaker": "BETKING",
+            "odds": 1.75,
+            "source_market_id": null
+          }
+        ]
+      },
+      "reason_codes": [
+        "TEAM_IT_WEAKEST_BLOCK",
+        "Q4_UNDER_MEDIUM_DRY_NO_STRONG_EDGE",
+        "STAT_GATE_AGAINST_LOW_CREDIBILITY",
+        "FAKE_UNDER",
+        "TEAM_IT_WEAKEST_BELOW_70"
+      ],
+      "action_changed": false
+    },
+    {
+      "row": 54,
+      "timestamp_utc": "2026-07-22T20:50:50+00:00",
+      "match_id": "SKYXWQ7s",
+      "match_name": "Лос-Анджелес Спаркс Ж vs Фінікс Мерк'юрі Ж",
+      "checkpoint": 3,
+      "source_file": "/app/state/match_files/Los-Andzheles_Sparks_Zh_vs_Finiks_Merk_yuri_Zh_SKYXWQ7s_q3_result.json",
+      "original_action": "PASS",
+      "original_p_final": 0.2694547144707082,
+      "status": "OK",
+      "current_action": "PASS",
+      "current_status": "PASS",
+      "current_p_final": 0.3720464428883602,
+      "market": {
+        "market_type": "TEAM_IT_MATCH",
+        "team": "Фінікс Мерк'юрі Ж",
+        "segment": "MATCH",
+        "side": "UNDER",
+        "line": 85.5,
+        "odds": 1.7,
+        "bookmaker": "BETKING",
+        "offers": [
+          {
+            "market_id": "away_ind_total_MATCH_85_5_6_under_6",
+            "bookmaker": "BETKING",
+            "odds": 1.7,
+            "source_market_id": null
+          }
+        ]
+      },
+      "reason_codes": [
+        "TEAM_IT_WEAKEST_BLOCK",
+        "Q4_UNDER_NO_DRY",
+        "STAT_GATE_AGAINST_LOW_CREDIBILITY",
+        "FAKE_UNDER",
+        "TEAM_IT_WEAKEST_BELOW_70"
+      ],
+      "action_changed": false
+    }
+  ]
+}

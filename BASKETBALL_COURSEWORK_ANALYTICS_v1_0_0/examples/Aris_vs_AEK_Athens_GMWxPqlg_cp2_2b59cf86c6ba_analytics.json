@@ -1,0 +1,183 @@
+{
+  "coursework_basketball_analytics": {
+    "system_version": "1.0.0",
+    "research_context": true,
+    "created_at": "2026-07-21T13:26:04+00:00",
+    "input_hash": "2b59cf86c6baa3d815c46aeaece6cbfde0f530fa51702f8725dc10494f37a421",
+    "run_key": "ACADEMIC-AB9B993DE27ACAD75B8464E5",
+    "match": {
+      "match_id": "GMWxPqlg",
+      "name": "Аріс vs АЕК Афіни",
+      "home_team": "Аріс",
+      "away_team": "АЕК Афіни",
+      "quarter_minutes": 10,
+      "regulation_minutes": 40
+    },
+    "checkpoint": 2,
+    "snapshot_state": {
+      "elapsed_minutes": 26.0,
+      "current_quarter": 3,
+      "current_quarter_minutes_left": 4.0,
+      "score": {
+        "home": 61.0,
+        "away": 58.0,
+        "total": 119.0
+      },
+      "finished": false
+    },
+    "data_readiness": "READY",
+    "data_quality": {
+      "schema_errors": [],
+      "same_format_history_n": 69,
+      "ignored_non_sport_sections": true
+    },
+    "remaining_plan": {
+      "future_quarters": [
+        3,
+        4
+      ],
+      "current_quarter": 3,
+      "current_quarter_remaining_ratio": 0.4,
+      "partial_current_quarter": true
+    },
+    "forecast": {
+      "current_total_points": 119.0,
+      "historical_remaining_distribution": {
+        "n": 69,
+        "mean": 57.14492753623188,
+        "median": 56.6,
+        "standard_deviation": 9.351368824494658,
+        "p10": 45.480000000000004,
+        "p25": 50.6,
+        "p75": 63.6,
+        "p90": 68.52000000000001,
+        "minimum": 40.6,
+        "maximum": 83.6
+      },
+      "forecast_final_total_points": 175.6,
+      "central_interval_p10_p90": [
+        164.48000000000002,
+        187.52
+      ],
+      "formula": "current_total_points + median(historical_remaining_points)",
+      "already_scored_points_added_once": true,
+      "approximation_used": true
+    },
+    "quarter_profiles": {
+      "Q3": {
+        "n": 69,
+        "mean": 39.34782608695652,
+        "median": 39.0,
+        "standard_deviation": 6.2280817719057575,
+        "p10": 31.8,
+        "p25": 35.0,
+        "p75": 43.0,
+        "p90": 48.0,
+        "minimum": 26.0,
+        "maximum": 57.0
+      },
+      "Q4": {
+        "n": 69,
+        "mean": 41.405797101449274,
+        "median": 42.0,
+        "standard_deviation": 8.560028244489738,
+        "p10": 30.8,
+        "p25": 34.0,
+        "p75": 46.0,
+        "p90": 52.0,
+        "minimum": 26.0,
+        "maximum": 68.0
+      }
+    },
+    "history_audit": {
+      "n_raw": 75,
+      "n_unique_complete": 69,
+      "n_same_format": 69,
+      "sample_game_ids": [
+        "r9YUQ5Jt",
+        "I3ZF4e5F",
+        "thFxtcAO",
+        "E7Ez94cf",
+        "tSXTyoEE",
+        "8zT0eWA4",
+        "zBp0wbkJ",
+        "nTxrq2Ls",
+        "h6iZF3ie",
+        "neQDkoYg",
+        "StamP7U8",
+        "nLnUtVRh",
+        "nNHdFOHD",
+        "GxGviWy9",
+        "YwOZMFJM",
+        "A7kn00et",
+        "nmqqq0yI",
+        "hAVsYUS1",
+        "lUfioV0l",
+        "S0JXlFVs",
+        "ziE85gmd",
+        "hrswZcGN",
+        "0hWxF6Kh",
+        "UivavPHM",
+        "fFadK3Qj",
+        "fgvhB32K",
+        "Es91VTYi",
+        "rXPQbZCc",
+        "rc9HXdEb",
+        "S49q6D5t",
+        "ABkt3o97",
+        "SKVT7LHO",
+        "WrXKcjXR",
+        "Eud3eNiL",
+        "E5JIfr5C",
+        "AB0qwUVr",
+        "vDH9x816",
+        "A1EfcDck",
+        "jJpi6mPM",
+        "M3LGiQic",
+        "0ludgP4l",
+        "jFgQbosR",
+        "0j1BpFdn",
+        "zk9PQK5D",
+        "Ye5nRt96",
+        "EgZ1f5r1",
+        "x2s4Y7a6",
+        "z72eNoaL",
+        "AaSyeIHD",
+        "vLIh3Q7k",
+        "Eilt75oL",
+        "QHhJlRhd",
+        "zLFXZaJD",
+        "v1MyBH9b",
+        "bJhARk3k",
+        "6RpY8RG8",
+        "GpUCo1tm",
+        "zRMumg0f",
+        "A9KEYgo1",
+        "2HKHRoYG",
+        "bD9nb8hL",
+        "6RIeMKWH",
+        "4r8x1f8D",
+        "r1PsF8lB",
+        "Kt1H2val",
+        "2RPqvm1k",
+        "6wyrlupe",
+        "QmLXAhID",
+        "rg9sl5HF"
+      ],
+      "excluded": {
+        "current_match": 0,
+        "technical_result": 0,
+        "duplicate": 6,
+        "incomplete_quarters": 0
+      }
+    },
+    "external_delivery": {
+      "enabled": false,
+      "reason": "COURSEWORK_OFFLINE_ONLY"
+    },
+    "integrity_report": {
+      "all_passed": true,
+      "errors": []
+    }
+  }
+}

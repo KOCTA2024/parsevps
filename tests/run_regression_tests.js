@@ -72,12 +72,46 @@ const classify = (completed, idx) => vm.runInContext(
 
 // Delayed-start regression: all checkpoint windows may be open, but each must
 // react only to its own actual quarter boundary.
-assertEqual(classify(1, 0), 'TARGET', 'Q1 watcher fires at Q1 completion');
+assertEqual(classify(1, 0), 'TARGET', 'generic classifier detects Q1 completion');
 assertEqual(classify(1, 1), 'WAIT', 'HT watcher ignores Q1 break');
 assertEqual(classify(1, 2), 'WAIT', 'Q3 watcher ignores Q1 break');
 assertEqual(classify(2, 0), 'STALE', 'late Q1 watcher does not replay at halftime');
 assertEqual(classify(2, 1), 'TARGET', 'HT watcher fires at Q2 completion');
 assertEqual(classify(2, 2), 'WAIT', 'Q3 watcher ignores halftime');
 assertEqual(classify(3, 2), 'TARGET', 'Q3 watcher fires in Q3 break/Q4');
+
+const q2TriggerContext = {};
+vm.createContext(q2TriggerContext);
+vm.runInContext(extractFunction(stageMonitorSource, 'checkpoint1Q2TriggerState'), q2TriggerContext);
+const q2Trigger = (stage, minute = 2) => vm.runInContext(
+  `checkpoint1Q2TriggerState(${JSON.stringify(stage)}, ${minute})`,
+  q2TriggerContext,
+);
+
+assertEqual(
+  q2Trigger({status: 'break', completedQuarters: 1, currentQuarter: 1, liveMinute: 10}),
+  'ARMED',
+  'Q1 break arms checkpoint #1 without firing',
+);
+assertEqual(
+  q2Trigger({status: 'live', completedQuarters: 1, currentQuarter: 2, liveMinute: 1}),
+  'WAIT',
+  'Q2 minute 1 does not fire checkpoint #1',
+);
+assertEqual(
+  q2Trigger({status: 'live', completedQuarters: 1, currentQuarter: 2, liveMinute: 2}),
+  'TARGET',
+  'Q2 minute 2 fires checkpoint #1',
+);
+assertEqual(
+  q2Trigger({status: 'live', completedQuarters: 1, currentQuarter: 2, liveMinute: 3}),
+  'TARGET',
+  'Q2 minute 3 still fires checkpoint #1 after a delayed poll',
+);
+assertEqual(
+  q2Trigger({status: 'live', completedQuarters: 2, currentQuarter: 3, liveMinute: 1}),
+  'STALE',
+  'checkpoint #1 is not replayed after Q2 ends',
+);
 
 console.log('\nAll JavaScript regression tests passed.');
