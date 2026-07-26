@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
-"""SUPER_BASKET VPS ACTION SYSTEM v5.5.0 - single-file edition.
+"""SUPER_BASKET LIVE ADVISOR v12.1.0.
 
 PROGRAMMER INTEGRATION:
-    python super_basket_vps_system.py run --match /path/to/match.json
-    python super_basket_vps_system.py watch --inbox /srv/basket/inbox --outbox /srv/basket/outbox
+    python super_basket_vps_system_FINAL_v12_3_PREMATCH_Q1_START_ADVISOR.py run --match /path/match.json --checkpoint 1
+    python super_basket_vps_system_FINAL_v12_3_PREMATCH_Q1_START_ADVISOR.py watch --inbox /srv/basket/inbox --outbox /srv/basket/outbox
 
-The existing parser remains the source of match/history/line data.  This file:
-1) calculates P_hist -> P_scenario -> P_live -> P_raw -> P_final;
-2) applies stat/conflict/router/Team-IT/Q4 gates;
-3) lets GPT audit (never recalculate or upgrade) a RISK/PLAY signal;
-4) sends approved RISK/PLAY signals to Telegram;
-5) stores signals/outcomes in SQLite and activates conservative calibration
-   only after a sufficient number of settled predictions.
+The parser remains the source of live match, history, lines and statistics.
+This single file:
+1) calculates exact P_history -> line-specific P_scenario -> live projections -> P_live -> P_raw -> P_final;
+2) mines and explains repeated game-state scenarios and their impact on each total/team-IT line;
+3) evaluates quarter, half and match totals plus both teams' individual totals;
+4) detects history/live conflict and FAKE OVER / FAKE UNDER when statistics are available;
+5) dispatches Telegram only when a real line is in a 75-100% historical zone,
+   no supported real total/IT line exists, or a configured exceptional live edge is present;
+6) returns PLAY / RISK / PASS and, for PASS/no-line cases, the nearest theoretical trigger;
+7) stores deterministic delivery/audit data in JSON and SQLite.
 
-Required only for GPT review:  pip install -U openai
-Everything else uses Python's standard library.
+The v12.3 advisor is deterministic and does not require GPT. It supports pre-match and Q1-start recommendations, and builds history-anchored reference lines when a relevant bookmaker total/IT is absent. Optional legacy GPT and Excel-audit integrations require external packages only when explicitly enabled.
 """
 from __future__ import annotations
 
@@ -458,6 +460,12 @@ def adapt_match(source: dict[str, Any], config: dict[str, Any], strict: bool=Fal
     time_reliable = elapsed_raw not in (None, '') or (period is not None and (period_played_raw not in (None, '') or period_left_raw not in (None, '')))
     if elapsed_minutes is None and period and (period_played is not None):
         elapsed_minutes = (period - 1) * quarter_minutes + period_played
+    # Some parser snapshots provide only the clock remaining in the current quarter.
+    # Convert it to played time before calculating stage, pace and live projections.
+    if elapsed_minutes is None and period and period_played is None and period_left is not None:
+        safe_left = max(0.0, min(float(quarter_minutes), float(period_left)))
+        period_played = float(quarter_minutes) - safe_left
+        elapsed_minutes = (period - 1) * quarter_minutes + period_played
     if elapsed_minutes is None and period is None:
         # No numeric time fields in the payload at all (e.g. 'match' block empty) - fall
         # back to parsing the provider's textual status ("Live (N-а чверть M')",
@@ -798,12 +806,29 @@ def _market_type(bucket: str, scope: str, team: Optional[str]) -> tuple[Optional
     return (None, scope or 'UNKNOWN')
 
 def _current_quarter_issue(market_type: str, segment: str, canonical: dict[str, Any]) -> Optional[str]:
+    """Validate quarter markets without blocking the next quarter at a boundary.
+
+    After Q1/HT/Q3 the bookmaker can already publish Q2/Q3/Q4 lines before the
+    next quarter has a score or a running clock. Those are valid forward-looking
+    markets and must be evaluated. A genuinely past or unrelated future quarter
+    remains blocked.
+    """
     if market_type not in {'CURRENT_QUARTER_TOTAL', 'CURRENT_QUARTER_TEAM_IT'}:
         return None
-    current = canonical.get('current_quarter')
+    current = to_int(canonical.get('current_quarter'))
     target = int(segment[1:]) if segment.startswith('Q') and segment[1:].isdigit() else None
+    trigger = to_int(canonical.get('trigger_checkpoint'))
+    expected = trigger + 1 if trigger in {1, 2, 3} else current
     if target is None:
         return 'UNKNOWN_QUARTER'
+    if target < 1 or target > 4:
+        return 'INVALID_QUARTER'
+    # The next quarter at an explicit checkpoint is valid even before its first
+    # possession, so exact current-quarter score/clock are not required yet.
+    if expected is not None and target == expected:
+        if current is not None and current > target:
+            return 'PAST_QUARTER'
+        return None
     if current is None:
         return 'NO_CURRENT_QUARTER'
     if target > current:
@@ -812,7 +837,8 @@ def _current_quarter_issue(market_type: str, segment: str, canonical: dict[str, 
         return 'PAST_QUARTER'
     if canonical.get('clock') is None:
         return 'NO_EXACT_CURRENT_QUARTER_TIME'
-    quarter_score = canonical.get('quarters', [])[target - 1]
+    quarters = canonical.get('quarters') or []
+    quarter_score = quarters[target - 1] if len(quarters) >= target else {}
     if quarter_score.get('total') is None:
         return 'NO_CURRENT_QUARTER_SCORE'
     return None
@@ -1053,7 +1079,19 @@ def calculate_total_history(market: dict[str, Any], canonical: dict[str, Any], c
     p_hist, normalized = _weighted_available(components, config['history_weights'])
     for block in (team_a, team_b, pooled, h2h, last5):
         block.pop('values', None)
-    return {'team_a': team_a, 'team_b': team_b, 'pooled': pooled, 'h2h': h2h, 'last5': last5, 'distribution': distribution, 'scored_allowed': scored_allowed, 'components': components, 'component_weights': normalized, 'p_hist': p_hist}
+    history_zone_rate = pooled.get('raw_pct')
+    return {
+        'team_a': team_a, 'team_b': team_b, 'pooled': pooled, 'h2h': h2h,
+        'last5': last5, 'distribution': distribution, 'scored_allowed': scored_allowed,
+        'components': components, 'component_weights': normalized, 'p_hist': p_hist,
+        # The user-facing history gate is the exact-line pooled raw hit zone.
+        # P_hist may include form/distribution/scored-allowed, but it may not
+        # replace the mandatory 75% exact historical zone.
+        'history_zone_rate': history_zone_rate,
+        'history_zone_hits': pooled.get('wins'),
+        'history_zone_n': pooled.get('n'),
+        'history_zone_source': 'POOLED_EXACT_LINE_RAW',
+    }
 
 def _current_team_score(canonical: dict[str, Any], team: str, segment: str) -> float:
     side = 'home' if team == canonical['home_team'] else 'away'
@@ -1084,6 +1122,12 @@ def calculate_team_it_history(market: dict[str, Any], canonical: dict[str, Any],
     components = {'own_scored': own['p_smoothed'], 'opponent_allowed': allowed['p_smoothed'], 'h2h_it': h2h['p_smoothed']}
     configured = {'own_scored': float(weights['own_weight']), 'opponent_allowed': float(weights['opponent_allowed_weight']), 'h2h_it': float(weights['h2h_weight'])}
     p_hist, normalized = _weighted_available(components, configured)
+    raw_zone_components = {
+        'own_scored': own.get('raw_pct'),
+        'opponent_allowed': allowed.get('raw_pct'),
+        'h2h_it': h2h.get('raw_pct') if h2h.get('n') else None,
+    }
+    history_zone_rate, history_zone_weights = _weighted_available(raw_zone_components, configured)
     current = _current_team_score(canonical, team, market.get('segment', 'MATCH'))
     required = max(0.0, float(market['line']) - current)
     if market.get('segment') == 'MATCH':
@@ -1107,7 +1151,21 @@ def calculate_team_it_history(market: dict[str, Any], canonical: dict[str, Any],
     weakest = min(weakest_values) if weakest_values else None
     for block in (own, allowed, h2h):
         block.pop('values', None)
-    return {'team_a': own if team == canonical['home_team'] else {}, 'team_b': own if team == canonical['away_team'] else {}, 'pooled': {}, 'h2h': h2h, 'last5': {}, 'distribution': {}, 'own_scored': own, 'opponent_allowed': allowed, 'h2h_it': h2h, 'opponent': opponent, 'components': components, 'component_weights': normalized, 'weakest_gate': weakest, 'required_live': required, 'remaining_minutes': remaining_minutes, 'required_points_per_minute': required_ppm, 'required_points_per_possession': required_ppp, 'p_hist_IT': p_hist, 'p_hist': p_hist}
+    return {
+        'team_a': own if team == canonical['home_team'] else {},
+        'team_b': own if team == canonical['away_team'] else {},
+        'pooled': {}, 'h2h': h2h, 'last5': {}, 'distribution': {},
+        'own_scored': own, 'opponent_allowed': allowed, 'h2h_it': h2h,
+        'opponent': opponent, 'components': components, 'component_weights': normalized,
+        'weakest_gate': weakest, 'required_live': required,
+        'remaining_minutes': remaining_minutes,
+        'required_points_per_minute': required_ppm,
+        'required_points_per_possession': required_ppp,
+        'p_hist_IT': p_hist, 'p_hist': p_hist,
+        'history_zone_rate': history_zone_rate,
+        'history_zone_weights': history_zone_weights,
+        'history_zone_source': 'TEAM_IT_OWN_ALLOWED_H2H_RAW',
+    }
 
 def calculate_history(market: dict[str, Any], canonical: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     if market['market_type'].startswith('TEAM_IT') or market['market_type'] == 'CURRENT_QUARTER_TEAM_IT':
@@ -1352,12 +1410,15 @@ def calculate_scenario(market: dict[str, Any], canonical: dict[str, Any], histor
             valid_outcomes = [float(value) for value in values if value is not None]
             breakdown = exact_breakdown(values, float(market['line']), market['side'], alpha, beta)
             credibility = breakdown['n'] / (breakdown['n'] + pattern_k) if breakdown['n'] else 0.0
-            smoothed = breakdown['p_smoothed'] if breakdown['p_smoothed'] is not None else p_hist
-            shrunk = credibility * smoothed + (1 - credibility) * p_hist
+            neutral = 0.50
+            smoothed = breakdown['p_smoothed'] if breakdown['p_smoothed'] is not None else neutral
+            # Scenario must be independent from P_hist. Small samples shrink to
+            # neutral 50%, never back to the historical line probability.
+            shrunk = credibility * smoothed + (1 - credibility) * neutral
             coverage = breakdown['n'] / len(pool) if pool else 0.0
-            coverage_cap_applied = coverage < 0.10 and shrunk > p_hist
+            coverage_cap_applied = coverage < 0.10 and shrunk > neutral
             if coverage_cap_applied:
-                shrunk = p_hist
+                shrunk = neutral
             sample_quality = min(1.0, breakdown['n'] / 10.0)
             specificity = float(config['patterns']['specificity'].get(pattern['pattern_id'], 0.7))
             distance_quality = 1.0
@@ -1418,13 +1479,13 @@ def calculate_scenario(market: dict[str, Any], canonical: dict[str, Any], histor
         effective_sample = sum((pattern['pattern_weight'] * pattern['matched_games'] for pattern in patterns_used))
         scenario_k = float(config['credibility']['scenario_k'])
         credibility = effective_sample / (effective_sample + scenario_k)
-        probability = credibility * raw + (1 - credibility) * p_hist
+        probability = credibility * raw + (1 - credibility) * 0.50
         support = 'ON'
     else:
-        raw = p_hist
+        raw = 0.50
         effective_sample = 0.0
         credibility = 0.0
-        probability = p_hist
+        probability = 0.50
         support = 'OFF'
     outcome_items = [
         (float(pattern['outcome_median']), float(pattern.get('pattern_weight') or 0.0))
@@ -1591,6 +1652,66 @@ def _previous_quarter_pace(market: dict[str, Any], canonical: dict[str, Any], cl
         return None
     return float(points) / canonical['quarter_seconds']
 
+
+def _detect_run_context(canonical: dict[str, Any], team_metrics: dict[str, dict[str, Optional[float]]]) -> dict[str, Any]:
+    """Classify a live run without play-by-play.
+
+    BOTH_SIDES_RUNOUT means both offenses are participating in a high-rate segment.
+    SOLO_RUN means one team owns at least 72% of a sufficiently large segment. A
+    solo run is not automatically Match Over: the opponent must still show attack
+    volume/bounce potential; otherwise only the running team's IT may benefit.
+    """
+    quarter_seconds = float(canonical.get('quarter_seconds') or 600)
+    current_q = canonical.get('current_quarter')
+    stage = str(canonical.get('stage') or '')
+    if stage == 'HT':
+        index = 1
+        elapsed = quarter_seconds
+    elif stage == 'AFTER_3Q':
+        index = 2
+        elapsed = quarter_seconds
+    elif current_q and 1 <= int(current_q) <= 4:
+        index = int(current_q) - 1
+        elapsed = max(0.0, quarter_seconds - float(canonical.get('quarter_seconds_remaining') or quarter_seconds))
+    else:
+        return {'label': 'OFF', 'reason': 'NO_SEGMENT'}
+    quarters = canonical.get('quarters') or []
+    if index >= len(quarters):
+        return {'label': 'OFF', 'reason': 'NO_QUARTER'}
+    q = quarters[index] or {}
+    home = to_number(q.get('home'))
+    away = to_number(q.get('away'))
+    if home is None or away is None or elapsed < 120:
+        return {'label': 'OFF', 'reason': 'SEGMENT_TOO_EARLY_OR_MISSING'}
+    total = home + away
+    minutes = elapsed / 60.0
+    ppm = total / minutes if minutes > 0 else 0.0
+    share = max(home, away) / total if total > 0 else 0.0
+    leader = 'home' if home >= away else 'away'
+    opponent = 'away' if leader == 'home' else 'home'
+    opponent_metrics = team_metrics.get(opponent) or {}
+    opponent_bounce = bool(
+        (opponent_metrics.get('eFG') is not None and float(opponent_metrics['eFG']) < 0.46)
+        and (opponent_metrics.get('FGA_per_minute') is not None and float(opponent_metrics['FGA_per_minute']) >= 1.20)
+        and ((opponent_metrics.get('FTr') or 0.0) >= 0.20 or (opponent_metrics.get('ORB_per_possession') or 0.0) >= 0.07)
+    )
+    if ppm >= 4.4 and min(home, away) >= max(8.0, 0.22 * total):
+        label = 'BOTH_SIDES_RUNOUT'
+    elif total >= 14 and share >= 0.72:
+        label = 'SOLO_RUN_WITH_OPPONENT_BOUNCE' if opponent_bounce else 'SOLO_RUN_ONE_SIDED'
+    else:
+        label = 'NO_STRONG_RUN'
+    return {
+        'label': label,
+        'quarter': index + 1,
+        'home_points': home,
+        'away_points': away,
+        'segment_points_per_minute': ppm,
+        'leader': leader,
+        'leader_share': share,
+        'opponent_bounce': opponent_bounce,
+    }
+
 def _trimmed_weighted_mean(items: list[tuple[str, float, float]]) -> tuple[float, set[str]]:
     included = list(items)
     excluded: set[str] = set()
@@ -1724,16 +1845,70 @@ def calculate_live_projection(market: dict[str, Any], canonical: dict[str, Any],
         historical_pace = statistics.median(historical_paces) if historical_paces else current_pace
         scenario_pace = historical_pace
         pace_weights = config['projection']['regression']
-        blended_future_pace = current_pace * pace_weights['current_pace'] + historical_pace * pace_weights['history_pace'] + scenario_pace * pace_weights['scenario_pace']
+        margin = abs(float(canonical['score']['home']) - float(canonical['score']['away']))
+        # Close games preserve a real high pace longer; blowouts regress harder.
+        if margin <= 10:
+            current_pace_w, history_pace_w, scenario_pace_w = 0.55, 0.30, 0.15
+            pace_context = 'CLOSE_PACE_PRESERVED'
+        elif margin >= 18:
+            current_pace_w, history_pace_w, scenario_pace_w = 0.30, 0.55, 0.15
+            pace_context = 'BLOWOUT_REGRESSION'
+        else:
+            current_pace_w = float(pace_weights['current_pace'])
+            history_pace_w = float(pace_weights['history_pace'])
+            scenario_pace_w = float(pace_weights['scenario_pace'])
+            pace_context = 'STANDARD_REGRESSION'
+        blended_future_pace = current_pace * current_pace_w + historical_pace * history_pace_w + scenario_pace * scenario_pace_w
         future_possessions = blended_future_pace * remaining_minutes
+        run_context = _detect_run_context(canonical, team_metrics)
+        run_label = run_context.get('label')
+        if run_label == 'BOTH_SIDES_RUNOUT' and margin <= 10:
+            future_possessions *= 1.03
+        elif run_label == 'SOLO_RUN_WITH_OPPONENT_BOUNCE':
+            future_possessions *= 1.015
+        elif run_label == 'SOLO_RUN_ONE_SIDED' and not market.get('team'):
+            # A one-team burst with a dead opponent is not a match-total Over signal.
+            future_possessions *= 0.98
         regressed: dict[str, float] = {}
+        efficiency_context: dict[str, Any] = {}
         for side, offense, opponent_allowed in (('home', home_offense, away_allowed), ('away', away_offense, home_allowed)):
             current_ppp = safe_div(canonical['score'][side], team_metrics[side]['Poss'])
+            efg = team_metrics[side].get('eFG')
+            fga_pm = team_metrics[side].get('FGA_per_minute')
+            ftr = team_metrics[side].get('FTr')
+            orb_rate = team_metrics[side].get('ORB_per_possession')
+            to_rate = team_metrics[side].get('TO_rate')
+            high_volume = fga_pm is not None and fga_pm >= 1.20
+            bounce = bool(efg is not None and efg < 0.46 and high_volume and ((ftr or 0) >= 0.22 or (orb_rate or 0) >= 0.075))
+            overheat = bool(efg is not None and efg > 0.64 and not high_volume and (ftr or 0) < 0.20)
+            turnover_drag = bool(to_rate is not None and to_rate >= 0.22)
+            if bounce:
+                local_weights = {'current': 0.15, 'offense': 0.35, 'allowed': 0.35, 'scenario': 0.15}
+                label = 'LOW_EFG_HIGH_VOLUME_BOUNCE'
+            elif overheat:
+                local_weights = {'current': 0.15, 'offense': 0.38, 'allowed': 0.37, 'scenario': 0.10}
+                label = 'HIGH_EFG_LOW_SUPPORT_REGRESSION'
+            else:
+                local_weights = {
+                    'current': float(pace_weights['current_ppp']),
+                    'offense': float(pace_weights['historical_offense_ppp']),
+                    'allowed': float(pace_weights['opponent_allowed_ppp']),
+                    'scenario': float(pace_weights['scenario_ppp']),
+                }
+                label = 'STANDARD_PPP_REGRESSION'
             base_values = {'current': current_ppp, 'offense': offense, 'allowed': opponent_allowed, 'scenario': offense}
-            weights = {'current': pace_weights['current_ppp'], 'offense': pace_weights['historical_offense_ppp'], 'allowed': pace_weights['opponent_allowed_ppp'], 'scenario': pace_weights['scenario_ppp']}
-            available = [(base_values[key], weights[key]) for key in base_values if base_values[key] is not None]
+            available = [(base_values[key], local_weights[key]) for key in base_values if base_values[key] is not None]
             total = sum((weight for _, weight in available))
-            regressed[side] = sum((value * weight for value, weight in available)) / total if total else 1.0
+            value = sum((v * w for v, w in available)) / total if total else 1.0
+            if turnover_drag:
+                value *= 0.97
+                label += '+TO_DRAG'
+            regressed[side] = value
+            efficiency_context[side] = {
+                'label': label, 'eFG': efg, 'FGA_per_minute': fga_pm,
+                'FTr': ftr, 'ORB_per_possession': orb_rate, 'TO_rate': to_rate,
+                'weights': local_weights,
+            }
         if market.get('team'):
             side = 'home' if market['team'] == canonical['home_team'] else 'away'
             stat_adjusted = clock['current_points'] + future_possessions * regressed[side]
@@ -1762,7 +1937,14 @@ def calculate_live_projection(market: dict[str, Any], canonical: dict[str, Any],
         if stat_adjusted is not None:
             future_points = max(0.0, stat_adjusted - clock['current_points'])
             stat_adjusted = clock['current_points'] + future_points * (1 + adjustment_rate)
-        stat_details.update({'current_pace': current_pace, 'historical_pace': historical_pace, 'scenario_pace': scenario_pace, 'blended_future_pace': blended_future_pace, 'future_possessions': future_possessions, 'regressed_ppp': regressed, 'adjustment_rate': adjustment_rate, 'adjustment_events': adjustment_events})
+        stat_details.update({
+            'current_pace': current_pace, 'historical_pace': historical_pace,
+            'scenario_pace': scenario_pace, 'blended_future_pace': blended_future_pace,
+            'future_possessions': future_possessions, 'regressed_ppp': regressed,
+            'pace_context': pace_context, 'run_context': run_context,
+            'efficiency_context': efficiency_context,
+            'adjustment_rate': adjustment_rate, 'adjustment_events': adjustment_events,
+        })
     parser_components = _parser_projection_components(market, canonical, clock)
     parser_available_values = [
         item['value'] for item in parser_components.values()
@@ -1795,6 +1977,8 @@ def calculate_live_projection(market: dict[str, Any], canonical: dict[str, Any],
         components[key] = {'value': parser_components.get(key, {}).get('value', value), 'weight': component_weights[key], 'available': value is not None, 'included': value is not None and key not in trimmed, 'exclusion_reason': 'TRIMMED_EXTREME' if key in trimmed else parser_exclusion or ('UNAVAILABLE' if value is None else None)}
     line_edge = projection_used - line if market['side'] == 'OVER' else line - projection_used
     sigma = _stage_sigma(market['market_type'], canonical['stage'], config)
+    if (stat or {}).get('stat_support') == 'OFF':
+        sigma *= 1.20
     z_score = line_edge / sigma
     p_live = normal_cdf(z_score)
     return {'clock': canonical.get('clock'), 'elapsed_seconds': clock['elapsed_seconds'], 'remaining_seconds': clock['remaining_seconds'], 'elapsed_game_seconds': canonical['elapsed_game_seconds'], 'remaining_game_seconds': canonical['remaining_game_seconds'], 'current_points': clock['current_points'], 'components': components, 'projection_simple': simple, 'projection_segment': segment_projection, 'projection_model_live': segment_projection, 'projection_history': history_projection, 'projection_scenario': scenario_projection, 'scenario_projection_method': scenario_projection_method, 'projection_stat_adjusted': stat_adjusted, 'projection_control': control, 'projection_used': projection_used, 'Projection_used': projection_used, 'line': line, 'line_edge': line_edge, 'line_edge_over': projection_used - line, 'line_edge_under': line - projection_used, 'sigma': sigma, 'z_score': z_score, 'p_live': p_live, 'stat_projection_details': stat_details}
@@ -2349,10 +2533,7 @@ def _verdict(
     strong_clean: bool,
     p_hist: Optional[float]=None,
 ) -> str:
-    if blockers or (
-        probability < 0.65
-        and not _strong_history_risk_band(probability, p_hist)
-    ):
+    if blockers or probability < 0.60:
         return 'PASS'
     if probability < 0.75:
         return 'RISK PLAY'
@@ -2601,10 +2782,53 @@ class SuperBasketCalculator:
                 normalized_weights['hist'] = non_live
                 normalized_weights['scenario'] = 0.0
             normalized_weights['live'] = live_weight
+        gates_cfg = self.config.get('signal_gates', {})
+        history_zone_rate = to_number(history.get('history_zone_rate'))
+        history_zone_min = float(gates_cfg.get('history_zone_min', 0.75))
+        strong_edge_for_reversal = _strong_edge_threshold(market['market_type'], self.config)
+        fake_profile = bool(
+            (market['side'] == 'OVER' and stat.get('fake_over'))
+            or (market['side'] == 'UNDER' and stat.get('fake_under'))
+        )
+        live_reversal_active = bool(
+            gates_cfg.get('allow_live_reversal', True)
+            and canonical['stage'] != 'PRE_MATCH'
+            and live.get('p_live', 0.0) >= float(gates_cfg.get('live_reversal_p_live_min', 0.80))
+            and scenario.get('p_scenario', 0.0) >= float(gates_cfg.get('live_reversal_p_scenario_min', 0.68))
+            and live.get('line_edge', -999.0) >= strong_edge_for_reversal
+            and stat.get('stat_gate_status') == 'CONFIRMED'
+            and not fake_profile
+        )
+        if live_reversal_active:
+            # Explicit project reversal weights: history 11.5%, scenario 8.5%, live 80%.
+            normalized_weights = {'hist': 0.115, 'scenario': 0.085, 'live': 0.80}
         p_raw = normalized_weights['hist'] * history['p_hist'] + normalized_weights['scenario'] * scenario['p_scenario'] + normalized_weights['live'] * live['p_live']
         router = _router(market, canonical)
         caps: list[dict[str, Any]] = []
         blockers = list(initial_blockers)
+        gates_cfg = self.config.get('signal_gates', {})
+        history_zone_rate = to_number(history.get('history_zone_rate'))
+        history_zone_min = float(gates_cfg.get('history_zone_min', 0.75))
+        live_edge_min = float(gates_cfg.get('live_edge_min_points', 3.0))
+        scenario_direction_min = float(gates_cfg.get('scenario_direction_min', 0.50))
+        if (history_zone_rate is None or history_zone_rate < history_zone_min) and not live_reversal_active:
+            blockers.append(_blocker(
+                'HISTORY_ZONE_BELOW_75',
+                'Signal requires at least a 75% exact-line historical zone in the same direction',
+                {'history_zone_rate': history_zone_rate, 'required': history_zone_min, 'source': history.get('history_zone_source')},
+            ))
+        if canonical['stage'] != 'PRE_MATCH' and float(live.get('line_edge') or -999.0) < live_edge_min:
+            blockers.append(_blocker(
+                'LIVE_EDGE_BELOW_3',
+                'Live projection must be at least 3 points beyond the bookmaker line in the signal direction',
+                {'line_edge': live.get('line_edge'), 'required': live_edge_min, 'projection_used': live.get('projection_used'), 'line': market.get('line')},
+            ))
+        if scenario.get('scenario_support') == 'ON' and float(scenario.get('p_scenario') or 0.0) < scenario_direction_min:
+            blockers.append(_blocker(
+                'SCENARIO_DIRECTION_CONFLICT',
+                'Matched historical states point against the evaluated side',
+                {'p_scenario': scenario.get('p_scenario'), 'required': scenario_direction_min},
+            ))
         if canonical['data_gate']['schema_errors']:
             blockers.append(_blocker('SCHEMA_ERROR', 'Required canonical fields are missing', {'paths': canonical['data_gate']['schema_errors']}))
         if router.get('cap') is not None:
@@ -2705,7 +2929,11 @@ class SuperBasketCalculator:
                     blockers.append(_blocker('Q4_OVER_CONFIRMATION_FAILED', 'Q4 Over needs P_live >=60%, projection above line, TO not high and eFG not low'))
         active_cap = min((item['cap'] for item in caps), default=1.0)
         p_final = max(0.0, min(1.0, context_probability, active_cap))
-        alignment = history['p_hist'] >= 0.5 and scenario['p_scenario'] >= 0.5 and (live['p_live'] >= 0.5)
+        alignment = (
+            (live_reversal_active or (history_zone_rate is not None and history_zone_rate >= history_zone_min))
+            and scenario['p_scenario'] >= float(self.config.get('signal_gates', {}).get('scenario_direction_min', 0.50))
+            and live['line_edge'] >= float(self.config.get('signal_gates', {}).get('live_edge_min_points', 3.0))
+        )
         sample_sufficient = canonical['data_gate']['pooled_n'] >= 20
         strong_clean = not blockers and (not caps) and alignment and (stat['stat_gate_status'] == 'CONFIRMED') and sample_sufficient
         verdict = _verdict(
@@ -2718,6 +2946,7 @@ class SuperBasketCalculator:
             _trace_step('P_HIST', True, 'weighted exact + form + H2H + distribution (or Team IT formula)', history.get('components', {'team_it': history.get('component_weights')}), None, history['p_hist']),
             _trace_step('P_SCENARIO', scenario.get('scenario_support') == 'ON', 'independent matched-pattern groups with sample shrinkage', {'effective_sample': scenario.get('effective_sample'), 'patterns_used': [item.get('pattern_id') for item in scenario.get('patterns_used', [])], 'outcome_center': scenario.get('outcome_center')}, None, scenario['p_scenario']),
             _trace_step('P_LIVE', canonical['stage'] != 'PRE_MATCH', 'Phi(line edge / sigma) from conservative multi-component projection', {'projection_used': live.get('projection_used'), 'line': market['line'], 'line_edge': live.get('line_edge'), 'sigma': live.get('sigma'), 'scenario_projection_method': live.get('scenario_projection_method')}, None, live['p_live']),
+            _trace_step('ALIGNED_SIGNAL_GATES', True, '75% exact history zone + 3 point live edge + non-opposing scenario; exceptional reversal requires 80% live weight conditions', {'history_zone_rate': history_zone_rate, 'history_zone_min': history_zone_min, 'line_edge': live.get('line_edge'), 'live_edge_min': float(self.config.get('signal_gates', {}).get('live_edge_min_points', 3.0)), 'p_scenario': scenario.get('p_scenario'), 'live_reversal_active': live_reversal_active}, None, p_raw, [item['rule_id'] for item in blockers if item['rule_id'] in {'HISTORY_ZONE_BELOW_75','LIVE_EDGE_BELOW_3','SCENARIO_DIRECTION_CONFLICT'}]),
             _trace_step('STAGE_WEIGHTS', True, 'w_hist*P_hist + w_scenario*P_scenario + w_live*P_live; LIVE_DOMINANCE may raise live weight to at most 0.80', {'stage': stage_key, 'base_weights': base_weights, 'effective_weights': normalized_weights, 'normalization_applied': normalization_applied, 'live_dominance': live_dominance}, None, p_raw, ['LIVE_DOMINANCE'] if live_dominance['active'] else []),
             _trace_step('PRODUCTION_ROUTER', router['status'] != 'ALLOW', 'router may allow, cap, prioritize or block the market', router, p_raw, p_raw, [router['reason']]),
             _trace_step('STAT_GATE', stat.get('stat_gate_status') != 'OFF', 'team-relative 3-of-5 confirmation gate', {'support': stat.get('stat_support'), 'status': stat.get('stat_gate_status'), 'over_score': stat.get('over_gate_score'), 'under_score': stat.get('under_gate_score')}, p_raw, p_raw, [f"STAT_{stat.get('stat_gate_status')}"]),
@@ -2730,7 +2959,34 @@ class SuperBasketCalculator:
             _trace_step('HARD_BLOCKERS', bool(blockers), 'any hard blocker forces PASS without inventing a replacement market', {'blockers': blockers}, p_final, p_final, [item['rule_id'] for item in blockers]),
             _trace_step('P_FINAL_RULE', True, 'clamp(P_context, active caps); blockers control verdict', {'strong_clean': strong_clean}, p_final, p_final, [verdict]),
         ]
-        return {**market, 'history': history, 'scenario': scenario, 'live': live, 'stat_comparison': stat, 'q4_context': q4, 'zone_credibility': zone_credibility, 'live_dominance': live_dominance, 'weights': {'original': original_weights, 'base_normalized': base_weights, 'normalized': normalized_weights, 'normalization_applied': normalization_applied, 'live_dominance_applied': live_dominance['active']}, 'p_raw': p_raw, 'router': router, 'caps': caps, 'blockers': blockers, 'hard_conflict': bool(blockers), 'p_final': p_final, 'verdict': verdict, 'p_trace': p_trace, 'strong_requirements': {'aligned': alignment, 'stat_confirmation': stat['stat_gate_status'] == 'CONFIRMED', 'sample_sufficient': sample_sufficient, 'clean': strong_clean}}
+        return {
+            **market, 'history': history, 'scenario': scenario, 'live': live,
+            'stat_comparison': stat, 'q4_context': q4,
+            'zone_credibility': zone_credibility, 'live_dominance': live_dominance,
+            'live_reversal': {
+                'active': live_reversal_active,
+                'history_zone_rate': history_zone_rate,
+                'required_history_zone': history_zone_min,
+                'required_live_edge': strong_edge_for_reversal,
+            },
+            'weights': {
+                'original': original_weights, 'base_normalized': base_weights,
+                'normalized': normalized_weights,
+                'normalization_applied': normalization_applied,
+                'live_dominance_applied': live_dominance['active'],
+            },
+            'p_raw': p_raw, 'router': router, 'caps': caps, 'blockers': blockers,
+            'hard_conflict': bool(blockers), 'p_final': p_final, 'verdict': verdict,
+            'p_trace': p_trace,
+            'strong_requirements': {
+                'aligned': alignment,
+                'history_zone_pass': live_reversal_active or (history_zone_rate is not None and history_zone_rate >= history_zone_min),
+                'live_edge_pass': live['line_edge'] >= float(self.config.get('signal_gates', {}).get('live_edge_min_points', 3.0)),
+                'scenario_direction_pass': scenario['p_scenario'] >= float(self.config.get('signal_gates', {}).get('scenario_direction_min', 0.50)),
+                'stat_confirmation': stat['stat_gate_status'] == 'CONFIRMED',
+                'sample_sufficient': sample_sufficient, 'clean': strong_clean,
+            },
+        }
 
     def calculate(self, source: dict[str, Any], dispatch_threshold: Optional[float]=None, strict_schema: bool=False) -> dict[str, Any]:
         if not _valid_zone_table(self.zones_data):
@@ -2765,16 +3021,7 @@ class SuperBasketCalculator:
         threshold = float(dispatch_threshold if dispatch_threshold is not None else self.config.get('dispatch_threshold', 0.7))
         candidates = [
             evaluation for evaluation in evaluations
-            if (
-                evaluation['p_final'] >= threshold
-                or (
-                    threshold <= 0.65
-                    and _strong_history_risk_band(
-                        evaluation['p_final'],
-                        evaluation.get('history', {}).get('p_hist'),
-                    )
-                )
-            )
+            if evaluation['p_final'] >= threshold
             and (not evaluation['blockers'])
             and (evaluation.get('odds') is not None)
             and (evaluation['odds'] >= float(self.config['odds_min']))
@@ -4606,11 +4853,21 @@ def resolve_team_relative_zones(
 
 # ===== EMBEDDED CONFIG AND SIMPLE INTEGRATION API =====
 DEFAULT_CONFIG = json.loads(r"""{
-  "engine_version": "5.5.0",
+  "engine_version": "6.0.0",
   "calibration_status": "calibration_default_not_backtested",
   "odds_min": 1.44,
   "odds_max": 10.0,
-  "dispatch_threshold": 0.65,
+  "dispatch_threshold": 0.60,
+  "signal_gates": {
+    "history_zone_min": 0.75,
+    "live_edge_min_points": 3.0,
+    "scenario_direction_min": 0.50,
+    "play_min": 0.75,
+    "risk_min": 0.60,
+    "allow_live_reversal": true,
+    "live_reversal_p_live_min": 0.80,
+    "live_reversal_p_scenario_min": 0.68
+  },
   "smoothing": {"alpha": 1.0, "beta": 1.0},
   "credibility": {
     "h2h_k": 8.0,
@@ -4789,7 +5046,7 @@ DEFAULT_CONFIG = json.loads(r"""{
 
 
 # ===== VPS ORCHESTRATION, AUDIT, LEARNING, GPT AND TELEGRAM =====
-SYSTEM_VERSION = '5.5.0'
+SYSTEM_VERSION = '9.1.0'
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec='seconds')
@@ -5057,10 +5314,6 @@ def normalized_action(
         return 'PASS', 'TRIGGER ONLY', '0%'
     if probability < 0.60:
         return 'PASS', 'PASS', '0%'
-    if probability < 0.65:
-        if _strong_history_risk_band(probability, p_hist):
-            return 'RISK', 'RISK ENTRY — P_HIST ABOVE 80%', '10-15% live-limit'
-        return 'PASS', 'PASS', '0%'
     if probability < 0.75:
         return 'RISK', 'RISK ENTRY', '10-15% live-limit'
     if probability < 0.80:
@@ -5098,70 +5351,17 @@ RISK_POST_FILTER_P_FINAL_UPPER_BOUND = 0.65
 
 
 def apply_risk_post_filter(decision: dict[str, Any]) -> dict[str, Any]:
-    """Suppress a sub-65% RISK when P_live is not strictly above 85%.
-
-    RISK decisions with P_final >=65%, PLAY, and deterministic PASS decisions
-    bypass this delivery filter unchanged.
-    The original deterministic action is preserved for audit/backtesting.
-    """
-    deterministic_action = str(
-        decision.get('deterministic_action') or decision.get('action') or 'PASS'
-    ).upper()
-    probabilities = decision.get('probabilities') or {}
-    p_final = to_number(probabilities.get('p_final'))
-    p_live = to_number(probabilities.get('p_live'))
-    applicable = (
-        deterministic_action == 'RISK'
-        and p_final is not None
-        and p_final < RISK_POST_FILTER_P_FINAL_UPPER_BOUND
-    )
-    result = {
-        'enabled': True,
-        'applicable': applicable,
-        'p_final_upper_bound_exclusive': RISK_POST_FILTER_P_FINAL_UPPER_BOUND,
-        'p_final': p_final,
-        'comparison': '>',
-        'threshold': RISK_POST_FILTER_P_LIVE_THRESHOLD,
-        'p_live': p_live,
+    """v6: no second hidden threshold. A clean deterministic RISK starts at 60%."""
+    return {
+        'enabled': False,
+        'applicable': False,
+        'p_final': to_number((decision.get('probabilities') or {}).get('p_final')),
+        'p_live': to_number((decision.get('probabilities') or {}).get('p_live')),
         'passed': True,
         'filtered': False,
         'reason_code': None,
+        'policy': 'RISK_60_TO_74_99_AFTER_ALL_HARD_GATES',
     }
-    if not applicable:
-        return result
-    if p_live is not None and p_live > RISK_POST_FILTER_P_LIVE_THRESHOLD:
-        return result
-
-    reason_code = 'RISK_POSTFILTER_P_LIVE_NOT_ABOVE_85'
-    result.update({
-        'passed': False,
-        'filtered': True,
-        'reason_code': reason_code,
-    })
-    decision['action'] = 'PASS'
-    decision['status'] = 'PASS — RISK POST-FILTER'
-    decision['stake'] = '0%'
-    decision['budget_recommendation'] = build_budget_recommendation(
-        decision['action'],
-        decision['status'],
-        decision['stake'],
-    )
-    decision.setdefault('reason_codes', [])
-    if reason_code not in decision['reason_codes']:
-        decision['reason_codes'].insert(0, reason_code)
-    live_label = 'відсутній' if p_live is None else f'{p_live:.1%}'
-    decision['explanation_uk'] = (
-        f'{decision.get("explanation_uk") or ""} '
-        f'RISK post-filter для P_final нижче 65%: P_live {live_label}; '
-        f'для відправки потрібно строго більше 85%.'
-    ).strip()
-    decision['main_risk_uk'] = (
-        'Детермінований RISK збережено для аудиту, але Telegram-сигнал '
-        'відфільтровано через недостатній P_live.'
-    )
-    decision['trigger_uk'] = 'Для RISK з P_final <65% потрібен P_live >85%.'
-    return result
-
 
 def _precomputed_line_reconciliation(source: dict[str, Any], evaluation: Optional[dict[str, Any]], data_gate: dict[str, Any]) -> dict[str, Any]:
     if not evaluation:
@@ -5442,14 +5642,7 @@ def apply_learning_to_evaluation(evaluation: dict[str, Any], store: LearningStor
     item['system_action'] = action
     item['system_status'] = status
     item['stake'] = stake
-    item['system_reason_codes'] = (
-        ['RISK_60_64_P_HIST_ABOVE_80']
-        if action == 'RISK' and _strong_history_risk_band(
-            p_calibrated,
-            p_hist,
-        )
-        else []
-    )
+    item['system_reason_codes'] = []
     item['calibration'] = calibration
     item.setdefault('p_trace', []).append(_trace_step(
         'CALIBRATION', calibration['status'] == 'ACTIVE',
@@ -5479,12 +5672,15 @@ def summarize_line_evaluation(item: dict[str, Any]) -> dict[str, Any]:
         'status': item.get('system_status', 'PASS'),
         'stake': item.get('stake', '0%'),
         'p_hist': item.get('history', {}).get('p_hist'),
+        'history_zone_rate': item.get('history', {}).get('history_zone_rate'),
+        'history_zone_source': item.get('history', {}).get('history_zone_source'),
         'p_scenario': item.get('scenario', {}).get('p_scenario'),
         'p_live': item.get('live', {}).get('p_live'),
         'p_raw': item.get('p_raw'),
         'p_final': item.get('p_final_system', item.get('p_final')),
         'projection_used': item.get('live', {}).get('projection_used'),
         'line_edge': item.get('live', {}).get('line_edge'),
+        'live_reversal_active': item.get('live_reversal', {}).get('active', False),
         'stat_gate_status': item.get('stat_comparison', {}).get('stat_gate_status'),
         'stat_values_projected_to_scope_end': item.get('stat_comparison', {}).get('values_projected_to_scope_end', False),
         'router_status': item.get('router', {}).get('status'),
@@ -5563,27 +5759,20 @@ def deterministic_explanation(evaluation: Optional[dict[str, Any]], action: str,
             'Потрібні P_final не нижче 75% та відсутність hard blocker.'
             if mode.upper() == 'STRICT'
             else (
-                'Потрібні P_final ≥65% або P_final 60–64.99% при '
-                'P_hist >80%, без hard blocker.'
+                'Потрібні P_final ≥60%, історична зона ≥75%, live edge ≥3 '
+                'та відсутність hard blocker.'
             )
         )
         return explanation, risk, trigger
     explanation = (
         f'P_final {probability:.1%}: проєкція {live.get("projection_used"):.1f} очка, '
         f'{direction} лінії {float(evaluation["line"]):.1f} на {abs(edge):.1f}; '
-        f'P_hist {float(history.get("p_hist") or 0):.1%}, stat-gate {stat.get("stat_gate_status")}.'
+        f'P_hist {float(history.get("p_hist") or 0):.1%}, '
+        f'історична зона {float(history.get("history_zone_rate") or 0):.1%}, '
+        f'stat-gate {stat.get("stat_gate_status")}.'
     )
     if action == 'RISK':
-        if _strong_history_risk_band(
-            probability,
-            history.get('p_hist'),
-        ):
-            risk = (
-                'P_final перебуває в зоні 60–64.99%; RISK дозволено лише при '
-                'P_hist >80%.'
-            )
-        else:
-            risk = 'Ймовірність перебуває в action-зоні 65–74%, тому це не clean PLAY і потрібен зменшений ліміт.'
+        risk = 'P_final перебуває в зоні 60–74.99%, тому це RISK, а не clean PLAY; усі hard-gates уже пройдені.'
     else:
         risk = 'Лінія та коефіцієнт можуть змінитися; сигнал чинний лише для вказаного snapshot.'
     trigger = 'Брати тільки якщо та сама лінія ще доступна, odds >=1.44 і рахунок/час не змінилися суттєво.'
@@ -5831,8 +6020,8 @@ def process_vps_match_file(
     zones_path: str | Path | None = None,
     db_path: str | Path = 'super_basket.sqlite3',
     mode: str = 'ACTION',
-    require_gpt: bool = True,
-    enable_gpt: bool = True,
+    require_gpt: bool = False,
+    enable_gpt: bool = False,
     enable_telegram: bool = True,
     dry_run: bool = False,
     strict_schema: bool = False,
@@ -5845,6 +6034,8 @@ def process_vps_match_file(
         raise ValueError('mode must be ACTION or STRICT')
     source_path = Path(match_path).expanduser().resolve()
     source = load_json(source_path)
+    if checkpoint is None:
+        checkpoint = _v11_checkpoint_from_filename(source_path)
     if checkpoint is not None:
         checkpoint = int(checkpoint)
         if checkpoint not in {1, 2, 3}:
@@ -6186,18 +6377,18 @@ def calculate_match_file(
 
 def _add_runtime_switches(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--mode', choices=['action', 'strict'], default=os.getenv('SUPER_BASKET_MODE', 'action').lower())
-    parser.add_argument('--require-gpt', dest='require_gpt', action='store_true', default=env_bool('SUPER_BASKET_REQUIRE_GPT', True))
+    parser.add_argument('--require-gpt', dest='require_gpt', action='store_true', default=env_bool('SUPER_BASKET_REQUIRE_GPT', False))
     parser.add_argument('--no-require-gpt', dest='require_gpt', action='store_false')
-    parser.add_argument('--gpt', dest='enable_gpt', action='store_true', default=True)
+    parser.add_argument('--gpt', dest='enable_gpt', action='store_true', default=env_bool('SUPER_BASKET_ENABLE_GPT', False))
     parser.add_argument('--no-gpt', dest='enable_gpt', action='store_false')
-    parser.add_argument('--telegram', dest='enable_telegram', action='store_true', default=True)
+    parser.add_argument('--telegram', dest='enable_telegram', action='store_true', default=env_bool('SUPER_BASKET_ENABLE_TELEGRAM', True))
     parser.add_argument('--no-telegram', dest='enable_telegram', action='store_false')
 
 def _single_file_cli(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0].startswith('--') and '--match' in argv:
         argv.insert(0, 'run')
-    parser = argparse.ArgumentParser(description=f'SUPER_BASKET VPS ACTION SYSTEM v{SYSTEM_VERSION}')
+    parser = argparse.ArgumentParser(description=f'SUPER_BASKET VPS STANDALONE ACTION SYSTEM v{SYSTEM_VERSION}')
     subparsers = parser.add_subparsers(dest='command', required=True)
 
     run = subparsers.add_parser('run', help='Process one parser JSON')
@@ -6294,7 +6485,7 @@ def _single_file_cli(argv: list[str] | None = None) -> int:
                 'telegram_chat_id_set': bool(os.getenv('TELEGRAM_CHAT_ID')),
                 'telegram_chats_file': os.getenv('TELEGRAM_CHATS_FILE'),
                 'telegram_chats_file_chat_count': len(_load_telegram_chat_ids()),
-                'require_gpt': env_bool('SUPER_BASKET_REQUIRE_GPT', True),
+                'require_gpt': env_bool('SUPER_BASKET_REQUIRE_GPT', False),
                 'live_limit_set': to_number(os.getenv('SUPER_BASKET_LIVE_LIMIT')) is not None,
                 'bankroll_set': to_number(os.getenv('SUPER_BASKET_BANKROLL')) is not None,
                 'budget_currency': os.getenv('SUPER_BASKET_CURRENCY', 'USDT'),
@@ -6307,6 +6498,9768 @@ def _single_file_cli(argv: list[str] | None = None) -> int:
         print(f'ERROR: {type(exc).__name__}: {exc}', file=sys.stderr)
         return 1
     return 0
+
+
+
+
+# ===== v9.0 FINAL HYBRID FULL-PARITY OVERRIDES =====
+# Implemented from Basketball Hybrid Master v4.0 plus the project NO-STAT,
+# Team-IT, production-router and Q4 rules.  The public CLI/API remains intact.
+
+_V9_ADAPT_MATCH_BASE = adapt_match
+_V9_CALCULATE_SCENARIO_BASE = calculate_scenario
+_V9_CALCULATE_LIVE_BASE = calculate_live_projection
+_V9_CALCULATE_STAT_BASE = calculate_stat_gate
+_V9_EVALUATE_BASE = SuperBasketCalculator.evaluate_market
+_V9_CALCULATE_BASE = SuperBasketCalculator.calculate
+_V9_APPLY_LEARNING_BASE = apply_learning_to_evaluation
+_V9_SUMMARIZE_BASE = summarize_line_evaluation
+
+DEFAULT_CONFIG['engine_version'] = '9.1.0-FINAL-HYBRID-PARITY'
+DEFAULT_CONFIG['dispatch_threshold'] = 0.60
+DEFAULT_CONFIG.setdefault('signal_gates', {}).update({
+    'history_zone_min': 0.75,
+    'live_edge_min_points': 3.0,
+    'scenario_direction_min': 0.50,
+    'risk_min': 0.60,
+    'play_min': 0.75,
+    'allow_live_reversal': True,
+    'live_reversal_p_live_min': 0.80,
+    'live_reversal_p_scenario_min': 0.68,
+})
+# Correct the old 1.02 sum for current-quarter weights.
+DEFAULT_CONFIG.setdefault('stage_weights', {})['CURRENT_Q1_Q3'] = {
+    'hist': 0.225, 'scenario': 0.225, 'live': 0.55,
+}
+DEFAULT_CONFIG.setdefault('caps', {}).update({
+    'partial_stat_3plus': 0.84,
+    'partial_stat_under3': 0.79,
+    'stat_neutral_live': 0.74,
+    'no_stat_support_5_6': 0.79,
+    'no_stat_support_4': 0.74,
+    'no_stat_support_3': 0.72,
+    'no_stat_support_0_2': 0.67,
+    'full_stat_reversal': 0.79,
+    'no_stat_reversal': 0.74,
+})
+
+_V9_FORMULA_REGISTRY = {
+    'history_total': (
+        'P_hist = normalized weighted blend of exact-line pooled probability, '
+        'last5 shrunk probability, H2H shrunk modifier, distribution probability, '
+        'and scored/allowed interaction. Mandatory signal zone is raw pooled exact-line >=75%.'
+    ),
+    'history_team_it': (
+        'P_hist_IT = 0.50*Own_scored_exact + 0.35*Opponent_allowed_exact '
+        '+ 0.15*H2H_IT_exact; weakest own/allowed gate controls cap/block.'
+    ),
+    'smoothing': 'p_smoothed = (hits + 1) / (N + 2).',
+    'scenario_full_partial': (
+        'Use only current-state patterns (quarter result, score/margin/total bucket, sequence); '
+        'P_scenario = credibility*P_state_smoothed + (1-credibility)*0.50, '
+        'credibility=min(1,N_state/8). Future-result/broad-history patterns are excluded.'
+    ),
+    'scenario_no_stat': (
+        'N_state<3 => scenario OFF. Otherwise P_scenario = credibility*P_state_smoothed '
+        '+ (1-credibility)*P_hist, credibility=min(1,N_state/8).'
+    ),
+    'projection_full_stat': (
+        'Conservative multi-component projection: regressed segment pace + history + scenario '
+        '+ stat-adjusted possession/efficiency projection + control; simple pace informational only.'
+    ),
+    'projection_partial_stat': (
+        'Same conservative engine using only available stat groups; missing values remain N/A; '
+        'PARTIAL_STAT cap84 with >=3 independent confirmations, otherwise cap79.'
+    ),
+    'projection_no_stat_n5': (
+        'Projection_used = 0.35*Projection_regressed + 0.35*Projection_history '
+        '+ 0.30*Projection_scenario when N_state>=5.'
+    ),
+    'projection_no_stat_n3_4': (
+        'Projection_used = 0.40*Projection_regressed + 0.45*Projection_history '
+        '+ 0.15*Projection_scenario when N_state=3-4.'
+    ),
+    'projection_no_stat_n0_2': (
+        'Projection_used = 0.50*Projection_regressed + 0.50*Projection_history when N_state<3.'
+    ),
+    'p_live': (
+        'OVER: Phi((Projection_used-Line)/sigma); UNDER: Phi((Line-Projection_used)/sigma). '
+        'NO_STAT sigma = 1.20*sigma_base.'
+    ),
+    'p_raw': 'P_raw = w_hist*P_hist + w_scenario*P_scenario + w_live*P_live.',
+    'p_final': 'P_final = min(P_raw after context, every active cap); any hard blocker => PASS.',
+    'verdict': 'P_final<60% PASS; 60-74.99% RISK; >=75% PLAY, subject to gates/blockers.',
+    'normal_signal_gates': (
+        'Exact-line historical zone >=75%; live projection at least 3 points beyond line in signal '
+        'direction; scenario not against; real odds >=1.44; router allowed; hard conflict OFF.'
+    ),
+    'reversal': (
+        'Confirmed live reversal weights = 0.115*P_hist_live_side + 0.085*P_scenario_live_side '
+        '+ 0.80*P_live_live_side. FULL/PARTIAL cap79; NO_STAT requires support score>=5 and cap74.'
+    ),
+}
+
+
+def _v9_stat_channels(canonical: dict[str, Any]) -> dict[str, Any]:
+    home = canonical.get('live_stats', {}).get('home', {})
+    away = canonical.get('live_stats', {}).get('away', {})
+    groups = {
+        'FGA_POSS': bool((home.get('FGA') is not None or home.get('Poss') is not None)
+                         and (away.get('FGA') is not None or away.get('Poss') is not None)),
+        'FTA_FTR': bool((home.get('FTA') is not None or home.get('FTr') is not None)
+                        and (away.get('FTA') is not None or away.get('FTr') is not None)),
+        'ORB': home.get('ORB') is not None and away.get('ORB') is not None,
+        'TO': home.get('TO') is not None and away.get('TO') is not None,
+        'EFG': home.get('eFG') is not None and away.get('eFG') is not None,
+    }
+    count = sum(bool(value) for value in groups.values())
+    if count >= 4:
+        mode, support = 'FULL_STAT', 'ON'
+    elif count >= 2:
+        mode, support = 'PARTIAL_STAT', 'LIMITED'
+    else:
+        mode, support = 'SCORE_TIME_HISTORY', 'N/A_NO_STATS'
+    if canonical.get('stage') != 'PRE_MATCH':
+        gate = canonical.get('data_gate', {})
+        if gate.get('schema_errors') or not gate.get('time_reliable', True):
+            mode, support = 'DATA_OFF', 'OFF'
+    return {
+        'data_mode': mode,
+        'stat_support': support,
+        'groups': groups,
+        'group_count': count,
+        'missing_groups': [name for name, present in groups.items() if not present],
+    }
+
+
+def adapt_match(source: dict[str, Any], config: dict[str, Any], strict: bool=False) -> dict[str, Any]:
+    canonical = _V9_ADAPT_MATCH_BASE(source, config, strict)
+    classification = _v9_stat_channels(canonical)
+    canonical['data_mode'] = classification['data_mode']
+    canonical['stat_support'] = classification['stat_support']
+    canonical['stat_channels'] = classification['groups']
+    gate = canonical.setdefault('data_gate', {})
+    gate['data_mode'] = classification['data_mode']
+    gate['stat_support'] = classification['stat_support']
+    gate['stat_channel_count'] = classification['group_count']
+    gate['stat_channels'] = classification['groups']
+    gate['missing_stat_groups'] = classification['missing_groups']
+    gate['stats_found'] = classification['group_count'] > 0
+    return canonical
+
+
+_V9_STATE_GROUPS = {
+    'quarter_result', 'score_state', 'margin_state', 'total_state',
+    'sequence_state', 'line_threshold', 'time_state',
+}
+
+
+def _v9_state_sample(patterns: list[dict[str, Any]]) -> int:
+    # Correlated patterns from one team cannot be added as independent rows.
+    per_team: dict[str, int] = {}
+    for item in patterns:
+        team = str(item.get('team') or '')
+        per_team[team] = max(per_team.get(team, 0), int(item.get('matched_games') or 0))
+    return sum(per_team.values())
+
+
+def calculate_scenario(
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+    history: dict[str, Any],
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    result = _V9_CALCULATE_SCENARIO_BASE(market, canonical, history, config)
+    candidates = [
+        item for item in result.get('patterns_found', [])
+        if item.get('pattern_group') in _V9_STATE_GROUPS
+        and item.get('pattern_group') != 'match_result'
+        and int(item.get('matched_games') or 0) >= 3
+    ]
+    # One best pattern per team/state family prevents double counting.
+    best: dict[tuple[str, str], dict[str, Any]] = {}
+    for item in candidates:
+        key = (str(item.get('team') or ''), str(item.get('pattern_group') or ''))
+        if key not in best or float(item.get('pattern_rank') or 0.0) > float(best[key].get('pattern_rank') or 0.0):
+            best[key] = item
+    used = list(best.values())
+    for item in used:
+        item['used_in_scenario_v9'] = True
+        item['pattern_weight_v9'] = max(
+            0.0001,
+            float(item.get('credibility') or 0.0)
+            * float(item.get('sample_quality') or 0.0)
+            * float(item.get('specificity') or 0.0),
+        )
+    denom = sum(float(item['pattern_weight_v9']) for item in used)
+    if denom > 0:
+        p_state = sum(
+            float(item['pattern_weight_v9']) * float(item.get('smoothed_probability') or 0.50)
+            for item in used
+        ) / denom
+        outcome_items = [
+            (float(item['outcome_median']), float(item['pattern_weight_v9']))
+            for item in used if item.get('outcome_median') is not None
+        ]
+        outcome_denom = sum(weight for _, weight in outcome_items)
+        outcome_center = (
+            sum(value * weight for value, weight in outcome_items) / outcome_denom
+            if outcome_denom > 0 else None
+        )
+    else:
+        p_state, outcome_center = 0.50, None
+    n_state = _v9_state_sample(used)
+    credibility = min(1.0, n_state / 8.0) if n_state > 0 else 0.0
+    mode = canonical.get('data_mode') or canonical.get('data_gate', {}).get('data_mode')
+    if n_state < 3:
+        support = 'OFF'
+        active = False
+        probability = 0.50
+        formula = 'N_state<3 => scenario OFF; scenario weight is renormalized away.'
+    elif mode == 'SCORE_TIME_HISTORY':
+        support = 'SMALL_SAMPLE' if n_state < 5 else 'ON'
+        active = True
+        probability = credibility * p_state + (1.0 - credibility) * float(history.get('p_hist') or 0.50)
+        formula = 'credibility*P_state_smoothed + (1-credibility)*P_hist'
+    else:
+        support = 'SMALL_SAMPLE' if n_state < 5 else 'ON'
+        active = True
+        # FULL/PARTIAL scenario remains independent from broad history.
+        probability = credibility * p_state + (1.0 - credibility) * 0.50
+        formula = 'credibility*P_state_smoothed + (1-credibility)*0.50'
+    result.update({
+        'patterns_used': used,
+        'state_patterns_used': used,
+        'p_state_smoothed': p_state,
+        'n_state': n_state,
+        'effective_sample': float(n_state),
+        'scenario_credibility': credibility,
+        'p_scenario': max(0.0, min(1.0, probability)),
+        'p_scenario_effective': max(0.0, min(1.0, probability)) if active else None,
+        'scenario_support': support,
+        'scenario_active': active,
+        'outcome_center': outcome_center,
+        'formula_v9': formula,
+        'excluded_pattern_groups': ['quarter_strength', 'allowed_threshold', 'match_result'],
+        'leakage_guard': 'Historical final-result patterns are excluded from P_scenario.',
+    })
+    return result
+
+
+def _v9_segment_indices(market: dict[str, Any]) -> list[int]:
+    segment = str(market.get('segment') or 'MATCH').upper()
+    if segment == 'MATCH':
+        return [0, 1, 2, 3]
+    if segment == 'H1':
+        return [0, 1]
+    if segment == 'H2':
+        return [2, 3]
+    if segment.startswith('Q') and segment[1:].isdigit():
+        idx = int(segment[1:]) - 1
+        return [idx] if 0 <= idx <= 3 else []
+    return []
+
+
+def _v9_remaining_from_values(
+    values: list[Optional[float]],
+    indices: list[int],
+    elapsed_game_seconds: float,
+    quarter_seconds: float,
+) -> Optional[float]:
+    if not indices or quarter_seconds <= 0:
+        return None
+    total = 0.0
+    for idx in indices:
+        if idx >= len(values) or values[idx] is None:
+            return None
+        start = idx * quarter_seconds
+        end = start + quarter_seconds
+        if elapsed_game_seconds <= start:
+            fraction = 1.0
+        elif elapsed_game_seconds >= end:
+            fraction = 0.0
+        else:
+            fraction = (end - elapsed_game_seconds) / quarter_seconds
+        total += float(values[idx]) * max(0.0, min(1.0, fraction))
+    return total
+
+
+def _v9_game_total_quarters(game: dict[str, Any]) -> list[Optional[float]]:
+    return [to_number(item.get('total')) for item in (game.get('quarters') or [])[:4]]
+
+
+def _v9_game_team_quarters(game: dict[str, Any], team: str) -> list[Optional[float]]:
+    quarters = game.get('quarters') or []
+    if str(game.get('home_team')) == str(team):
+        return [to_number(item.get('home')) for item in quarters[:4]]
+    if str(game.get('away_team')) == str(team):
+        return [to_number(item.get('away')) for item in quarters[:4]]
+    return []
+
+
+def _v9_required_probability(values: list[float], target: float, side: str) -> dict[str, Any]:
+    valid = [float(value) for value in values if value is not None]
+    if not valid:
+        return {'available': False, 'p_required_history': None, 'hits': 0, 'n': 0, 'target': target}
+    if side == 'OVER':
+        hits = sum(value >= target for value in valid)
+    else:
+        hits = sum(value <= target for value in valid)
+    p = (hits + 1.0) / (len(valid) + 2.0)
+    return {
+        'available': True,
+        'p_required_history': p,
+        'hits': int(hits),
+        'n': len(valid),
+        'target': target,
+        'raw_rate': hits / len(valid),
+        'median_remaining': statistics.median(valid),
+        'mean_remaining': statistics.fmean(valid),
+    }
+
+
+def _v9_required_history(
+    market: dict[str, Any], canonical: dict[str, Any]
+) -> dict[str, Any]:
+    indices = _v9_segment_indices(market)
+    elapsed = float(canonical.get('elapsed_game_seconds') or 0.0)
+    q_seconds = float(canonical.get('quarter_seconds') or 600.0)
+    try:
+        clock = _segment_clock(market, canonical)
+        current = float(clock.get('current_points') or 0.0)
+    except Exception:
+        current = 0.0
+    line = float(market['line'])
+    side = str(market['side']).upper()
+    threshold = math.floor(line) + 1 if side == 'OVER' else math.floor(line)
+    target = float(threshold) - current
+    if side == 'OVER' and target <= 0:
+        return {'available': True, 'p_required_history': 1.0, 'hits': 1, 'n': 1, 'target': target, 'already_reached': True}
+    if side == 'UNDER' and target < 0:
+        return {'available': True, 'p_required_history': 0.0, 'hits': 0, 'n': 1, 'target': target, 'already_failed': True}
+
+    market_type = str(market.get('market_type') or '')
+    if market_type.startswith('TEAM_IT') or market_type == 'CURRENT_QUARTER_TEAM_IT':
+        team = str(market.get('team') or '')
+        own_pool = canonical['history']['team_a'] if team == canonical['home_team'] else canonical['history']['team_b']
+        opponent_pool = canonical['history']['team_b'] if team == canonical['home_team'] else canonical['history']['team_a']
+        own_values = []
+        for game in own_pool:
+            remaining = _v9_remaining_from_values(
+                [to_number(v) for v in (game.get('team_quarters') or [])[:4]],
+                indices, elapsed, q_seconds,
+            )
+            if remaining is not None:
+                own_values.append(remaining)
+        allowed_values = []
+        for game in opponent_pool:
+            remaining = _v9_remaining_from_values(
+                [to_number(v) for v in (game.get('opponent_quarters') or [])[:4]],
+                indices, elapsed, q_seconds,
+            )
+            if remaining is not None:
+                allowed_values.append(remaining)
+        h2h_values = []
+        for game in canonical['history'].get('h2h', []):
+            quarters = _v9_game_team_quarters(game, team)
+            remaining = _v9_remaining_from_values(quarters, indices, elapsed, q_seconds) if quarters else None
+            if remaining is not None:
+                h2h_values.append(remaining)
+        own = _v9_required_probability(own_values, target, side)
+        allowed = _v9_required_probability(allowed_values, target, side)
+        h2h = _v9_required_probability(h2h_values, target, side)
+        components = {
+            'own_remaining': own.get('p_required_history'),
+            'opponent_allowed_remaining': allowed.get('p_required_history'),
+            'h2h_remaining': h2h.get('p_required_history'),
+        }
+        probability, weights = _weighted_available(components, {
+            'own_remaining': 0.50,
+            'opponent_allowed_remaining': 0.35,
+            'h2h_remaining': 0.15,
+        })
+        return {
+            'available': own['available'] and allowed['available'],
+            'p_required_history': probability,
+            'target': target,
+            'side': side,
+            'current_points': current,
+            'components': components,
+            'component_weights': weights,
+            'own': own,
+            'opponent_allowed': allowed,
+            'h2h': h2h,
+            'method': 'fractional-current-quarter historical remaining; Team IT own/allowed/H2H blend',
+        }
+
+    values: list[float] = []
+    for pool_name in ('team_a', 'team_b'):
+        for game in canonical['history'].get(pool_name, []):
+            remaining = _v9_remaining_from_values(
+                _v9_game_total_quarters(game), indices, elapsed, q_seconds,
+            )
+            if remaining is not None:
+                values.append(remaining)
+    result = _v9_required_probability(values, target, side)
+    result.update({
+        'side': side,
+        'current_points': current,
+        'method': 'fractional-current-quarter pooled historical remaining',
+    })
+    return result
+
+
+def calculate_stat_gate(
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+    zones_data: Optional[dict[str, Any]],
+    *,
+    project_counts_to_scope_end: bool=True,
+) -> dict[str, Any]:
+    result = _V9_CALCULATE_STAT_BASE(
+        market, canonical, zones_data,
+        project_counts_to_scope_end=project_counts_to_scope_end,
+    )
+    classification = _v9_stat_channels(canonical)
+    mode = classification['data_mode']
+    result['data_mode'] = mode
+    result['stat_channels'] = classification['groups']
+    result['stat_channel_count'] = classification['group_count']
+    if mode in {'SCORE_TIME_HISTORY', 'DATA_OFF'}:
+        result['stat_support'] = 'OFF' if mode == 'DATA_OFF' else 'N/A_NO_STATS'
+        result['stat_gate_status'] = 'OFF'
+        result['fake_over'] = False
+        result['fake_under'] = False
+        result['stat_unknown_not_zero'] = True
+        return result
+    result['stat_support'] = 'ON' if mode == 'FULL_STAT' else 'LIMITED'
+    if mode == 'PARTIAL_STAT':
+        over_count = len(set(result.get('over_positive_channels') or []))
+        under_count = len(set(result.get('under_positive_channels') or []))
+        evaluated = over_count if market.get('side') == 'OVER' else under_count
+        opposite = under_count if market.get('side') == 'OVER' else over_count
+        if evaluated >= 3:
+            status = 'CONFIRMED'
+        elif opposite >= 3 and evaluated < 3:
+            status = 'AGAINST'
+        else:
+            status = 'NEUTRAL'
+        result['stat_gate_status'] = status
+        result['partial_independent_confirmations'] = evaluated
+        result['partial_opposite_confirmations'] = opposite
+    return result
+
+
+def _v9_no_stat_edge_min(market: dict[str, Any], canonical: dict[str, Any]) -> float:
+    market_type = str(market.get('market_type') or '')
+    stage = str(canonical.get('stage') or '')
+    if market_type == 'H1_TOTAL':
+        return 5.0
+    if market_type == 'H2_TOTAL':
+        return 5.0
+    if market_type == 'MATCH_TOTAL':
+        if stage == 'EARLY_LIVE':
+            return 10.0
+        if stage == 'HT':
+            return 7.0
+        if stage in {'AFTER_3Q', 'Q4_CONFIRMATION'}:
+            return 5.0
+        return 10.0
+    if market_type == 'TEAM_IT_MATCH':
+        return 5.0
+    if market_type == 'TEAM_IT_HALF':
+        return 4.0
+    if market_type == 'CURRENT_QUARTER_TOTAL':
+        return 5.0
+    if market_type == 'CURRENT_QUARTER_TEAM_IT':
+        return 4.0
+    return 5.0
+
+
+def _v9_projection_alignment(live: dict[str, Any], scenario_active: bool, side: str, line: float) -> dict[str, Any]:
+    values = {
+        'regressed': to_number(live.get('projection_regressed') or live.get('projection_segment')),
+        'history': to_number(live.get('projection_history')),
+        'scenario': to_number(live.get('projection_scenario')) if scenario_active else None,
+    }
+    def aligned(value: Optional[float]) -> bool:
+        if value is None:
+            return False
+        return value > line if side == 'OVER' else value < line
+    flags = {key: aligned(value) for key, value in values.items() if value is not None}
+    needed = 2 if scenario_active else len(flags)
+    count = sum(flags.values())
+    return {
+        'values': values,
+        'aligned_flags': flags,
+        'aligned_count': count,
+        'required_count': needed,
+        'passed': bool(flags) and count >= needed,
+    }
+
+
+def _v9_no_stat_support(
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+    history: dict[str, Any],
+    scenario: dict[str, Any],
+    live: dict[str, Any],
+) -> dict[str, Any]:
+    scenario_active = bool(scenario.get('scenario_active'))
+    n_state = int(scenario.get('n_state') or 0)
+    small_patterns = [
+        item for item in scenario.get('state_patterns_used', [])
+        if 3 <= int(item.get('matched_games') or 0) <= 4
+        and float(item.get('smoothed_probability') or 0.0) >= 0.68
+    ]
+    scenario_point = bool(
+        (scenario_active and n_state >= 5 and float(scenario.get('p_scenario') or 0.0) >= 0.68)
+        or len({(item.get('team'), item.get('pattern_group')) for item in small_patterns}) >= 2
+    )
+    edge_min = _v9_no_stat_edge_min(market, canonical)
+    alignment = _v9_projection_alignment(
+        live, scenario_active, str(market['side']), float(market['line'])
+    )
+    required = live.get('required_history') or {}
+    checks = {
+        'P_HIST_GE_68': float(history.get('p_hist') or 0.0) >= 0.68,
+        'P_SCENARIO_GE_68_OR_TWO_SMALL': scenario_point,
+        'P_LIVE_GE_70': float(live.get('p_live') or 0.0) >= 0.70,
+        'MIN_STAGE_MARKET_EDGE': float(live.get('line_edge') or -999.0) >= edge_min,
+        'REQUIRED_HISTORY_GE_68': float(required.get('p_required_history') or 0.0) >= 0.68,
+        'PROJECTIONS_ALIGNED': alignment['passed'],
+    }
+    score = sum(bool(value) for value in checks.values())
+    if score >= 5:
+        cap = 0.79
+    elif score == 4:
+        cap = 0.74
+    elif score == 3:
+        cap = 0.72
+    else:
+        cap = 0.67
+    return {
+        'score': score,
+        'max_score': 6,
+        'checks': checks,
+        'cap': cap,
+        'edge_min': edge_min,
+        'projection_alignment': alignment,
+        'n_state': n_state,
+        'scenario_active': scenario_active,
+    }
+
+
+def calculate_live_projection(
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+    history: dict[str, Any],
+    scenario: dict[str, Any],
+    config: dict[str, Any],
+    stat: Optional[dict[str, Any]]=None,
+) -> dict[str, Any]:
+    result = _V9_CALCULATE_LIVE_BASE(market, canonical, history, scenario, config, stat)
+    mode = canonical.get('data_mode') or canonical.get('data_gate', {}).get('data_mode')
+    result['data_mode'] = mode
+    result['projection_regressed'] = result.get('projection_segment')
+    result['required_history'] = _v9_required_history(market, canonical)
+    result['projection_formula_mode'] = 'FULL_STAT_CONSERVATIVE_BLEND'
+    if mode == 'PARTIAL_STAT':
+        result['projection_formula_mode'] = 'PARTIAL_STAT_AVAILABLE_CHANNEL_BLEND'
+    elif mode == 'SCORE_TIME_HISTORY':
+        regressed = to_number(result.get('projection_regressed'))
+        history_projection = to_number(result.get('projection_history'))
+        scenario_projection = to_number(result.get('projection_scenario')) if scenario.get('scenario_active') else None
+        n_state = int(scenario.get('n_state') or 0)
+        if n_state >= 5 and scenario_projection is not None:
+            configured = {'regressed': 0.35, 'history': 0.35, 'scenario': 0.30}
+            formula = '0.35*regressed + 0.35*history + 0.30*scenario'
+        elif 3 <= n_state <= 4 and scenario_projection is not None:
+            configured = {'regressed': 0.40, 'history': 0.45, 'scenario': 0.15}
+            formula = '0.40*regressed + 0.45*history + 0.15*scenario'
+        else:
+            configured = {'regressed': 0.50, 'history': 0.50}
+            formula = '0.50*regressed + 0.50*history'
+        values = {
+            'regressed': regressed,
+            'history': history_projection,
+            'scenario': scenario_projection,
+        }
+        available = {
+            key: value for key, value in values.items()
+            if key in configured and value is not None
+        }
+        denom = sum(configured[key] for key in available)
+        if denom > 0:
+            projection = sum(float(available[key]) * configured[key] for key in available) / denom
+            weights = {key: configured[key] / denom for key in available}
+        else:
+            projection = float(result.get('projection_used') or market['line'])
+            weights = {}
+            formula += ' [fallback: no valid components]'
+        sigma_base = _stage_sigma(market['market_type'], canonical['stage'], config)
+        sigma = sigma_base * 1.20
+        line = float(market['line'])
+        edge = projection - line if market['side'] == 'OVER' else line - projection
+        result.update({
+            'projection_used': projection,
+            'Projection_used': projection,
+            'line_edge': edge,
+            'line_edge_over': projection - line,
+            'line_edge_under': line - projection,
+            'sigma_base': sigma_base,
+            'sigma': sigma,
+            'z_score': edge / sigma if sigma > 0 else 0.0,
+            'p_live': normal_cdf(edge / sigma) if sigma > 0 else 0.50,
+            'projection_formula_mode': 'SCORE_TIME_HISTORY_NO_STAT',
+            'projection_formula': formula,
+            'projection_formula_weights': weights,
+            'no_stat_components': values,
+        })
+    return result
+
+
+def _v9_dedup_rules(items: list[dict[str, Any]], *, cap: bool=False) -> list[dict[str, Any]]:
+    output: dict[str, dict[str, Any]] = {}
+    for item in items:
+        key = str(item.get('rule_id'))
+        if key not in output:
+            output[key] = item
+        elif cap and float(item.get('cap') or 1.0) < float(output[key].get('cap') or 1.0):
+            output[key] = item
+    return list(output.values())
+
+
+def _v9_stage_weights(market: dict[str, Any], canonical: dict[str, Any], config: dict[str, Any]) -> dict[str, float]:
+    if market.get('market_type') in {'CURRENT_QUARTER_TOTAL', 'CURRENT_QUARTER_TEAM_IT'}:
+        return {'hist': 0.225, 'scenario': 0.225, 'live': 0.55}
+    raw = config.get('stage_weights', {}).get(
+        canonical.get('stage'), config.get('stage_weights', {}).get('EARLY_LIVE', {})
+    )
+    normalized, _ = _normalize_weights(raw)
+    return normalized
+
+
+def _v9_reversal_conditions(
+    market: dict[str, Any], canonical: dict[str, Any], evaluation: dict[str, Any]
+) -> dict[str, Any]:
+    history = evaluation['history']
+    scenario = evaluation['scenario']
+    live = evaluation['live']
+    stat = evaluation['stat_comparison']
+    zone = to_number(history.get('history_zone_rate'))
+    opposite_zone = 1.0 - zone if zone is not None else None
+    strong_edge = _strong_edge_threshold(market['market_type'], DEFAULT_CONFIG)
+    common = bool(
+        canonical.get('stage') != 'PRE_MATCH'
+        and opposite_zone is not None and opposite_zone >= 0.90
+        and float(live.get('p_live') or 0.0) >= 0.80
+        and bool(scenario.get('scenario_active'))
+        and float(scenario.get('p_scenario') or 0.0) >= 0.68
+        and float(live.get('line_edge') or -999.0) >= strong_edge
+        and not ((market['side'] == 'OVER' and stat.get('fake_over'))
+                 or (market['side'] == 'UNDER' and stat.get('fake_under')))
+    )
+    mode = canonical.get('data_mode')
+    if mode == 'SCORE_TIME_HISTORY':
+        support = _v9_no_stat_support(market, canonical, history, scenario, live)
+        active = bool(
+            common
+            and support['score'] >= 5
+            and float((live.get('required_history') or {}).get('p_required_history') or 0.0) >= 0.68
+        )
+        cap = 0.74
+    else:
+        support = None
+        active = bool(common and stat.get('stat_gate_status') == 'CONFIRMED')
+        cap = 0.79
+    return {
+        'active': active,
+        'opposite_history_zone': opposite_zone,
+        'strong_edge_required': strong_edge,
+        'mode': mode,
+        'cap': cap,
+        'no_stat_support': support,
+    }
+
+
+def _v9_evaluate_market(self: SuperBasketCalculator, market: dict[str, Any], canonical: dict[str, Any]) -> dict[str, Any]:
+    evaluation = _V9_EVALUATE_BASE(self, market, canonical)
+    evaluation['data_mode'] = canonical.get('data_mode')
+    evaluation['stat_channels'] = deepcopy(canonical.get('stat_channels') or {})
+    # Early return for parser/router-invalid markets.
+    if 'history' not in evaluation or not evaluation.get('live') or evaluation.get('router', {}).get('hard_block'):
+        return evaluation
+
+    history = evaluation['history']
+    scenario = evaluation['scenario']
+    live = evaluation['live']
+    stat = evaluation['stat_comparison']
+    mode = canonical.get('data_mode')
+    weights = _v9_stage_weights(market, canonical, self.config)
+    scenario_active = bool(scenario.get('scenario_active'))
+    if not scenario_active:
+        weights['scenario'] = 0.0
+        weights, _ = _normalize_weights(weights)
+    reversal = _v9_reversal_conditions(market, canonical, evaluation)
+    if reversal['active']:
+        weights = {'hist': 0.115, 'scenario': 0.085, 'live': 0.80}
+    p_scenario = float(scenario.get('p_scenario') or 0.50)
+    p_raw = (
+        weights['hist'] * float(history.get('p_hist') or 0.50)
+        + weights['scenario'] * p_scenario
+        + weights['live'] * float(live.get('p_live') or 0.50)
+    )
+
+    remove_caps = {'NO_STATS_FALLBACK', 'STAT_SUPPORT_LIMITED'}
+    caps = [item for item in evaluation.get('caps', []) if item.get('rule_id') not in remove_caps]
+    blockers = list(evaluation.get('blockers', []))
+    if not scenario_active:
+        blockers = [item for item in blockers if item.get('rule_id') != 'SCENARIO_DIRECTION_CONFLICT']
+    if reversal['active']:
+        blockers = [
+            item for item in blockers
+            if item.get('rule_id') not in {'HISTORY_ZONE_BELOW_75', 'STRONG_HISTORY_LIVE_CONFLICT'}
+        ]
+        caps.append(_cap(
+            'CONFIRMED_LIVE_REVERSAL_CAP', reversal['cap'],
+            'Strong current live direction overrides opposite 90%+ history only under reversal rules',
+            reversal,
+        ))
+
+    # Re-assert mandatory normal gates after old-engine adjustments.
+    zone = to_number(history.get('history_zone_rate'))
+    if (zone is None or zone < 0.75) and not reversal['active']:
+        blockers.append(_blocker(
+            'HISTORY_ZONE_BELOW_75',
+            'Exact-line history zone in signal direction must be at least 75%',
+            {'history_zone_rate': zone, 'required': 0.75},
+        ))
+    if canonical.get('stage') != 'PRE_MATCH' and float(live.get('line_edge') or -999.0) < 3.0:
+        blockers.append(_blocker(
+            'LIVE_EDGE_BELOW_3',
+            'Projection_used must be at least 3 points beyond line in signal direction',
+            {'line_edge': live.get('line_edge'), 'required': 3.0},
+        ))
+    if scenario_active and p_scenario < 0.50:
+        blockers.append(_blocker(
+            'SCENARIO_DIRECTION_CONFLICT',
+            'Current-state scenario points against the candidate',
+            {'p_scenario': p_scenario},
+        ))
+
+    no_stat_support = None
+    if mode == 'FULL_STAT':
+        if canonical.get('stage') != 'PRE_MATCH' and stat.get('stat_gate_status') not in {'CONFIRMED'}:
+            caps.append(_cap(
+                'FULL_STAT_CONFIRMATION_NOT_ON', 0.74,
+                'Live edge without 3/5 stat confirmation cannot be a clean PLAY',
+                {'stat_gate_status': stat.get('stat_gate_status')},
+            ))
+    elif mode == 'PARTIAL_STAT':
+        confirmations = int(stat.get('partial_independent_confirmations') or 0)
+        cap = 0.84 if confirmations >= 3 else 0.79
+        caps.append(_cap(
+            'PARTIAL_STAT_CAP_84' if confirmations >= 3 else 'PARTIAL_STAT_CAP_79',
+            cap,
+            'PARTIAL_STAT uses only available groups; STRONG PLAY is forbidden',
+            {'independent_confirmations': confirmations},
+        ))
+        if stat.get('stat_gate_status') == 'AGAINST':
+            blockers.append(_blocker(
+                'PARTIAL_STAT_GATE_AGAINST',
+                'Available partial-stat channels directly oppose the candidate',
+            ))
+    elif mode == 'SCORE_TIME_HISTORY':
+        no_stat_support = _v9_no_stat_support(market, canonical, history, scenario, live)
+        caps.append(_cap(
+            f"NO_STAT_SUPPORT_{no_stat_support['score']}_OF_6",
+            float(no_stat_support['cap']),
+            'NO_STAT_SUPPORT_SCORE cap',
+            no_stat_support,
+        ))
+        if no_stat_support['score'] <= 2:
+            blockers.append(_blocker(
+                'NO_STAT_SUPPORT_TOO_LOW',
+                'NO_STAT_SUPPORT_SCORE 0-2/6 cannot produce a signal',
+                no_stat_support,
+            ))
+    elif mode == 'DATA_OFF':
+        blockers.append(_blocker('DATA_OFF', 'Critical score/stage/time data are unavailable'))
+
+    # Required-history is mandatory evidence in NO_STAT and is always logged.
+    evaluation['required_history'] = deepcopy(live.get('required_history') or {})
+    if mode == 'SCORE_TIME_HISTORY' and not (live.get('required_history') or {}).get('available'):
+        blockers.append(_blocker(
+            'REQUIRED_HISTORY_UNAVAILABLE',
+            'Historical remaining-points distribution could not be calculated',
+        ))
+
+    # Keep Q4 harmonic/context reduction from the base engine conservatively.
+    context_probability = p_raw
+    if evaluation.get('q4_context', {}).get('applicable'):
+        old_raw = float(evaluation.get('p_raw') or p_raw)
+        old_final = float(evaluation.get('p_final') or old_raw)
+        old_cap = min((float(item.get('cap') or 1.0) for item in evaluation.get('caps', [])), default=1.0)
+        old_context = min(old_raw, old_cap)
+        if old_final < old_context:
+            context_probability = min(context_probability, old_final)
+
+    caps = _v9_dedup_rules(caps, cap=True)
+    blockers = _v9_dedup_rules(blockers)
+    active_cap = min((float(item['cap']) for item in caps), default=1.0)
+    p_final = max(0.0, min(1.0, context_probability, active_cap))
+    clean = bool(
+        not blockers
+        and mode == 'FULL_STAT'
+        and stat.get('stat_gate_status') == 'CONFIRMED'
+        and not caps
+        and zone is not None and zone >= 0.75
+        and float(live.get('line_edge') or 0.0) >= 3.0
+    )
+    verdict = _verdict(p_final, blockers, clean, history.get('p_hist'))
+
+    evaluation.update({
+        'weights': {
+            **(evaluation.get('weights') or {}),
+            'normalized': weights,
+            'scenario_off_renormalized': not scenario_active,
+            'formula_sum': sum(weights.values()),
+        },
+        'p_raw': p_raw,
+        'caps': caps,
+        'blockers': blockers,
+        'hard_conflict': bool(blockers),
+        'p_final': p_final,
+        'verdict': verdict,
+        'live_reversal': {**(evaluation.get('live_reversal') or {}), **reversal},
+        'no_stat_support': no_stat_support,
+        'formula_registry_version': 'v9.1-FINAL-HYBRID-PARITY',
+    })
+    evaluation.setdefault('p_trace', []).append(_trace_step(
+        'V9_FINAL_HYBRID_PARITY', True,
+        'Separate FULL_STAT/PARTIAL_STAT/NO_STAT formulas; exact history zone; state scenario; RequiredHistoryP; support score; final caps',
+        {
+            'data_mode': mode,
+            'weights': weights,
+            'scenario_active': scenario_active,
+            'required_history': live.get('required_history'),
+            'no_stat_support': no_stat_support,
+            'reversal': reversal,
+            'active_cap': active_cap,
+        },
+        p_raw, p_final,
+        [item.get('rule_id') for item in caps + blockers],
+    ))
+    return evaluation
+
+
+SuperBasketCalculator.evaluate_market = _v9_evaluate_market
+
+
+def _v9_calculate(self: SuperBasketCalculator, source: dict[str, Any], dispatch_threshold: Optional[float]=None, strict_schema: bool=False) -> dict[str, Any]:
+    output = _V9_CALCULATE_BASE(self, source, dispatch_threshold, strict_schema)
+    calculation = output.get('super_basket_calculation', {})
+    calculation['engine_version'] = '9.1.0-FINAL-HYBRID-PARITY'
+    snapshot = calculation.get('canonical_snapshot', {})
+    evaluations = calculation.get('market_evaluations') or []
+    if evaluations:
+        snapshot['data_mode'] = evaluations[0].get('data_mode')
+        snapshot['stat_channels'] = evaluations[0].get('stat_channels')
+    calculation['formula_registry'] = deepcopy(_V9_FORMULA_REGISTRY)
+    calculation['verdict_thresholds'] = {
+        'PASS': '<60% or any hard blocker',
+        'RISK': '60-74.99%',
+        'PLAY': '>=75%',
+    }
+    output['super_basket_calculation'] = calculation
+    return output
+
+
+SuperBasketCalculator.calculate = _v9_calculate
+
+
+def apply_learning_to_evaluation(evaluation: dict[str, Any], store: LearningStore, calculation: dict[str, Any], mode: str) -> dict[str, Any]:
+    item = _V9_APPLY_LEARNING_BASE(evaluation, store, calculation, mode)
+    probability = float(item.get('p_final_system', item.get('p_final') or 0.0))
+    action, status, stake = normalized_action(
+        probability, item.get('blockers', []), mode, item.get('history', {}).get('p_hist')
+    )
+    # STRONG is reserved for clean FULL_STAT only. No-stat may still be a normal
+    # PLAY at 75-79 when support score is 5-6/6, exactly as requested.
+    if status == 'STRONG PLAY':
+        clean = bool(
+            item.get('data_mode') == 'FULL_STAT'
+            and item.get('stat_comparison', {}).get('stat_gate_status') == 'CONFIRMED'
+            and not item.get('caps')
+            and not item.get('blockers')
+        )
+        if not clean:
+            status, stake = 'MAIN PLAY', '30-35% live-limit'
+    item['system_action'] = action
+    item['system_status'] = status
+    item['stake'] = stake
+    return item
+
+
+def summarize_line_evaluation(item: dict[str, Any]) -> dict[str, Any]:
+    summary = _V9_SUMMARIZE_BASE(item)
+    summary.update({
+        'data_mode': item.get('data_mode'),
+        'stat_channels': deepcopy(item.get('stat_channels') or {}),
+        'n_state': item.get('scenario', {}).get('n_state'),
+        'scenario_active': item.get('scenario', {}).get('scenario_active'),
+        'required_history_p': item.get('live', {}).get('required_history', {}).get('p_required_history'),
+        'required_history_hits_n': [
+            item.get('live', {}).get('required_history', {}).get('hits'),
+            item.get('live', {}).get('required_history', {}).get('n'),
+        ],
+        'no_stat_support_score': (item.get('no_stat_support') or {}).get('score'),
+        'no_stat_support_checks': deepcopy((item.get('no_stat_support') or {}).get('checks') or {}),
+        'projection_formula_mode': item.get('live', {}).get('projection_formula_mode'),
+        'projection_formula': item.get('live', {}).get('projection_formula'),
+        'weights': deepcopy(item.get('weights', {}).get('normalized') or {}),
+    })
+    return summary
+
+
+
+# ===== v9.1 DIRECTIONAL STAT-GATE RESOLUTION =====
+# A 3/5 rule can occasionally mark both Over and Under evidence as present
+# (for example high FTA together with high TO and low ORB).  Such a snapshot
+# is mixed evidence, not two simultaneous confirmations.  Resolve the gate
+# per candidate side before caps/blockers are applied.
+_V91_CALCULATE_STAT_GATE_BASE = calculate_stat_gate
+
+
+def calculate_stat_gate(
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+    zones_data: Optional[dict[str, Any]],
+    *,
+    project_counts_to_scope_end: bool=True,
+) -> dict[str, Any]:
+    result = _V91_CALCULATE_STAT_GATE_BASE(
+        market, canonical, zones_data,
+        project_counts_to_scope_end=project_counts_to_scope_end,
+    )
+    mode = str(result.get('data_mode') or canonical.get('data_mode') or '')
+    if mode in {'SCORE_TIME_HISTORY', 'DATA_OFF'}:
+        return result
+
+    over_count = len(set(result.get('over_positive_channels') or []))
+    under_count = len(set(result.get('under_positive_channels') or []))
+    side = str(market.get('side') or '').upper()
+    candidate_count = over_count if side == 'OVER' else under_count
+    opposite_count = under_count if side == 'OVER' else over_count
+    fake_candidate = bool(result.get('fake_over')) if side == 'OVER' else bool(result.get('fake_under'))
+
+    if fake_candidate:
+        status = 'AGAINST'
+        reason = 'FAKE_DIRECTION_PROFILE'
+    elif candidate_count >= 3 and opposite_count < 3:
+        status = 'CONFIRMED'
+        reason = 'CANDIDATE_3_OF_5_ONLY'
+    elif opposite_count >= 3 and candidate_count < 3:
+        status = 'AGAINST'
+        reason = 'OPPOSITE_3_OF_5_ONLY'
+    elif candidate_count >= 3 and opposite_count >= 3:
+        status = 'CONFLICT'
+        reason = 'BOTH_DIRECTIONS_3_OF_5_MIXED'
+    else:
+        status = 'NEUTRAL'
+        reason = 'NO_DIRECTION_REACHES_3_OF_5'
+
+    result['stat_gate_status'] = status
+    result['stat_direction_resolution'] = {
+        'candidate_side': side,
+        'candidate_confirmations': candidate_count,
+        'opposite_confirmations': opposite_count,
+        'over_confirmations': over_count,
+        'under_confirmations': under_count,
+        'fake_candidate': fake_candidate,
+        'reason': reason,
+    }
+    if mode == 'PARTIAL_STAT':
+        result['partial_independent_confirmations'] = candidate_count
+        result['partial_opposite_confirmations'] = opposite_count
+    return result
+
+
+# Publish the final version in both CLI metadata and calculation output.
+DEFAULT_CONFIG['engine_version'] = '9.1.0-FINAL-HYBRID-PARITY'
+_V9_FORMULA_REGISTRY['stat_gate_resolution'] = (
+    'Candidate CONFIRMED only when its direction has >=3 independent channels and the opposite has <3; '
+    'opposite-only => AGAINST; both >=3 => CONFLICT; neither => NEUTRAL; fake candidate => AGAINST.'
+)
+
+
+
+# ===== v10.0 CORE LIVE-PROJECTION PARITY OVERRIDES =====
+# Replaces the earlier possessions*PPP approximation with the full project CORE:
+# rho_stage -> live/pre shot-volume regression -> remaining attempts -> remaining
+# points -> tail adjustment -> PreFinal + rho*(LiveRaw-PreFinal).
+# NO_STAT keeps its own score/time/history/scenario formula.
+
+SYSTEM_VERSION = '10.0.0'
+DEFAULT_CONFIG['engine_version'] = '10.0.0-CORE-LIVE-PROJECTION'
+DEFAULT_CONFIG.setdefault('projection', {}).setdefault('core_live', {}).update({
+    'gamma_last5': 0.25,
+    'k_mean': 10.0,
+    'k_rate': 12.0,
+    'own_weight': 0.55,
+    'opponent_allowed_weight': 0.45,
+    'orb_bonus_factor': 0.70,
+    'to_drag_factor': 0.80,
+    'partial_sigma_multiplier': 1.10,
+    'no_stat_sigma_multiplier': 1.20,
+    'projection_conflict_sigma_multiplier': 1.20,
+    'match_projection_conflict_points': 15.0,
+    'team_it_projection_conflict_points': 7.0,
+})
+
+_V10_CALCULATE_BASE = SuperBasketCalculator.calculate
+_V10_EVALUATE_BASE = SuperBasketCalculator.evaluate_market
+_V10_SUMMARIZE_BASE = summarize_line_evaluation
+
+
+def _v10_scope_indices(market: dict[str, Any]) -> list[int]:
+    segment = str(market.get('segment') or 'MATCH').upper()
+    if segment == 'H1':
+        return [0, 1]
+    if segment == 'H2':
+        return [2, 3]
+    if segment.startswith('Q') and segment[1:].isdigit():
+        q = int(segment[1:])
+        return [q - 1] if 1 <= q <= 4 else []
+    return [0, 1, 2, 3]
+
+
+def _v10_scope_minutes(market: dict[str, Any], canonical: dict[str, Any], game: Optional[dict[str, Any]]=None) -> float:
+    indices = _v10_scope_indices(market)
+    q_minutes = to_number(((game or {}).get('format') or {}).get('quarter_minutes'))
+    if q_minutes is None:
+        q_minutes = float(canonical.get('quarter_minutes') or 10.0)
+    return max(1.0, len(indices) * float(q_minutes))
+
+
+def _v10_segment_stats(game: dict[str, Any], side: str, market: dict[str, Any]) -> dict[str, Optional[float]]:
+    indices = _v10_scope_indices(market)
+    metrics = ('FGA', 'FGM', '2PA', '2PM', '3PA', '3PM', 'FTA', 'FTM', 'ORB', 'DRB', 'TO', 'FOULS')
+    if indices == [0, 1, 2, 3]:
+        source = (game.get('stats') or {}).get(side) or {}
+        return {metric: to_number(source.get(metric)) for metric in metrics}
+    rows = ((game.get('quarter_stats') or {}).get(side) or [])
+    output: dict[str, Optional[float]] = {}
+    for metric in metrics:
+        values = [to_number(rows[index].get(metric)) for index in indices if index < len(rows)]
+        output[metric] = sum(float(value) for value in values) if values and all(value is not None for value in values) else None
+    return output
+
+
+def _v10_decay_weights(n: int, gamma: float=0.25) -> list[float]:
+    if n <= 0:
+        return []
+    raw = [math.exp(-gamma * index) for index in range(n)]
+    total = sum(raw)
+    return [value / total for value in raw] if total else [1.0 / n] * n
+
+
+def _v10_form_adjusted(values: list[float], *, k: float, gamma: float=0.25) -> tuple[Optional[float], dict[str, Any]]:
+    clean = [float(value) for value in values if value is not None and math.isfinite(float(value))]
+    if not clean:
+        return None, {'n': 0, 'long_mean': None, 'last5_weighted': None, 'credibility': 0.0}
+    long_mean = statistics.mean(clean)
+    last = clean[:5]
+    weights = _v10_decay_weights(len(last), gamma)
+    last5_weighted = sum(value * weight for value, weight in zip(last, weights))
+    n_eff = 1.0 / sum(weight * weight for weight in weights) if weights else 0.0
+    credibility = n_eff / (n_eff + float(k)) if n_eff > 0 else 0.0
+    adjusted = long_mean + credibility * (last5_weighted - long_mean)
+    return adjusted, {
+        'n': len(clean),
+        'long_mean': long_mean,
+        'last5_weighted': last5_weighted,
+        'last5_weights': weights,
+        'n_eff': n_eff,
+        'credibility': credibility,
+        'k': float(k),
+    }
+
+
+def _v10_row_profile(stats: dict[str, Optional[float]], duration_minutes: float) -> dict[str, Optional[float]]:
+    fga = to_number(stats.get('FGA'))
+    fgm = to_number(stats.get('FGM'))
+    two_pa = to_number(stats.get('2PA'))
+    two_pm = to_number(stats.get('2PM'))
+    three_pa = to_number(stats.get('3PA'))
+    three_pm = to_number(stats.get('3PM'))
+    fta = to_number(stats.get('FTA'))
+    ftm = to_number(stats.get('FTM'))
+    orb = to_number(stats.get('ORB'))
+    drb = to_number(stats.get('DRB'))
+    turnovers = to_number(stats.get('TO'))
+    fouls = to_number(stats.get('FOULS'))
+    if two_pa is None and fga is not None and three_pa is not None:
+        two_pa = max(0.0, fga - three_pa)
+    if two_pm is None and fgm is not None and three_pm is not None:
+        two_pm = max(0.0, fgm - three_pm)
+    return {
+        'FGApm': safe_div(fga, duration_minutes),
+        'FTApm': safe_div(fta, duration_minutes),
+        'ORBpm': safe_div(orb, duration_minutes),
+        'DRBpm': safe_div(drb, duration_minutes),
+        'TOpm': safe_div(turnovers, duration_minutes),
+        'FOULpm': safe_div(fouls, duration_minutes),
+        'Share2': safe_div(two_pa, fga),
+        'Share3': safe_div(three_pa, fga),
+        'P2': safe_div(two_pm, two_pa),
+        'P3': safe_div(three_pm, three_pa),
+        'PFT': safe_div(ftm, fta),
+        'FTr': safe_div(fta, fga),
+    }
+
+
+def _v10_history_stat_profile(
+    pool: list[dict[str, Any]],
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+    *,
+    allowed: bool=False,
+) -> dict[str, Any]:
+    cfg = DEFAULT_CONFIG['projection']['core_live']
+    rows: list[dict[str, Optional[float]]] = []
+    for game in pool:
+        perspective = str(game.get('perspective_side') or '')
+        if perspective not in {'home', 'away'}:
+            continue
+        side = ('away' if perspective == 'home' else 'home') if allowed else perspective
+        stats = _v10_segment_stats(game, side, market)
+        rows.append(_v10_row_profile(stats, _v10_scope_minutes(market, canonical, game)))
+    rate_metrics = {'Share2', 'Share3', 'P2', 'P3', 'PFT', 'FTr'}
+    adjusted: dict[str, Optional[float]] = {}
+    details: dict[str, Any] = {}
+    for metric in ('FGApm', 'FTApm', 'ORBpm', 'DRBpm', 'TOpm', 'FOULpm', 'Share2', 'Share3', 'P2', 'P3', 'PFT', 'FTr'):
+        values = [row[metric] for row in rows if row.get(metric) is not None]
+        adjusted[metric], details[metric] = _v10_form_adjusted(
+            [float(value) for value in values],
+            k=float(cfg['k_rate'] if metric in rate_metrics else cfg['k_mean']),
+            gamma=float(cfg['gamma_last5']),
+        )
+    return {'values': adjusted, 'details': details, 'n_rows': len(rows), 'allowed_mode': allowed}
+
+
+def _v10_pre_stat_team(
+    side: str,
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+) -> dict[str, Any]:
+    cfg = DEFAULT_CONFIG['projection']['core_live']
+    own_pool = canonical['history']['team_a'] if side == 'home' else canonical['history']['team_b']
+    opponent_pool = canonical['history']['team_b'] if side == 'home' else canonical['history']['team_a']
+    own = _v10_history_stat_profile(own_pool, market, canonical, allowed=False)
+    allowed = _v10_history_stat_profile(opponent_pool, market, canonical, allowed=True)
+    opponent_own = _v10_history_stat_profile(opponent_pool, market, canonical, allowed=False)
+    own_w = float(cfg['own_weight'])
+    allowed_w = float(cfg['opponent_allowed_weight'])
+
+    def blend(metric: str) -> Optional[float]:
+        a = to_number(own['values'].get(metric))
+        b = to_number(allowed['values'].get(metric))
+        available = [(a, own_w), (b, allowed_w)]
+        available = [(value, weight) for value, weight in available if value is not None]
+        if not available:
+            return None
+        denominator = sum(weight for _, weight in available)
+        return sum(float(value) * weight for value, weight in available) / denominator
+
+    pre = {metric: blend(metric) for metric in ('FGApm', 'FTApm', 'ORBpm', 'DRBpm', 'TOpm', 'FOULpm', 'Share2', 'Share3', 'P2', 'P3', 'PFT', 'FTr')}
+    if pre['Share2'] is not None and pre['Share3'] is not None:
+        total_share = pre['Share2'] + pre['Share3']
+        if total_share > 0:
+            pre['Share2'] /= total_share
+            pre['Share3'] /= total_share
+    duration = _v10_scope_minutes(market, canonical)
+    pre_fga = pre['FGApm'] * duration if pre['FGApm'] is not None else None
+    pre_fta = pre['FTApm'] * duration if pre['FTApm'] is not None else None
+    pre_2pa = pre_fga * pre['Share2'] if pre_fga is not None and pre['Share2'] is not None else None
+    pre_3pa = pre_fga * pre['Share3'] if pre_fga is not None and pre['Share3'] is not None else None
+    shot_points = (
+        2.0 * pre_2pa * pre['P2'] + 3.0 * pre_3pa * pre['P3']
+        if None not in (pre_2pa, pre_3pa, pre['P2'], pre['P3']) else None
+    )
+    ft_points = pre_fta * pre['PFT'] if pre_fta is not None and pre['PFT'] is not None else None
+
+    pre_orb = pre['ORBpm'] * duration if pre['ORBpm'] is not None else None
+    pre_to = pre['TOpm'] * duration if pre['TOpm'] is not None else None
+    opp_drb_allowed = allowed['values'].get('DRBpm')
+    opp_drb_allowed = float(opp_drb_allowed) * duration if opp_drb_allowed is not None else None
+    own_to_baseline = own['values'].get('TOpm')
+    own_to_baseline = float(own_to_baseline) * duration if own_to_baseline is not None else None
+    orb_bonus = (
+        max(0.0, pre_orb - opp_drb_allowed) * float(cfg['orb_bonus_factor'])
+        if pre_orb is not None and opp_drb_allowed is not None else 0.0
+    )
+    to_drag = (
+        max(0.0, pre_to - own_to_baseline) * float(cfg['to_drag_factor'])
+        if pre_to is not None and own_to_baseline is not None else 0.0
+    )
+    opp_fouls = opponent_own['values'].get('FOULpm')
+    own_fouls = own['values'].get('FOULpm')
+    foul_pressure = 0.0
+    if opp_fouls is not None and pre['FTr'] is not None and pre['PFT'] is not None:
+        baseline_candidates = [float(value) for value in (opp_fouls, own_fouls) if value is not None]
+        foul_baseline = statistics.mean(baseline_candidates) if baseline_candidates else float(opp_fouls)
+        foul_pressure = max(0.0, (float(opp_fouls) - foul_baseline) * duration) * pre['FTr'] * pre['PFT']
+
+    pre_final = None
+    if shot_points is not None and ft_points is not None:
+        pre_final = shot_points + ft_points + orb_bonus - to_drag + foul_pressure
+    return {
+        'side': side,
+        'duration_minutes': duration,
+        'own_profile': own,
+        'opponent_allowed_profile': allowed,
+        'opponent_own_profile': opponent_own,
+        'pre': pre,
+        'Pre_FGA': pre_fga,
+        'Pre_FTA': pre_fta,
+        'Pre_2PA': pre_2pa,
+        'Pre_3PA': pre_3pa,
+        'ShotPts': shot_points,
+        'FTPts': ft_points,
+        'ORB_bonus': orb_bonus,
+        'TO_drag': to_drag,
+        'FoulPressureAdj': foul_pressure,
+        'HCA': None,
+        'RestAdj': None,
+        'PreFinal': pre_final,
+        'formula': 'PreFinal = ShotPts + FTPts + ORB_bonus - TO_drag + FoulPressureAdj; unavailable context terms stay OFF',
+    }
+
+
+def _v10_stage_trust(canonical: dict[str, Any]) -> tuple[float, float, float]:
+    minutes_played = max(0.0, float(canonical.get('elapsed_game_seconds') or 0.0) / 60.0)
+    stage = str(canonical.get('stage') or '')
+    if stage == 'Q4_CONFIRMATION':
+        k = 6.0
+    elif stage in {'HT', 'AFTER_3Q'} or minutes_played >= 20.0:
+        k = 10.0
+    else:
+        k = 18.0
+    rho = minutes_played / (minutes_played + k) if minutes_played > 0 else 0.0
+    return rho, k, minutes_played
+
+
+def _v10_live_stat_team(
+    side: str,
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+    pre_profile: dict[str, Any],
+    rho: float,
+    remaining_minutes: float,
+) -> dict[str, Any]:
+    cfg = DEFAULT_CONFIG['projection']['core_live']
+    stats = canonical.get('live_stats', {}).get(side, {}) or {}
+    elapsed_minutes = max(0.0, float(canonical.get('elapsed_game_seconds') or 0.0) / 60.0)
+    raw = _v10_row_profile({metric: to_number(stats.get(metric)) for metric in ('FGA','FGM','2PA','2PM','3PA','3PM','FTA','FTM','ORB','DRB','TO','FOULS')}, max(elapsed_minutes, 1e-9))
+    pre = pre_profile['pre']
+
+    def reg(metric: str) -> tuple[Optional[float], float]:
+        live_value = to_number(raw.get(metric))
+        pre_value = to_number(pre.get(metric))
+        if live_value is None and pre_value is None:
+            return None, 0.0
+        if live_value is None:
+            return pre_value, 0.0
+        if pre_value is None:
+            return live_value, 1.0
+        return rho * live_value + (1.0 - rho) * pre_value, rho
+
+    adjusted: dict[str, Optional[float]] = {}
+    metric_rho: dict[str, float] = {}
+    for metric in ('FGApm','FTApm','ORBpm','TOpm','Share2','Share3','P2','P3','PFT'):
+        adjusted[metric], metric_rho[metric] = reg(metric)
+    if adjusted['Share2'] is not None and adjusted['Share3'] is not None:
+        total_share = adjusted['Share2'] + adjusted['Share3']
+        if total_share > 0:
+            adjusted['Share2'] /= total_share
+            adjusted['Share3'] /= total_share
+
+    rem_fga = adjusted['FGApm'] * remaining_minutes if adjusted['FGApm'] is not None else None
+    rem_fta = adjusted['FTApm'] * remaining_minutes if adjusted['FTApm'] is not None else None
+    rem_2pa = rem_fga * adjusted['Share2'] if rem_fga is not None and adjusted['Share2'] is not None else None
+    rem_3pa = rem_fga * adjusted['Share3'] if rem_fga is not None and adjusted['Share3'] is not None else None
+    rem_pts = (
+        2.0 * rem_2pa * adjusted['P2']
+        + 3.0 * rem_3pa * adjusted['P3']
+        + rem_fta * adjusted['PFT']
+        if None not in (rem_2pa, rem_3pa, rem_fta, adjusted['P2'], adjusted['P3'], adjusted['PFT']) else None
+    )
+
+    pre_orb_pm = to_number(pre.get('ORBpm'))
+    pre_to_pm = to_number(pre.get('TOpm'))
+    orb_bonus_live = (
+        max(0.0, float(adjusted['ORBpm']) - float(pre_orb_pm)) * remaining_minutes * float(cfg['orb_bonus_factor'])
+        if adjusted['ORBpm'] is not None and pre_orb_pm is not None else 0.0
+    )
+    to_drag_live = (
+        max(0.0, float(adjusted['TOpm']) - float(pre_to_pm)) * remaining_minutes * float(cfg['to_drag_factor'])
+        if adjusted['TOpm'] is not None and pre_to_pm is not None else 0.0
+    )
+    # FTApm regression already carries the foul path. Extra tail terms are OFF
+    # unless a source supplies an explicit coefficient; this avoids double count.
+    foul_tail_adj = 0.0
+    endgame_ft_adj = 0.0
+    tail_adj = orb_bonus_live - to_drag_live + foul_tail_adj + endgame_ft_adj
+
+    team_name = canonical['home_team'] if side == 'home' else canonical['away_team']
+    current_team_points = _current_team_score(canonical, team_name, str(market.get('segment') or 'MATCH'))
+    live_raw = current_team_points + rem_pts + tail_adj if rem_pts is not None else None
+    pre_final = to_number(pre_profile.get('PreFinal'))
+    live_projection_stat = (
+        pre_final + rho * (live_raw - pre_final)
+        if pre_final is not None and live_raw is not None else live_raw if live_raw is not None else pre_final
+    )
+    return {
+        'side': side,
+        'team': team_name,
+        'rho_stage': rho,
+        'live_raw_metrics': raw,
+        'pre_metrics': pre,
+        'adjusted_metrics': adjusted,
+        'metric_rho': metric_rho,
+        'RemFGA': rem_fga,
+        'RemFTA': rem_fta,
+        'Rem2PA': rem_2pa,
+        'Rem3PA': rem_3pa,
+        'RemPts': rem_pts,
+        'ORB_bonus_live': orb_bonus_live,
+        'TO_drag_live': to_drag_live,
+        'FoulTailAdj': foul_tail_adj,
+        'EndgameFTAdj': endgame_ft_adj,
+        'TailAdj': tail_adj,
+        'CurrentTeamPoints': current_team_points,
+        'LiveRaw_Team': live_raw,
+        'PreFinal_Team': pre_final,
+        'LiveProjection_stat_Team': live_projection_stat,
+        'tail_policy': 'Only residual ORB/TO anomalies are applied; FTA path is already in RemFTA; unavailable explicit tail coefficients stay OFF.',
+    }
+
+
+def _v10_historical_remaining_projection(
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+) -> tuple[Optional[float], dict[str, Any]]:
+    indices = _v9_segment_indices(market)
+    elapsed = float(canonical.get('elapsed_game_seconds') or 0.0)
+    q_seconds = float(canonical.get('quarter_seconds') or 600.0)
+    clock = _segment_clock(market, canonical)
+    current = float(clock.get('current_points') or 0.0)
+    market_type = str(market.get('market_type') or '')
+    if market_type.startswith('TEAM_IT') or market_type == 'CURRENT_QUARTER_TEAM_IT':
+        team = str(market.get('team') or '')
+        own_pool = canonical['history']['team_a'] if team == canonical['home_team'] else canonical['history']['team_b']
+        opponent_pool = canonical['history']['team_b'] if team == canonical['home_team'] else canonical['history']['team_a']
+        own_values: list[float] = []
+        for game in own_pool:
+            remaining = _v9_remaining_from_values(
+                [to_number(value) for value in (game.get('team_quarters') or [])[:4]],
+                indices, elapsed, q_seconds,
+            )
+            if remaining is not None:
+                own_values.append(float(remaining))
+        allowed_values: list[float] = []
+        for game in opponent_pool:
+            remaining = _v9_remaining_from_values(
+                [to_number(value) for value in (game.get('opponent_quarters') or [])[:4]],
+                indices, elapsed, q_seconds,
+            )
+            if remaining is not None:
+                allowed_values.append(float(remaining))
+        h2h_values: list[float] = []
+        for game in canonical['history'].get('h2h', []):
+            quarters = _v9_game_team_quarters(game, team)
+            remaining = _v9_remaining_from_values(quarters, indices, elapsed, q_seconds) if quarters else None
+            if remaining is not None:
+                h2h_values.append(float(remaining))
+        medians = {
+            'own': statistics.median(own_values) if own_values else None,
+            'opponent_allowed': statistics.median(allowed_values) if allowed_values else None,
+            'h2h': statistics.median(h2h_values) if h2h_values else None,
+        }
+        remaining, weights = _weighted_available(medians, {'own': 0.50, 'opponent_allowed': 0.35, 'h2h': 0.15})
+        return (
+            current + remaining if remaining is not None else None,
+            {'current': current, 'remaining_medians': medians, 'weights': weights, 'method': 'Team IT historical median remaining 50/35/15'},
+        )
+    values: list[float] = []
+    for pool_name in ('team_a', 'team_b'):
+        for game in canonical['history'].get(pool_name, []):
+            remaining = _v9_remaining_from_values(
+                _v9_game_total_quarters(game), indices, elapsed, q_seconds,
+            )
+            if remaining is not None:
+                values.append(float(remaining))
+    median_remaining = statistics.median(values) if values else None
+    return (
+        current + median_remaining if median_remaining is not None else None,
+        {'current': current, 'median_remaining': median_remaining, 'n': len(values), 'method': 'Pooled historical median remaining'},
+    )
+
+
+
+def _v10_weighted_median(values: list[tuple[float, float]]) -> Optional[float]:
+    clean = sorted((float(value), max(0.0, float(weight))) for value, weight in values if value is not None and weight is not None)
+    if not clean:
+        return None
+    total = sum(weight for _, weight in clean)
+    if total <= 0:
+        return statistics.median(value for value, _ in clean)
+    threshold = total / 2.0
+    running = 0.0
+    for value, weight in clean:
+        running += weight
+        if running >= threshold:
+            return value
+    return clean[-1][0]
+
+
+def _v10_scenario_projection_center(scenario: dict[str, Any]) -> tuple[Optional[float], dict[str, Any]]:
+    """Return a candidate-side-independent outcome center for the current state.
+
+    Probabilities in P_scenario are side-specific; the projection of final points must not be.
+    Therefore the center uses only state-pattern outcome medians and weights that do not
+    depend on whether the candidate is OVER or UNDER.
+    """
+    projection_groups = {
+        'quarter_result', 'score_state', 'margin_state', 'total_state',
+        'sequence_state', 'time_state',
+    }
+    selected: dict[tuple[str, str], dict[str, Any]] = {}
+    for item in scenario.get('patterns_found', []) or []:
+        group = str(item.get('pattern_group') or '')
+        if group not in projection_groups:
+            continue
+        median = to_number(item.get('outcome_median'))
+        n = int(item.get('matched_games') or 0)
+        if median is None or n < 3:
+            continue
+        team = str(item.get('team') or '')
+        specificity = max(0.10, float(item.get('specificity') or 0.50))
+        distance = max(0.10, float(item.get('distance_match_quality') or 1.00))
+        weight = n * specificity * distance
+        key = (team, group)
+        current = selected.get(key)
+        if current is None or weight > float(current['weight']):
+            selected[key] = {
+                'team': team,
+                'group': group,
+                'outcome_median': float(median),
+                'matched_games': n,
+                'weight': weight,
+                'pattern_id': item.get('pattern_id'),
+            }
+    weighted = [(row['outcome_median'], row['weight']) for row in selected.values()]
+    center = _v10_weighted_median(weighted)
+    return center, {
+        'method': 'candidate-independent weighted median of matched state outcome medians',
+        'selected_patterns': list(selected.values()),
+        'n_selected': len(selected),
+        'excluded_groups': sorted(set(_V9_STATE_GROUPS) - projection_groups),
+    }
+
+
+def _v10_candidate_independent_baselines(
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+    scenario: dict[str, Any],
+) -> dict[str, Any]:
+    clock = _segment_clock(market, canonical)
+    current = float(clock['current_points'])
+    simple = current / clock['elapsed_seconds'] * clock['full_seconds'] if clock['elapsed_seconds'] > 0 else None
+    history_values = _history_values(market, canonical)
+    historical_total_median = statistics.median(history_values) if history_values else None
+    historical_rate = historical_total_median / clock['full_seconds'] if historical_total_median is not None and clock['full_seconds'] else None
+    previous_rate = _previous_quarter_pace(market, canonical, clock)
+    current_rate = current / clock['elapsed_seconds'] if clock['elapsed_seconds'] > 0 else None
+    rates = [('current', current_rate, 0.45), ('previous', previous_rate, 0.25), ('history', historical_rate, 0.30)]
+    available = [(name, value, weight) for name, value, weight in rates if value is not None]
+    denominator = sum(weight for _, _, weight in available)
+    regressed_rate = sum(float(value) * weight for _, value, weight in available) / denominator if denominator else None
+    projection_regressed = current + regressed_rate * clock['remaining_seconds'] if regressed_rate is not None else None
+
+    projection_history, history_remaining_details = _v10_historical_remaining_projection(market, canonical)
+    scenario_active = bool(scenario.get('scenario_active'))
+    scenario_center, scenario_center_details = _v10_scenario_projection_center(scenario) if scenario_active else (None, {'method': 'OFF'})
+    projection_scenario = scenario_center if scenario_center is not None and scenario_center >= current else None
+
+    control_candidates = [value for value in (projection_history, projection_scenario, projection_regressed) if value is not None]
+    projection_control = statistics.median(control_candidates) if control_candidates else simple
+    anchor_candidates = [value for value in (projection_history, projection_scenario) if value is not None]
+    history_scenario_anchor = statistics.median(anchor_candidates) if anchor_candidates else projection_history
+    return {
+        'clock': clock,
+        'projection_simple': simple,
+        'projection_regressed': projection_regressed,
+        'projection_segment': projection_regressed,
+        'projection_history': projection_history,
+        'projection_scenario': projection_scenario,
+        'projection_control': projection_control,
+        'projection_history_scenario_anchor': history_scenario_anchor,
+        'scenario_active': scenario_active,
+        'scenario_projection_method': 'CANDIDATE_INDEPENDENT_MATCHED_STATE_CENTER' if projection_scenario is not None else 'OFF',
+        'scenario_projection_details': scenario_center_details,
+        'regressed_rate_details': {
+            'rates': {name: value for name, value, _ in rates},
+            'normalized_weights': {name: weight / denominator for name, value, weight in available} if denominator else {},
+        },
+        'history_remaining_details': history_remaining_details,
+    }
+
+
+def calculate_live_projection(
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+    history: dict[str, Any],
+    scenario: dict[str, Any],
+    config: dict[str, Any],
+    stat: Optional[dict[str, Any]]=None,
+) -> dict[str, Any]:
+    mode = str(canonical.get('data_mode') or canonical.get('data_gate', {}).get('data_mode') or 'DATA_OFF')
+    base = _v10_candidate_independent_baselines(market, canonical, scenario)
+    clock = base['clock']
+    line = float(market['line'])
+    side = str(market['side']).upper()
+    sigma_base = _stage_sigma(market['market_type'], canonical['stage'], config)
+    projection_stat = None
+    core_stat: dict[str, Any] = {}
+    projection_conflict = False
+    conflict_threshold = None
+    no_stat_components: dict[str, Optional[float]] = {}
+    no_stat_weights: dict[str, float] = {}
+
+    if mode in {'FULL_STAT', 'PARTIAL_STAT'}:
+        rho, k_stage, minutes_played = _v10_stage_trust(canonical)
+        remaining_minutes = float(clock['remaining_seconds']) / 60.0
+        pre_home = _v10_pre_stat_team('home', market, canonical)
+        pre_away = _v10_pre_stat_team('away', market, canonical)
+        live_home = _v10_live_stat_team('home', market, canonical, pre_home, rho, remaining_minutes)
+        live_away = _v10_live_stat_team('away', market, canonical, pre_away, rho, remaining_minutes)
+        if market.get('team'):
+            selected = live_home if market['team'] == canonical['home_team'] else live_away
+            projection_stat = to_number(selected.get('LiveProjection_stat_Team'))
+        else:
+            a = to_number(live_home.get('LiveProjection_stat_Team'))
+            b = to_number(live_away.get('LiveProjection_stat_Team'))
+            projection_stat = a + b if a is not None and b is not None else None
+        core_stat = {
+            'rho_stage': rho,
+            'K_stage': k_stage,
+            'minutes_played': minutes_played,
+            'minutes_left_scope': remaining_minutes,
+            'pre_home': pre_home,
+            'pre_away': pre_away,
+            'live_home': live_home,
+            'live_away': live_away,
+            'LiveProjection_stat_Total': (
+                to_number(live_home.get('LiveProjection_stat_Team')) + to_number(live_away.get('LiveProjection_stat_Team'))
+                if to_number(live_home.get('LiveProjection_stat_Team')) is not None
+                and to_number(live_away.get('LiveProjection_stat_Team')) is not None else None
+            ),
+            'LiveProjection_stat_Margin': (
+                to_number(live_home.get('LiveProjection_stat_Team')) - to_number(live_away.get('LiveProjection_stat_Team'))
+                if to_number(live_home.get('LiveProjection_stat_Team')) is not None
+                and to_number(live_away.get('LiveProjection_stat_Team')) is not None else None
+            ),
+            'formula': 'PreFinal_Team + rho_stage*(LiveRaw_Team-PreFinal_Team)',
+        }
+        conservative_components = [
+            value for value in (
+                projection_stat,
+                base.get('projection_control'),
+                base.get('projection_history_scenario_anchor'),
+            ) if value is not None
+        ]
+        projection_used = statistics.median(conservative_components) if conservative_components else line
+        conflict_threshold = (
+            float(DEFAULT_CONFIG['projection']['core_live']['team_it_projection_conflict_points'])
+            if market.get('team') else
+            float(DEFAULT_CONFIG['projection']['core_live']['match_projection_conflict_points'])
+        )
+        control = to_number(base.get('projection_control'))
+        if projection_stat is not None and control is not None:
+            projection_conflict = abs(projection_stat - control) > conflict_threshold
+        sigma = sigma_base * (
+            float(DEFAULT_CONFIG['projection']['core_live']['partial_sigma_multiplier'])
+            if mode == 'PARTIAL_STAT' else 1.0
+        )
+        if projection_conflict and (stat or {}).get('stat_gate_status') != 'CONFIRMED':
+            sigma *= float(DEFAULT_CONFIG['projection']['core_live']['projection_conflict_sigma_multiplier'])
+        formula_mode = 'FULL_STAT_CORE_SHOT_VOLUME' if mode == 'FULL_STAT' else 'PARTIAL_STAT_CORE_AVAILABLE_FIELDS'
+        formula_text = 'median(LiveProjection_stat, Projection_control, HistoryScenarioAnchor); simple pace diagnostic only'
+    elif mode == 'SCORE_TIME_HISTORY':
+        regressed = to_number(base.get('projection_regressed'))
+        history_projection = to_number(base.get('projection_history'))
+        scenario_projection = to_number(base.get('projection_scenario')) if base.get('scenario_active') else None
+        n_state = int(scenario.get('n_state') or 0)
+        if n_state >= 5 and scenario_projection is not None:
+            configured = {'regressed': 0.35, 'history': 0.35, 'scenario': 0.30}
+            formula_text = '0.35*Projection_regressed + 0.35*Projection_history + 0.30*Projection_scenario'
+        elif 3 <= n_state <= 4 and scenario_projection is not None:
+            configured = {'regressed': 0.40, 'history': 0.45, 'scenario': 0.15}
+            formula_text = '0.40*Projection_regressed + 0.45*Projection_history + 0.15*Projection_scenario'
+        else:
+            configured = {'regressed': 0.50, 'history': 0.50}
+            formula_text = '0.50*Projection_regressed + 0.50*Projection_history'
+        values = {'regressed': regressed, 'history': history_projection, 'scenario': scenario_projection}
+        no_stat_components = dict(values)
+        no_stat_weights = dict(configured)
+        available = {key: value for key, value in values.items() if key in configured and value is not None}
+        denominator = sum(configured[key] for key in available)
+        projection_used = (
+            sum(float(available[key]) * configured[key] for key in available) / denominator
+            if denominator > 0 else line
+        )
+        sigma = sigma_base * float(DEFAULT_CONFIG['projection']['core_live']['no_stat_sigma_multiplier'])
+        formula_mode = 'SCORE_TIME_HISTORY_NO_STAT'
+        core_stat = {'status': 'OFF_NO_STATS', 'unknown_fields_not_zero': True}
+    else:
+        projection_used = line
+        sigma = sigma_base
+        formula_mode = 'DATA_OFF'
+        formula_text = 'DATA_OFF'
+        core_stat = {'status': 'OFF_DATA'}
+
+    line_edge_over = projection_used - line
+    line_edge_under = line - projection_used
+    line_edge = line_edge_over if side == 'OVER' else line_edge_under
+    z_score = line_edge / sigma if sigma > 0 else 0.0
+    p_live = normal_cdf(z_score) if sigma > 0 else 0.50
+    parser_components = _parser_projection_components(market, canonical, clock)
+    components = {
+        'projection_simple': {'value': base.get('projection_simple'), 'included': False, 'role': 'diagnostic_only'},
+        'projection_regressed': {'value': base.get('projection_regressed'), 'included': mode == 'SCORE_TIME_HISTORY'},
+        'projection_history': {'value': base.get('projection_history'), 'included': True},
+        'projection_scenario': {'value': base.get('projection_scenario'), 'included': bool(base.get('scenario_active'))},
+        'projection_control': {'value': base.get('projection_control'), 'included': mode in {'FULL_STAT', 'PARTIAL_STAT'}},
+        'projection_history_scenario_anchor': {'value': base.get('projection_history_scenario_anchor'), 'included': mode in {'FULL_STAT', 'PARTIAL_STAT'}},
+        'projection_stat_adjusted': {'value': projection_stat, 'included': mode in {'FULL_STAT', 'PARTIAL_STAT'}},
+    }
+    for key, value in parser_components.items():
+        components[key] = {**value, 'included': False, 'role': 'audit_only_not_used_in_projection'}
+    return {
+        'clock': canonical.get('clock'),
+        'elapsed_seconds': clock['elapsed_seconds'],
+        'remaining_seconds': clock['remaining_seconds'],
+        'elapsed_game_seconds': canonical['elapsed_game_seconds'],
+        'remaining_game_seconds': canonical['remaining_game_seconds'],
+        'current_points': clock['current_points'],
+        'data_mode': mode,
+        'components': components,
+        'projection_simple': base.get('projection_simple'),
+        'projection_regressed': base.get('projection_regressed'),
+        'projection_segment': base.get('projection_segment'),
+        'projection_model_live': base.get('projection_regressed'),
+        'projection_history': base.get('projection_history'),
+        'projection_scenario': base.get('projection_scenario'),
+        'scenario_projection_method': base.get('scenario_projection_method'),
+        'projection_stat_adjusted': projection_stat,
+        'projection_control': base.get('projection_control'),
+        'projection_history_scenario_anchor': base.get('projection_history_scenario_anchor'),
+        'projection_used': projection_used,
+        'Projection_used': projection_used,
+        'line': line,
+        'line_edge': line_edge,
+        'line_edge_over': line_edge_over,
+        'line_edge_under': line_edge_under,
+        'sigma_base': sigma_base,
+        'sigma': sigma,
+        'z_score': z_score,
+        'p_live': p_live,
+        'required_history': _v9_required_history(market, canonical),
+        'projection_formula_mode': formula_mode,
+        'projection_formula': formula_text,
+        'no_stat_components': no_stat_components,
+        'no_stat_configured_weights': no_stat_weights,
+        'projection_conflict': projection_conflict,
+        'projection_conflict_threshold': conflict_threshold,
+        'stat_projection_details': {
+            'core_stat_projection': core_stat,
+            'baseline_details': base,
+            'parser_projection_audit': parser_components,
+        },
+        'core_live_formula_version': 'v3.4_CORE_FULL_WORK_FORMULAS',
+    }
+
+
+def _v10_evaluate_market(self: SuperBasketCalculator, market: dict[str, Any], canonical: dict[str, Any]) -> dict[str, Any]:
+    item = _V10_EVALUATE_BASE(self, market, canonical)
+    live = item.get('live') or {}
+    if live.get('projection_conflict') and item.get('stat_comparison', {}).get('stat_gate_status') == 'CONFIRMED':
+        cap = 0.79
+        if not any(rule.get('rule_id') == 'CORE_PROJECTION_DIVERGENCE_CAP' for rule in item.get('caps', [])):
+            item.setdefault('caps', []).append(_cap(
+                'CORE_PROJECTION_DIVERGENCE_CAP',
+                cap,
+                'Stat and checkpoint projections diverge beyond the project threshold; conservative P_live is required',
+                {
+                    'threshold': live.get('projection_conflict_threshold'),
+                    'projection_stat': live.get('projection_stat_adjusted'),
+                    'projection_control': live.get('projection_control'),
+                },
+            ))
+        item['p_final'] = min(float(item.get('p_final') or 0.0), cap)
+        clean = bool(
+            not item.get('blockers')
+            and item.get('data_mode') == 'FULL_STAT'
+            and item.get('stat_comparison', {}).get('stat_gate_status') == 'CONFIRMED'
+            and not item.get('caps')
+        )
+        item['verdict'] = _verdict(
+            float(item['p_final']), item.get('blockers', []), clean, item.get('history', {}).get('p_hist')
+        )
+    item['core_live_projection_version'] = '10.0.0'
+    return item
+
+
+SuperBasketCalculator.evaluate_market = _v10_evaluate_market
+
+
+_V10_FORMULA_REGISTRY = deepcopy(_V9_FORMULA_REGISTRY)
+_V10_FORMULA_REGISTRY.update({
+    'core_stat_stage_trust': 'rho_stage = minutes_played/(minutes_played+K_stage), K=18 early/1H, 10 HT/late Q3, 6 Q4.',
+    'core_stat_live_regression': (
+        'FGApm/FTApm/ORBpm/TOpm, Share2/Share3 and 2P/3P/FT percentages are blended: '
+        'adjusted = rho*live + (1-rho)*pre.'
+    ),
+    'core_stat_remaining': (
+        'RemFGA=FGApm_adj*MinutesLeft; RemFTA=FTApm_adj*MinutesLeft; '
+        'Rem2PA=RemFGA*Share2_adj; Rem3PA=RemFGA*Share3_adj; '
+        'RemPts=2*Rem2PA*P2_adj+3*Rem3PA*P3_adj+RemFTA*PFT_adj.'
+    ),
+    'core_stat_final': (
+        'LiveRaw_Team=CurrentTeamPoints+RemPts+TailAdj; '
+        'LiveProjection_stat_Team=PreFinal_Team+rho_stage*(LiveRaw_Team-PreFinal_Team).'
+    ),
+    'core_projection_used': (
+        'FULL/PARTIAL: median(LiveProjection_stat, Projection_control, HistoryScenarioAnchor). '
+        'Simple pace and parser projections are audit-only. NO_STAT uses its separate 35/35/30, 40/45/15 or 50/50 formula.'
+    ),
+})
+
+
+def _v10_calculate(self: SuperBasketCalculator, source: dict[str, Any], dispatch_threshold: Optional[float]=None, strict_schema: bool=False) -> dict[str, Any]:
+    output = _V10_CALCULATE_BASE(self, source, dispatch_threshold, strict_schema)
+    calculation = output.get('super_basket_calculation', {})
+    calculation['engine_version'] = '10.0.0-CORE-LIVE-PROJECTION'
+    calculation['formula_registry'] = deepcopy(_V10_FORMULA_REGISTRY)
+    calculation['live_projection_parity'] = {
+        'FULL_STAT': 'FULL CORE shot/volume formula',
+        'PARTIAL_STAT': 'same formula with missing live values regressed to pre baseline and partial caps',
+        'NO_STAT': 'score/time/history/scenario formula with sigma*1.20',
+        'candidate_independent_projection': True,
+        'simple_pace_used_for_signal': False,
+        'parser_projection_used_for_signal': False,
+    }
+    output['super_basket_calculation'] = calculation
+    return output
+
+
+SuperBasketCalculator.calculate = _v10_calculate
+
+
+def summarize_line_evaluation(item: dict[str, Any]) -> dict[str, Any]:
+    summary = _V10_SUMMARIZE_BASE(item)
+    live = item.get('live', {})
+    core = (live.get('stat_projection_details') or {}).get('core_stat_projection') or {}
+    summary.update({
+        'core_live_formula_version': live.get('core_live_formula_version'),
+        'rho_stage': core.get('rho_stage'),
+        'K_stage': core.get('K_stage'),
+        'projection_history_scenario_anchor': live.get('projection_history_scenario_anchor'),
+        'projection_stat_adjusted': live.get('projection_stat_adjusted'),
+        'projection_control': live.get('projection_control'),
+        'projection_regressed': live.get('projection_regressed'),
+        'projection_history': live.get('projection_history'),
+        'projection_scenario': live.get('projection_scenario'),
+        'no_stat_components': live.get('no_stat_components'),
+        'no_stat_configured_weights': live.get('no_stat_configured_weights'),
+        'projection_conflict': live.get('projection_conflict'),
+        'projection_conflict_threshold': live.get('projection_conflict_threshold'),
+        'simple_pace_included': bool((live.get('components') or {}).get('projection_simple', {}).get('included')),
+        'parser_projection_included': any(
+            bool(value.get('included'))
+            for key, value in (live.get('components') or {}).items()
+            if key.startswith('projection_parser_')
+        ),
+    })
+    return summary
+
+
+
+# ===== v10.1 FRESH-HISTORY + CONFLICT-SAFE SIGNAL POLICY =====
+# User policy:
+# - PLAY from 75%; RISK from 65%; below 65% PASS.
+# - normal signal requires raw exact-line history zone >=75% and live edge >=3 points.
+# - serious global conflicts are hard PASS, never RISK.
+# - history older than 30 days is not discarded; its probability and projection influence
+#   decay smoothly toward neutral/current-live values.
+
+_V101_ADAPT_BASE = adapt_match
+_V101_HISTORY_BASE = calculate_history
+_V101_SCENARIO_BASE = calculate_scenario
+_V101_LIVE_BASE = calculate_live_projection
+_V101_EVALUATE_BASE = SuperBasketCalculator.evaluate_market
+_V101_CALCULATE_BASE = SuperBasketCalculator.calculate
+_V101_SUMMARIZE_BASE = summarize_line_evaluation
+
+DEFAULT_CONFIG['engine_version'] = '10.1.0-FRESH-HISTORY-CONFLICT-SAFE'
+DEFAULT_CONFIG['dispatch_threshold'] = 0.65
+DEFAULT_CONFIG.setdefault('signal_gates', {}).update({
+    'history_zone_min': 0.75,
+    'live_edge_min_points': 3.0,
+    'risk_min': 0.65,
+    'play_min': 0.75,
+    'serious_conflicts_hard_block': True,
+})
+DEFAULT_CONFIG.setdefault('history_freshness', {}).update({
+    'grace_days': 30.0,
+    'half_life_days': 90.0,
+    'minimum_factor': 0.05,
+    'live_sigma_max_extra': 0.25,
+})
+
+
+def _v101_datetime_from_source(source: dict[str, Any]) -> Optional[datetime]:
+    candidates = [
+        (source.get('meta') or {}).get('generated_at'),
+        source.get('generated_at'),
+        source.get('snapshot_at'),
+        (source.get('match') or {}).get('date'),
+        ((source.get('bookmaker_lines') or {}).get('_source_meta') or {}).get('fetchedAt'),
+        (source.get('_source_meta') or {}).get('fetchedAt'),
+    ]
+    for value in candidates:
+        parsed = _parse_history_date(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _v101_parse_date(value: Any) -> Optional[datetime]:
+    parsed = _parse_history_date(value)
+    if parsed is not None:
+        return parsed
+    if value in (None, ''):
+        return None
+    text = str(value).strip()
+    for fmt in ('%d.%m.%Y %H:%M:%S', '%d-%m-%Y %H:%M:%S'):
+        try:
+            return datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
+def _v101_latest_history_date(games: list[dict[str, Any]]) -> Optional[datetime]:
+    dates = [_v101_parse_date(game.get('date')) for game in games or []]
+    valid = [value for value in dates if value is not None]
+    return max(valid) if valid else None
+
+
+def _v101_freshness_factor(gap_days: Optional[float], config: dict[str, Any]) -> float:
+    cfg = config.get('history_freshness', {})
+    if gap_days is None:
+        return 1.0
+    grace = max(0.0, float(cfg.get('grace_days', 30.0)))
+    half_life = max(1.0, float(cfg.get('half_life_days', 90.0)))
+    floor = max(0.0, min(1.0, float(cfg.get('minimum_factor', 0.05))))
+    if gap_days <= grace:
+        return 1.0
+    factor = math.exp(-math.log(2.0) * (float(gap_days) - grace) / half_life)
+    return max(floor, min(1.0, factor))
+
+
+def _v101_history_freshness(canonical: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    snapshot_dt = canonical.get('snapshot_datetime')
+    pools = canonical.get('history') or {}
+    latest_a = _v101_latest_history_date(pools.get('team_a') or [])
+    latest_b = _v101_latest_history_date(pools.get('team_b') or [])
+    latest_h2h = _v101_latest_history_date(pools.get('h2h') or [])
+
+    def gap(latest: Optional[datetime]) -> Optional[float]:
+        if snapshot_dt is None or latest is None:
+            return None
+        return max(0.0, (snapshot_dt - latest).total_seconds() / 86400.0)
+
+    gap_a, gap_b, gap_h2h = gap(latest_a), gap(latest_b), gap(latest_h2h)
+    factor_a = _v101_freshness_factor(gap_a, config)
+    factor_b = _v101_freshness_factor(gap_b, config)
+    factor_h2h = _v101_freshness_factor(gap_h2h, config)
+    known_team_factors = [
+        factor for factor, latest in ((factor_a, latest_a), (factor_b, latest_b))
+        if latest is not None
+    ]
+    if len(known_team_factors) == 2:
+        match_factor = math.sqrt(known_team_factors[0] * known_team_factors[1])
+    elif known_team_factors:
+        match_factor = known_team_factors[0]
+    else:
+        match_factor = 1.0
+    return {
+        'snapshot_datetime': snapshot_dt.isoformat() if isinstance(snapshot_dt, datetime) else None,
+        'team_a_latest': latest_a.isoformat() if latest_a else None,
+        'team_b_latest': latest_b.isoformat() if latest_b else None,
+        'h2h_latest': latest_h2h.isoformat() if latest_h2h else None,
+        'team_a_gap_days': gap_a,
+        'team_b_gap_days': gap_b,
+        'h2h_gap_days': gap_h2h,
+        'team_a_factor': factor_a,
+        'team_b_factor': factor_b,
+        'h2h_factor': factor_h2h,
+        'match_factor': match_factor,
+        'formula': 'factor=1 for <=30d; afterwards exp(-ln(2)*(gap-30)/90), floor 0.05',
+        'history_not_discarded': True,
+    }
+
+
+def adapt_match(source: dict[str, Any], config: dict[str, Any], strict: bool=False) -> dict[str, Any]:
+    canonical = _V101_ADAPT_BASE(source, config, strict)
+    canonical['snapshot_datetime'] = _v101_datetime_from_source(source)
+    freshness = _v101_history_freshness(canonical, config)
+    canonical['history_freshness'] = freshness
+    gate = canonical.setdefault('data_gate', {})
+    gate['history_freshness'] = deepcopy(freshness)
+    gate['history_gap_over_30_days'] = any(
+        value is not None and value > 30.0
+        for value in (freshness.get('team_a_gap_days'), freshness.get('team_b_gap_days'))
+    )
+    return canonical
+
+
+def _v101_shrink_probability(probability: Optional[float], factor: float) -> Optional[float]:
+    if probability is None:
+        return None
+    return max(0.0, min(1.0, 0.50 + float(factor) * (float(probability) - 0.50)))
+
+
+def calculate_history(market: dict[str, Any], canonical: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    result = _V101_HISTORY_BASE(market, canonical, config)
+    freshness = canonical.get('history_freshness') or _v101_history_freshness(canonical, config)
+    factor = float(freshness.get('match_factor', 1.0))
+    raw_p_hist = to_number(result.get('p_hist'))
+    adjusted = _v101_shrink_probability(raw_p_hist, factor)
+    result['p_hist_raw_before_freshness'] = raw_p_hist
+    result['p_hist'] = adjusted if adjusted is not None else result.get('p_hist')
+    if 'p_hist_IT' in result:
+        result['p_hist_IT_raw_before_freshness'] = to_number(result.get('p_hist_IT'))
+        result['p_hist_IT'] = result['p_hist']
+    raw_zone = to_number(result.get('history_zone_rate'))
+    result['history_zone_rate_raw'] = raw_zone
+    result['history_zone_rate_freshness_adjusted'] = _v101_shrink_probability(raw_zone, factor)
+    result['history_freshness'] = deepcopy(freshness)
+    result['history_freshness_factor'] = factor
+    result['history_freshness_formula'] = 'P_hist_fresh=0.50+factor*(P_hist_raw-0.50); raw exact-line zone remains the mandatory >=75% gate.'
+    return result
+
+
+def calculate_scenario(
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+    history: dict[str, Any],
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    result = _V101_SCENARIO_BASE(market, canonical, history, config)
+    freshness = canonical.get('history_freshness') or {}
+    factor = float(freshness.get('match_factor', 1.0))
+    raw_probability = to_number(result.get('p_scenario'))
+    adjusted = _v101_shrink_probability(raw_probability, factor)
+    result['p_scenario_raw_before_freshness'] = raw_probability
+    if adjusted is not None:
+        result['p_scenario'] = adjusted
+    result['scenario_freshness_factor'] = factor
+    result['scenario_freshness_formula'] = 'P_scenario_fresh=0.50+factor*(P_scenario_raw-0.50).'
+    return result
+
+
+def _v101_recompute_live_probability(
+    result: dict[str, Any],
+    market: dict[str, Any],
+    projection_used: float,
+    freshness_factor: float,
+    config: dict[str, Any],
+) -> None:
+    line = float(market['line'])
+    side = market['side']
+    base_sigma = float(result.get('sigma') or result.get('sigma_base') or 1.0)
+    extra_max = float(config.get('history_freshness', {}).get('live_sigma_max_extra', 0.25))
+    sigma = base_sigma * (1.0 + max(0.0, 1.0 - freshness_factor) * extra_max)
+    edge_over = projection_used - line
+    edge_under = line - projection_used
+    edge = edge_over if side == 'OVER' else edge_under
+    z_score = edge / sigma if sigma > 0 else 0.0
+    result.update({
+        'projection_used_before_freshness': result.get('projection_used'),
+        'projection_used': projection_used,
+        'Projection_used': projection_used,
+        'line_edge': edge,
+        'line_edge_over': edge_over,
+        'line_edge_under': edge_under,
+        'sigma_before_freshness': base_sigma,
+        'sigma': sigma,
+        'z_score': z_score,
+        'p_live': normal_cdf(z_score) if sigma > 0 else 0.50,
+        'history_freshness_factor': freshness_factor,
+    })
+
+
+def calculate_live_projection(
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+    history: dict[str, Any],
+    scenario: dict[str, Any],
+    config: dict[str, Any],
+    stat: Optional[dict[str, Any]]=None,
+) -> dict[str, Any]:
+    result = _V101_LIVE_BASE(market, canonical, history, scenario, config, stat)
+    if canonical.get('stage') == 'PRE_MATCH':
+        return result
+    freshness = canonical.get('history_freshness') or {}
+    factor = float(freshness.get('match_factor', 1.0))
+    mode = str(result.get('data_mode') or canonical.get('data_mode') or '')
+
+    if mode == 'SCORE_TIME_HISTORY':
+        components = result.get('no_stat_components') or {}
+        base_weights = result.get('no_stat_configured_weights') or {}
+        regressed = to_number(components.get('regressed'))
+        history_projection = to_number(components.get('history'))
+        scenario_projection = to_number(components.get('scenario'))
+        base_reg = float(base_weights.get('regressed', 0.0))
+        base_hist = float(base_weights.get('history', 0.0))
+        base_scen = float(base_weights.get('scenario', 0.0))
+        adjusted_weights = {
+            'regressed': base_reg + (1.0 - factor) * (base_hist + base_scen),
+            'history': base_hist * factor,
+            'scenario': base_scen * factor,
+        }
+        values = {
+            'regressed': regressed,
+            'history': history_projection,
+            'scenario': scenario_projection,
+        }
+        available = {
+            key: value for key, value in values.items()
+            if value is not None and adjusted_weights.get(key, 0.0) > 0
+        }
+        denominator = sum(adjusted_weights[key] for key in available)
+        projection_used = (
+            sum(float(available[key]) * adjusted_weights[key] for key in available) / denominator
+            if denominator > 0 else float(result.get('projection_used') or market['line'])
+        )
+        result['no_stat_freshness_weights'] = adjusted_weights
+        result['projection_formula_before_freshness'] = result.get('projection_formula')
+        result['projection_formula'] = (
+            'NO_STAT age-aware: history/scenario base weights multiplied by freshness; '
+            'lost weight transferred to current score-time regressed projection.'
+        )
+        _v101_recompute_live_probability(result, market, projection_used, factor, config)
+    elif mode in {'FULL_STAT', 'PARTIAL_STAT'} and factor < 0.999999:
+        original = to_number(result.get('projection_used'))
+        regressed = to_number(result.get('projection_regressed'))
+        stat_projection = to_number(result.get('projection_stat_adjusted'))
+        current_live_values = [value for value in (regressed, stat_projection) if value is not None]
+        if original is not None and current_live_values:
+            current_live_anchor = statistics.median(current_live_values)
+            projection_used = factor * original + (1.0 - factor) * current_live_anchor
+            result['current_live_anchor_for_freshness'] = current_live_anchor
+            result['projection_formula_before_freshness'] = result.get('projection_formula')
+            result['projection_formula'] = (
+                'FULL/PARTIAL age-aware: freshness*CORE_projection + '
+                '(1-freshness)*median(score-time regressed, CORE stat projection).'
+            )
+            _v101_recompute_live_probability(result, market, projection_used, factor, config)
+    return result
+
+
+def _verdict(
+    probability: float,
+    blockers: list[dict[str, Any]],
+    strong_clean: bool,
+    p_hist: Optional[float]=None,
+) -> str:
+    if blockers or probability < 0.65:
+        return 'PASS'
+    if probability < 0.75:
+        return 'RISK PLAY'
+    if probability < 0.80:
+        return 'LIVE PLAY'
+    return 'PLAY' if strong_clean else 'LIVE PLAY'
+
+
+def normalized_action(
+    probability: float,
+    blockers: list[dict[str, Any]],
+    mode: str,
+    p_hist: Optional[float]=None,
+) -> tuple[str, str, str]:
+    if blockers:
+        return 'PASS', 'PASS', '0%'
+    if mode.upper() == 'STRICT' and probability < 0.75:
+        return 'PASS', 'TRIGGER ONLY', '0%'
+    if probability < 0.65:
+        return 'PASS', 'PASS', '0%'
+    if probability < 0.75:
+        return 'RISK', 'RISK ENTRY', '10-15% live-limit'
+    if probability < 0.80:
+        return 'PLAY', 'LOW PLAY', '15-20% live-limit'
+    if probability < 0.85:
+        return 'PLAY', 'MAIN PLAY', '30-35% live-limit'
+    return 'PLAY', 'STRONG PLAY', '40-50% live-limit'
+
+
+def apply_risk_post_filter(decision: dict[str, Any]) -> dict[str, Any]:
+    return {
+        'enabled': False,
+        'applicable': False,
+        'p_final': to_number((decision.get('probabilities') or {}).get('p_final')),
+        'p_live': to_number((decision.get('probabilities') or {}).get('p_live')),
+        'passed': True,
+        'filtered': False,
+        'reason_code': None,
+        'policy': 'RISK_65_TO_74_99_ONLY_AFTER_75_HISTORY_3_EDGE_AND_NO_SERIOUS_CONFLICT',
+    }
+
+
+def _v101_serious_conflicts(item: dict[str, Any]) -> list[dict[str, Any]]:
+    stat = item.get('stat_comparison') or {}
+    live = item.get('live') or {}
+    side = item.get('side')
+    conflicts: list[dict[str, Any]] = []
+    status = str(stat.get('stat_gate_status') or 'OFF')
+    if status in {'AGAINST', 'CONFLICT'}:
+        conflicts.append(_blocker(
+            'GLOBAL_SERIOUS_STAT_CONFLICT',
+            'Serious global stat conflict: candidate direction is opposed or simultaneously contradicted by independent live channels',
+            {'stat_gate_status': status, 'over_score': stat.get('over_gate_score'), 'under_score': stat.get('under_gate_score')},
+        ))
+    fake_candidate = bool(
+        (side == 'OVER' and stat.get('fake_over'))
+        or (side == 'UNDER' and stat.get('fake_under'))
+    )
+    if fake_candidate:
+        conflicts.append(_blocker(
+            'GLOBAL_SERIOUS_FAKE_PROFILE',
+            'Candidate is a fake Over/Under profile; RISK is forbidden',
+            {'side': side, 'fake_over': stat.get('fake_over'), 'fake_under': stat.get('fake_under')},
+        ))
+    if live.get('projection_conflict'):
+        conflicts.append(_blocker(
+            'GLOBAL_SERIOUS_PROJECTION_CONFLICT',
+            'CORE stat projection and checkpoint/control projection diverge beyond the project threshold',
+            {
+                'threshold': live.get('projection_conflict_threshold'),
+                'projection_stat': live.get('projection_stat_adjusted'),
+                'projection_control': live.get('projection_control'),
+            },
+        ))
+    return conflicts
+
+
+def _v101_evaluate_market(self: SuperBasketCalculator, market: dict[str, Any], canonical: dict[str, Any]) -> dict[str, Any]:
+    item = _V101_EVALUATE_BASE(self, market, canonical)
+    existing = {entry.get('rule_id') for entry in item.get('blockers', [])}
+    serious = [entry for entry in _v101_serious_conflicts(item) if entry.get('rule_id') not in existing]
+    if serious:
+        item.setdefault('blockers', []).extend(serious)
+        item['hard_conflict'] = True
+        item['verdict'] = 'PASS'
+        item.setdefault('p_trace', []).append(_trace_step(
+            'GLOBAL_SERIOUS_CONFLICT_GATE',
+            True,
+            'AGAINST/CONFLICT stat profile, candidate-side fake profile, or major projection divergence => hard PASS; never RISK.',
+            {'conflicts': serious},
+            item.get('p_final'),
+            item.get('p_final'),
+            [entry['rule_id'] for entry in serious],
+        ))
+    item['history_freshness'] = deepcopy(canonical.get('history_freshness') or {})
+    item['signal_policy_version'] = 'RISK_65_NO_SERIOUS_CONFLICT_V10_1'
+    return item
+
+
+SuperBasketCalculator.evaluate_market = _v101_evaluate_market
+
+
+_V101_FORMULA_REGISTRY = deepcopy(_V10_FORMULA_REGISTRY)
+_V101_FORMULA_REGISTRY.update({
+    'history_freshness': (
+        'After a 30-day grace period, history trust decays continuously with a 90-day half-life. '
+        'P_hist_fresh=0.50+freshness*(P_hist_raw-0.50). Raw exact-line zone remains the >=75% entry gate.'
+    ),
+    'no_stat_freshness_projection': (
+        'NO_STAT history/scenario weights are multiplied by freshness; removed weight is transferred to '
+        'the current score-time regressed projection. History is never hard-deleted.'
+    ),
+    'signal_thresholds_v10_1': 'P_final<65% PASS; 65-74.99% RISK; >=75% PLAY.',
+    'serious_conflict_policy': (
+        'Stat AGAINST/CONFLICT, candidate-side FAKE profile, or major CORE projection divergence '
+        'is a hard PASS and can never be emitted as RISK.'
+    ),
+})
+
+
+def _v101_calculate(self: SuperBasketCalculator, source: dict[str, Any], dispatch_threshold: Optional[float]=None, strict_schema: bool=False) -> dict[str, Any]:
+    output = _V101_CALCULATE_BASE(self, source, dispatch_threshold, strict_schema)
+    calculation = output.get('super_basket_calculation', {})
+    calculation['engine_version'] = '10.1.0-FRESH-HISTORY-CONFLICT-SAFE'
+    calculation['formula_registry'] = deepcopy(_V101_FORMULA_REGISTRY)
+    calculation['signal_policy'] = {
+        'risk_min': 0.65,
+        'play_min': 0.75,
+        'raw_history_zone_min': 0.75,
+        'live_edge_min_points': 3.0,
+        'serious_conflicts_hard_pass': True,
+        'history_freshness_enabled': True,
+    }
+    output['super_basket_calculation'] = calculation
+    return output
+
+
+SuperBasketCalculator.calculate = _v101_calculate
+
+
+def summarize_line_evaluation(item: dict[str, Any]) -> dict[str, Any]:
+    summary = _V101_SUMMARIZE_BASE(item)
+    history = item.get('history') or {}
+    live = item.get('live') or {}
+    summary.update({
+        'p_hist_raw_before_freshness': history.get('p_hist_raw_before_freshness'),
+        'history_freshness_factor': history.get('history_freshness_factor'),
+        'history_zone_rate_raw': history.get('history_zone_rate_raw'),
+        'history_zone_rate_freshness_adjusted': history.get('history_zone_rate_freshness_adjusted'),
+        'projection_used_before_freshness': live.get('projection_used_before_freshness'),
+        'no_stat_freshness_weights': live.get('no_stat_freshness_weights'),
+        'serious_conflict_codes': [
+            entry.get('rule_id') for entry in item.get('blockers', [])
+            if str(entry.get('rule_id', '')).startswith('GLOBAL_SERIOUS_')
+        ],
+    })
+    return summary
+
+
+
+_V101_DETERMINISTIC_EXPLANATION_BASE = deterministic_explanation
+
+
+def deterministic_explanation(evaluation: Optional[dict[str, Any]], action: str, mode: str) -> tuple[str, str, str]:
+    explanation, risk, trigger = _V101_DETERMINISTIC_EXPLANATION_BASE(evaluation, action, mode)
+    trigger = trigger.replace('P_final ≥60%', 'P_final ≥65%')
+    risk = risk.replace('зоні 60–74.99%', 'зоні 65–74.99%')
+    return explanation, risk, trigger
+
+
+SYSTEM_VERSION = '10.1.0'
+DEFAULT_CONFIG['engine_version'] = '10.1.0-FRESH-HISTORY-CONFLICT-SAFE'
+
+
+# ===== v10.2 EDGE-TIERED HISTORY GATE =====
+# User policy:
+# - P_final thresholds stay unchanged: <65% PASS; 65-74.99% RISK; >=75% PLAY.
+# - serious global conflicts remain hard PASS.
+# - required raw exact-line history zone depends on live projection edge:
+#     0.50 <= edge < 3.00  -> history >= 75%
+#     3.00 <= edge < 5.00  -> history >= 70%
+#     edge >= 5.00         -> history >= 65%
+#     edge < 0.50          -> PASS
+# - freshness adjustment of P_hist/P_scenario/projection remains enabled.
+
+_V102_EVALUATE_BASE = SuperBasketCalculator.evaluate_market
+_V102_CALCULATE_BASE = SuperBasketCalculator.calculate
+_V102_SUMMARIZE_BASE = summarize_line_evaluation
+_V102_DETERMINISTIC_EXPLANATION_BASE = deterministic_explanation
+
+DEFAULT_CONFIG['engine_version'] = '10.2.0-EDGE-TIERED-HISTORY'
+DEFAULT_CONFIG['dispatch_threshold'] = 0.65
+DEFAULT_CONFIG.setdefault('signal_gates', {}).update({
+    'history_zone_min': 0.65,
+    'live_edge_min_points': 0.50,
+    'risk_min': 0.65,
+    'play_min': 0.75,
+    'serious_conflicts_hard_block': True,
+})
+DEFAULT_CONFIG.setdefault('edge_tiered_history_gate', {}).update({
+    'minimum_live_edge': 0.50,
+    'tier_1_edge_min': 0.50,
+    'tier_1_edge_max_exclusive': 3.00,
+    'tier_1_history_min': 0.75,
+    'tier_2_edge_min': 3.00,
+    'tier_2_edge_max_exclusive': 5.00,
+    'tier_2_history_min': 0.70,
+    'tier_3_edge_min': 5.00,
+    'tier_3_history_min': 0.65,
+})
+
+
+def _v102_required_history_zone(line_edge: Optional[float]) -> tuple[Optional[float], str]:
+    edge = to_number(line_edge)
+    if edge is None:
+        return None, 'EDGE_MISSING'
+    if edge < 0.50:
+        return None, 'EDGE_BELOW_0_50'
+    if edge < 3.00:
+        return 0.75, 'EDGE_0_50_TO_2_99_HISTORY_75'
+    if edge < 5.00:
+        return 0.70, 'EDGE_3_00_TO_4_99_HISTORY_70'
+    return 0.65, 'EDGE_5_PLUS_HISTORY_65'
+
+
+def _v102_sanitize_trace(
+    item: dict[str, Any],
+    required_history: Optional[float],
+    tier: str,
+    raw_zone: Optional[float],
+    edge: Optional[float],
+) -> None:
+    obsolete = {'HISTORY_ZONE_BELOW_75', 'LIVE_EDGE_BELOW_3'}
+    current_blockers = deepcopy(item.get('blockers') or [])
+    current_codes = [entry.get('rule_id') for entry in current_blockers]
+    for step in item.get('p_trace') or []:
+        if isinstance(step.get('reason_codes'), list):
+            step['reason_codes'] = [
+                code for code in step['reason_codes'] if code not in obsolete
+            ]
+        inputs = step.get('inputs')
+        if isinstance(inputs, dict) and isinstance(inputs.get('blockers'), list):
+            inputs['blockers'] = [
+                entry for entry in inputs['blockers']
+                if entry.get('rule_id') not in obsolete
+            ]
+        if step.get('step') == 'ALIGNED_SIGNAL_GATES':
+            step['formula'] = (
+                'Edge-tiered raw history gate: edge 0.50-2.99 requires 75%; '
+                'edge 3.00-4.99 requires 70%; edge 5.00+ requires 65%.'
+            )
+            step['inputs'] = {
+                'history_zone_rate_raw': raw_zone,
+                'required_history_zone': required_history,
+                'line_edge': edge,
+                'edge_tier': tier,
+                'p_scenario': (item.get('scenario') or {}).get('p_scenario'),
+            }
+            step['reason_codes'] = [
+                code for code in current_codes
+                if code in {'LIVE_EDGE_BELOW_0_50', 'HISTORY_ZONE_BELOW_DYNAMIC_MIN', 'SCENARIO_DIRECTION_CONFLICT'}
+            ]
+        elif step.get('step') == 'HARD_BLOCKERS':
+            step['applied'] = bool(current_blockers)
+            step['inputs'] = {'blockers': current_blockers}
+            step['reason_codes'] = current_codes
+        elif step.get('step') == 'P_FINAL_RULE':
+            step['reason_codes'] = [item.get('verdict')]
+
+
+def _v102_evaluate_market(
+    self: SuperBasketCalculator,
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+) -> dict[str, Any]:
+    item = _V102_EVALUATE_BASE(self, market, canonical)
+
+    obsolete = {'HISTORY_ZONE_BELOW_75', 'LIVE_EDGE_BELOW_3'}
+    item['blockers'] = [
+        entry for entry in (item.get('blockers') or [])
+        if entry.get('rule_id') not in obsolete
+    ]
+
+    history = item.get('history') or {}
+    live = item.get('live') or {}
+    raw_zone = to_number(history.get('history_zone_rate_raw'))
+    if raw_zone is None:
+        raw_zone = to_number(history.get('history_zone_rate'))
+    edge = to_number(live.get('line_edge'))
+
+    if canonical.get('stage') == 'PRE_MATCH':
+        required_history, tier = 0.75, 'PRE_MATCH_HISTORY_75'
+        if raw_zone is None or raw_zone < required_history:
+            item['blockers'].append(_blocker(
+                'HISTORY_ZONE_BELOW_DYNAMIC_MIN',
+                'Pre-match signal requires at least a 75% raw exact-line historical zone',
+                {
+                    'history_zone_rate_raw': raw_zone,
+                    'required': required_history,
+                    'tier': tier,
+                },
+            ))
+    else:
+        required_history, tier = _v102_required_history_zone(edge)
+        if required_history is None:
+            item['blockers'].append(_blocker(
+                'LIVE_EDGE_BELOW_0_50',
+                'Live projection edge must be at least 0.50 point in the candidate direction',
+                {
+                    'line_edge': edge,
+                    'required': 0.50,
+                    'projection_used': live.get('projection_used'),
+                    'line': market.get('line'),
+                    'tier': tier,
+                },
+            ))
+        elif raw_zone is None or raw_zone < required_history:
+            item['blockers'].append(_blocker(
+                'HISTORY_ZONE_BELOW_DYNAMIC_MIN',
+                'Raw exact-line historical zone is below the minimum required for this live edge tier',
+                {
+                    'history_zone_rate_raw': raw_zone,
+                    'required': required_history,
+                    'line_edge': edge,
+                    'tier': tier,
+                    'source': history.get('history_zone_source'),
+                },
+            ))
+
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[Any, Any]] = set()
+    for entry in item.get('blockers') or []:
+        key = (
+            entry.get('rule_id'),
+            json.dumps(entry.get('inputs') or {}, sort_keys=True, ensure_ascii=False, default=str),
+        )
+        if key not in seen:
+            seen.add(key)
+            deduped.append(entry)
+    item['blockers'] = deduped
+
+    stat = item.get('stat_comparison') or {}
+    strong_clean = bool(
+        not item['blockers']
+        and not item.get('caps')
+        and item.get('data_mode') == 'FULL_STAT'
+        and stat.get('stat_gate_status') == 'CONFIRMED'
+    )
+    item['verdict'] = _verdict(
+        float(item.get('p_final') or 0.0),
+        item['blockers'],
+        strong_clean,
+        history.get('p_hist'),
+    )
+    item['dynamic_history_gate'] = {
+        'line_edge': edge,
+        'history_zone_rate_raw': raw_zone,
+        'required_history_zone': required_history,
+        'tier': tier,
+        'passed': (
+            required_history is not None
+            and raw_zone is not None
+            and raw_zone >= required_history
+        ),
+        'minimum_live_edge': 0.50,
+        'formula': (
+            '0.50<=edge<3 => history>=75%; '
+            '3<=edge<5 => history>=70%; '
+            'edge>=5 => history>=65%; edge<0.50 => PASS.'
+        ),
+    }
+    item['signal_policy_version'] = 'EDGE_TIERED_HISTORY_V10_2'
+    _v102_sanitize_trace(item, required_history, tier, raw_zone, edge)
+    item.setdefault('p_trace', []).append(_trace_step(
+        'EDGE_TIERED_HISTORY_GATE',
+        True,
+        (
+            '0.50<=edge<3 requires raw history>=75%; '
+            '3<=edge<5 requires >=70%; edge>=5 requires >=65%; '
+            'serious conflicts remain hard PASS.'
+        ),
+        deepcopy(item['dynamic_history_gate']),
+        item.get('p_final'),
+        item.get('p_final'),
+        [
+            entry.get('rule_id') for entry in item['blockers']
+            if entry.get('rule_id') in {
+                'LIVE_EDGE_BELOW_0_50',
+                'HISTORY_ZONE_BELOW_DYNAMIC_MIN',
+            }
+        ],
+    ))
+    return item
+
+
+SuperBasketCalculator.evaluate_market = _v102_evaluate_market
+
+
+_V102_FORMULA_REGISTRY = deepcopy(_V101_FORMULA_REGISTRY)
+_V102_FORMULA_REGISTRY.update({
+    'edge_tiered_history_gate': (
+        'Raw exact-line history threshold depends on candidate-side live edge: '
+        '0.50<=edge<3.00 -> 75%; 3.00<=edge<5.00 -> 70%; edge>=5.00 -> 65%. '
+        'Edge<0.50 is PASS.'
+    ),
+    'signal_thresholds_v10_2': (
+        'P_final<65% PASS; 65-74.99% RISK; >=75% PLAY. '
+        'Serious global conflicts remain hard PASS.'
+    ),
+})
+
+
+def _v102_calculate(
+    self: SuperBasketCalculator,
+    source: dict[str, Any],
+    dispatch_threshold: Optional[float]=None,
+    strict_schema: bool=False,
+) -> dict[str, Any]:
+    output = _V102_CALCULATE_BASE(self, source, dispatch_threshold, strict_schema)
+    calculation = output.get('super_basket_calculation', {})
+    calculation['engine_version'] = '10.2.0-EDGE-TIERED-HISTORY'
+    calculation['formula_registry'] = deepcopy(_V102_FORMULA_REGISTRY)
+    calculation['signal_policy'] = {
+        'risk_min': 0.65,
+        'play_min': 0.75,
+        'edge_history_tiers': [
+            {'edge_min': 0.50, 'edge_max_exclusive': 3.00, 'raw_history_zone_min': 0.75},
+            {'edge_min': 3.00, 'edge_max_exclusive': 5.00, 'raw_history_zone_min': 0.70},
+            {'edge_min': 5.00, 'edge_max_exclusive': None, 'raw_history_zone_min': 0.65},
+        ],
+        'edge_below_0_50': 'PASS',
+        'serious_conflicts_hard_pass': True,
+        'history_freshness_enabled': True,
+        'odds_min': float(self.config.get('odds_min', 1.44)),
+    }
+    output['super_basket_calculation'] = calculation
+    return output
+
+
+SuperBasketCalculator.calculate = _v102_calculate
+
+
+def summarize_line_evaluation(item: dict[str, Any]) -> dict[str, Any]:
+    summary = _V102_SUMMARIZE_BASE(item)
+    gate = item.get('dynamic_history_gate') or {}
+    summary.update({
+        'dynamic_history_gate_tier': gate.get('tier'),
+        'dynamic_required_history_zone': gate.get('required_history_zone'),
+        'dynamic_history_gate_passed': gate.get('passed'),
+        'minimum_live_edge_v10_2': gate.get('minimum_live_edge'),
+    })
+    return summary
+
+
+def apply_risk_post_filter(decision: dict[str, Any]) -> dict[str, Any]:
+    return {
+        'enabled': False,
+        'applicable': False,
+        'p_final': to_number((decision.get('probabilities') or {}).get('p_final')),
+        'p_live': to_number((decision.get('probabilities') or {}).get('p_live')),
+        'passed': True,
+        'filtered': False,
+        'reason_code': None,
+        'policy': (
+            'RISK_65_TO_74_99_AFTER_EDGE_TIERED_HISTORY_GATE_'
+            'AND_NO_SERIOUS_CONFLICT'
+        ),
+    }
+
+
+def deterministic_explanation(
+    evaluation: Optional[dict[str, Any]],
+    action: str,
+    mode: str,
+) -> tuple[str, str, str]:
+    explanation, risk, trigger = _V102_DETERMINISTIC_EXPLANATION_BASE(
+        evaluation, action, mode
+    )
+    tier_text = (
+        'Історичний gate залежить від live edge: '
+        '0.5–2.99 очка → історія від 75%; '
+        '3–4.99 → від 70%; 5+ → від 65%.'
+    )
+    if tier_text not in trigger:
+        trigger = f'{trigger} {tier_text}'.strip()
+    return explanation, risk, trigger
+
+
+SYSTEM_VERSION = '10.2.0'
+DEFAULT_CONFIG['engine_version'] = '10.2.0-EDGE-TIERED-HISTORY'
+
+
+# ===== v10.3 CONFLICTS-AS-WARNINGS SIGNAL POLICY =====
+# User policy:
+# - P_final thresholds stay unchanged: <65% PASS; 65-74.99% RISK; >=75% PLAY.
+# - dynamic raw history gate stays unchanged:
+#     0.50 <= edge < 3.00 -> history >=75%
+#     3.00 <= edge < 5.00 -> history >=70%
+#     edge >=5.00 -> history >=65%
+# - directional/model conflicts are warnings, not blockers.
+# - P_final is NOT recomputed after removing conflict blockers; existing caps remain.
+# - structural/data/router/market blockers remain active.
+
+_V103_EVALUATE_BASE = SuperBasketCalculator.evaluate_market
+_V103_CALCULATE_BASE = SuperBasketCalculator.calculate
+_V103_SUMMARIZE_BASE = summarize_line_evaluation
+_V103_DETERMINISTIC_EXPLANATION_BASE = deterministic_explanation
+
+DEFAULT_CONFIG['engine_version'] = '10.3.0-CONFLICTS-AS-WARNINGS'
+DEFAULT_CONFIG['dispatch_threshold'] = 0.65
+DEFAULT_CONFIG.setdefault('signal_gates', {}).update({
+    'serious_conflicts_hard_block': False,
+})
+DEFAULT_CONFIG.setdefault('conflict_policy', {}).update({
+    'directional_conflicts_are_warnings': True,
+    'keep_existing_probability_caps': True,
+    'keep_structural_blockers': True,
+})
+
+_V103_CONFLICT_BLOCKER_IDS = {
+    'GLOBAL_SERIOUS_STAT_CONFLICT',
+    'GLOBAL_SERIOUS_FAKE_PROFILE',
+    'GLOBAL_SERIOUS_PROJECTION_CONFLICT',
+    'STAT_GATE_DIRECTLY_AGAINST',
+    'PARTIAL_STAT_GATE_AGAINST',
+    'STRONG_HISTORY_LIVE_CONFLICT',
+    'SCENARIO_DIRECTION_CONFLICT',
+}
+
+
+def _v103_is_conflict_blocker(entry: dict[str, Any]) -> bool:
+    rule_id = str(entry.get('rule_id') or '')
+    return (
+        rule_id in _V103_CONFLICT_BLOCKER_IDS
+        or rule_id.startswith('GLOBAL_SERIOUS_')
+    )
+
+
+def _v103_clean_trace(item: dict[str, Any]) -> None:
+    remaining = deepcopy(item.get('blockers') or [])
+    remaining_codes = [entry.get('rule_id') for entry in remaining]
+    warnings = deepcopy(item.get('conflict_warnings') or [])
+    warning_codes = [entry.get('rule_id') for entry in warnings]
+
+    for step in item.get('p_trace') or []:
+        if isinstance(step.get('reason_codes'), list):
+            step['reason_codes'] = [
+                code for code in step['reason_codes']
+                if code not in warning_codes
+            ]
+        inputs = step.get('inputs')
+        if isinstance(inputs, dict) and isinstance(inputs.get('blockers'), list):
+            inputs['blockers'] = [
+                entry for entry in inputs['blockers']
+                if not _v103_is_conflict_blocker(entry)
+            ]
+        if step.get('step') in {
+            'GLOBAL_SERIOUS_CONFLICT_GATE',
+            'LIVE_HISTORY_CONFLICT',
+        }:
+            step['applied'] = False
+            step['formula'] = (
+                'v10.3: directional/model conflict is audit warning only; '
+                'it does not force PASS.'
+            )
+            step['inputs'] = {'conflict_warnings': warnings}
+            step['reason_codes'] = []
+        elif step.get('step') == 'HARD_BLOCKERS':
+            step['applied'] = bool(remaining)
+            step['inputs'] = {'blockers': remaining}
+            step['reason_codes'] = remaining_codes
+        elif step.get('step') == 'P_FINAL_RULE':
+            step['reason_codes'] = [item.get('verdict')]
+
+
+def _v103_evaluate_market(
+    self: SuperBasketCalculator,
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+) -> dict[str, Any]:
+    item = _V103_EVALUATE_BASE(self, market, canonical)
+
+    original_blockers = deepcopy(item.get('blockers') or [])
+    conflict_warnings = [
+        entry for entry in original_blockers
+        if _v103_is_conflict_blocker(entry)
+    ]
+    remaining_blockers = [
+        entry for entry in original_blockers
+        if not _v103_is_conflict_blocker(entry)
+    ]
+
+    item['blockers'] = remaining_blockers
+    item['conflict_warnings'] = conflict_warnings
+    item['conflicts_block_signal'] = False
+    item['hard_conflict'] = bool(remaining_blockers)
+
+    history = item.get('history') or {}
+    stat = item.get('stat_comparison') or {}
+    strong_clean = bool(
+        not remaining_blockers
+        and not item.get('caps')
+        and item.get('data_mode') == 'FULL_STAT'
+        and stat.get('stat_gate_status') == 'CONFIRMED'
+    )
+    item['verdict'] = _verdict(
+        float(item.get('p_final') or 0.0),
+        remaining_blockers,
+        strong_clean,
+        history.get('p_hist'),
+    )
+    item['signal_policy_version'] = 'CONFLICTS_AS_WARNINGS_V10_3'
+    item['conflict_policy'] = {
+        'directional_conflicts_are_warnings': True,
+        'p_final_recomputed': False,
+        'existing_caps_preserved': True,
+        'removed_blocker_ids': [
+            entry.get('rule_id') for entry in conflict_warnings
+        ],
+        'remaining_blocker_ids': [
+            entry.get('rule_id') for entry in remaining_blockers
+        ],
+    }
+
+    _v103_clean_trace(item)
+    item.setdefault('p_trace', []).append(_trace_step(
+        'CONFLICTS_AS_WARNINGS_GATE',
+        bool(conflict_warnings),
+        (
+            'Directional/model conflicts are logged as warnings only. '
+            'Signal eligibility is controlled by P_final, dynamic raw-history gate, '
+            'live edge, odds and remaining structural/data/router blockers.'
+        ),
+        {
+            'conflict_warnings': conflict_warnings,
+            'remaining_blockers': remaining_blockers,
+            'p_final_unchanged': item.get('p_final'),
+            'dynamic_history_gate': item.get('dynamic_history_gate'),
+        },
+        item.get('p_final'),
+        item.get('p_final'),
+        [],
+    ))
+    return item
+
+
+SuperBasketCalculator.evaluate_market = _v103_evaluate_market
+
+
+_V103_FORMULA_REGISTRY = deepcopy(_V102_FORMULA_REGISTRY)
+_V103_FORMULA_REGISTRY.update({
+    'conflict_policy_v10_3': (
+        'Directional/model conflicts (stat AGAINST/CONFLICT, fake profile, '
+        'projection divergence, scenario opposition, strong history-live conflict) '
+        'are audit warnings only. Existing P_final and probability caps remain. '
+        'Structural/data/router blockers remain hard blockers.'
+    ),
+    'signal_thresholds_v10_3': (
+        'P_final<65% PASS; 65-74.99% RISK; >=75% PLAY. '
+        'Dynamic history gate by live edge remains unchanged.'
+    ),
+})
+
+
+def _v103_calculate(
+    self: SuperBasketCalculator,
+    source: dict[str, Any],
+    dispatch_threshold: Optional[float]=None,
+    strict_schema: bool=False,
+) -> dict[str, Any]:
+    output = _V103_CALCULATE_BASE(self, source, dispatch_threshold, strict_schema)
+    calculation = output.get('super_basket_calculation', {})
+    calculation['engine_version'] = '10.3.0-CONFLICTS-AS-WARNINGS'
+    calculation['formula_registry'] = deepcopy(_V103_FORMULA_REGISTRY)
+    calculation['signal_policy'] = {
+        'risk_min': 0.65,
+        'play_min': 0.75,
+        'edge_history_tiers': [
+            {'edge_min': 0.50, 'edge_max_exclusive': 3.00, 'raw_history_zone_min': 0.75},
+            {'edge_min': 3.00, 'edge_max_exclusive': 5.00, 'raw_history_zone_min': 0.70},
+            {'edge_min': 5.00, 'edge_max_exclusive': None, 'raw_history_zone_min': 0.65},
+        ],
+        'edge_below_0_50': 'PASS',
+        'directional_conflicts_block_signal': False,
+        'directional_conflicts_logged_as_warnings': True,
+        'existing_probability_caps_preserved': True,
+        'structural_data_router_blockers_preserved': True,
+        'history_freshness_enabled': True,
+        'odds_min': float(self.config.get('odds_min', 1.44)),
+    }
+    output['super_basket_calculation'] = calculation
+    return output
+
+
+SuperBasketCalculator.calculate = _v103_calculate
+
+
+def summarize_line_evaluation(item: dict[str, Any]) -> dict[str, Any]:
+    summary = _V103_SUMMARIZE_BASE(item)
+    summary.update({
+        'conflict_warning_codes': [
+            entry.get('rule_id')
+            for entry in item.get('conflict_warnings', [])
+        ],
+        'conflicts_block_signal_v10_3': False,
+        'remaining_hard_blocker_codes': [
+            entry.get('rule_id')
+            for entry in item.get('blockers', [])
+        ],
+    })
+    return summary
+
+
+def apply_risk_post_filter(decision: dict[str, Any]) -> dict[str, Any]:
+    return {
+        'enabled': False,
+        'applicable': False,
+        'p_final': to_number((decision.get('probabilities') or {}).get('p_final')),
+        'p_live': to_number((decision.get('probabilities') or {}).get('p_live')),
+        'passed': True,
+        'filtered': False,
+        'reason_code': None,
+        'policy': (
+            'RISK_65_TO_74_99_AFTER_DYNAMIC_EDGE_HISTORY_GATE; '
+            'DIRECTIONAL_CONFLICTS_ARE_WARNINGS'
+        ),
+    }
+
+
+def deterministic_explanation(
+    evaluation: Optional[dict[str, Any]],
+    action: str,
+    mode: str,
+) -> tuple[str, str, str]:
+    explanation, risk, trigger = _V103_DETERMINISTIC_EXPLANATION_BASE(
+        evaluation, action, mode
+    )
+    if evaluation and evaluation.get('conflict_warnings'):
+        warning_codes = ', '.join(
+            str(entry.get('rule_id'))
+            for entry in evaluation.get('conflict_warnings', [])
+        )
+        risk = (
+            f'{risk} Конфлікти не блокують сигнал у v10.3; '
+            f'вони залишені як попередження: {warning_codes}.'
+        ).strip()
+    return explanation, risk, trigger
+
+
+SYSTEM_VERSION = '10.3.0-TELEGRAM-READY'
+DEFAULT_CONFIG['engine_version'] = '10.3.0-CONFLICTS-AS-WARNINGS'
+
+
+# ===== v10.4 EDGE 3+ / RAW HISTORY 60% =====
+# User policy:
+# - P_final thresholds stay unchanged:
+#     P_final <65%       -> PASS
+#     65-74.99%          -> RISK
+#     >=75%              -> PLAY
+# - minimum live edge stays 0.50.
+# - raw exact-line history gate:
+#     0.50 <= edge <3.00 -> history >=75%
+#     edge >=3.00        -> history >=60%
+# - PRE_MATCH history gate stays 75%.
+# - directional/model conflicts stay warnings, not hard blockers.
+# - odds minimum stays 1.44.
+
+_V104_EVALUATE_BASE = SuperBasketCalculator.evaluate_market
+_V104_CALCULATE_BASE = SuperBasketCalculator.calculate
+_V104_SUMMARIZE_BASE = summarize_line_evaluation
+_V104_DETERMINISTIC_EXPLANATION_BASE = deterministic_explanation
+
+DEFAULT_CONFIG['engine_version'] = '10.4.0-EDGE3-HISTORY60'
+DEFAULT_CONFIG['dispatch_threshold'] = 0.65
+DEFAULT_CONFIG.setdefault('signal_gates', {}).update({
+    'history_zone_min': 0.60,
+    'live_edge_min_points': 0.50,
+    'risk_min': 0.65,
+    'play_min': 0.75,
+    'serious_conflicts_hard_block': False,
+})
+DEFAULT_CONFIG['edge_tiered_history_gate'] = {
+    'minimum_live_edge': 0.50,
+    'tier_1_edge_min': 0.50,
+    'tier_1_edge_max_exclusive': 3.00,
+    'tier_1_history_min': 0.75,
+    'tier_2_edge_min': 3.00,
+    'tier_2_edge_max_exclusive': None,
+    'tier_2_history_min': 0.60,
+}
+
+
+def _v102_required_history_zone(line_edge: Optional[float]) -> tuple[Optional[float], str]:
+    """v10.4 policy override used by the existing v10.2/v10.3 evaluation chain."""
+    edge = to_number(line_edge)
+    if edge is None:
+        return None, 'EDGE_MISSING'
+    if edge < 0.50:
+        return None, 'EDGE_BELOW_0_50'
+    if edge < 3.00:
+        return 0.75, 'EDGE_0_50_TO_2_99_HISTORY_75'
+    return 0.60, 'EDGE_3_PLUS_HISTORY_60'
+
+
+def _v102_sanitize_trace(
+    item: dict[str, Any],
+    required_history: Optional[float],
+    tier: str,
+    raw_zone: Optional[float],
+    edge: Optional[float],
+) -> None:
+    """v10.4 trace override so audit text matches the active gate."""
+    obsolete = {'HISTORY_ZONE_BELOW_75', 'LIVE_EDGE_BELOW_3'}
+    current_blockers = deepcopy(item.get('blockers') or [])
+    current_codes = [entry.get('rule_id') for entry in current_blockers]
+    for step in item.get('p_trace') or []:
+        if isinstance(step.get('reason_codes'), list):
+            step['reason_codes'] = [
+                code for code in step['reason_codes'] if code not in obsolete
+            ]
+        inputs = step.get('inputs')
+        if isinstance(inputs, dict) and isinstance(inputs.get('blockers'), list):
+            inputs['blockers'] = [
+                entry for entry in inputs['blockers']
+                if entry.get('rule_id') not in obsolete
+            ]
+        if step.get('step') == 'ALIGNED_SIGNAL_GATES':
+            step['formula'] = (
+                'v10.4 edge-tiered raw history gate: '
+                'edge 0.50-2.99 requires 75%; edge 3.00+ requires 60%.'
+            )
+            step['inputs'] = {
+                'history_zone_rate_raw': raw_zone,
+                'required_history_zone': required_history,
+                'line_edge': edge,
+                'edge_tier': tier,
+                'p_scenario': (item.get('scenario') or {}).get('p_scenario'),
+            }
+            step['reason_codes'] = [
+                code for code in current_codes
+                if code in {
+                    'LIVE_EDGE_BELOW_0_50',
+                    'HISTORY_ZONE_BELOW_DYNAMIC_MIN',
+                    'SCENARIO_DIRECTION_CONFLICT',
+                }
+            ]
+        elif step.get('step') == 'HARD_BLOCKERS':
+            step['applied'] = bool(current_blockers)
+            step['inputs'] = {'blockers': current_blockers}
+            step['reason_codes'] = current_codes
+        elif step.get('step') == 'P_FINAL_RULE':
+            step['reason_codes'] = [item.get('verdict')]
+
+
+def _v104_evaluate_market(
+    self: SuperBasketCalculator,
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+) -> dict[str, Any]:
+    item = _V104_EVALUATE_BASE(self, market, canonical)
+
+    gate = item.get('dynamic_history_gate') or {}
+    gate['formula'] = (
+        '0.50<=edge<3 => history>=75%; '
+        'edge>=3 => history>=60%; edge<0.50 => PASS.'
+    )
+    item['dynamic_history_gate'] = gate
+    item['signal_policy_version'] = 'EDGE3_HISTORY60_CONFLICT_WARNINGS_V10_4'
+
+    for step in item.get('p_trace') or []:
+        if step.get('step') == 'EDGE_TIERED_HISTORY_GATE':
+            step['formula'] = (
+                'v10.4: 0.50<=edge<3 requires raw history>=75%; '
+                'edge>=3 requires raw history>=60%; edge<0.50 is PASS. '
+                'Directional/model conflicts are warnings.'
+            )
+            if isinstance(step.get('inputs'), dict):
+                step['inputs']['formula_v10_4'] = gate['formula']
+        elif step.get('step') == 'CONFLICTS_AS_WARNINGS_GATE':
+            step['formula'] = (
+                'v10.4: directional/model conflicts are warnings only. '
+                'Signal eligibility uses P_final, edge/history gate, odds '
+                'and remaining structural/data/router blockers.'
+            )
+
+    item.setdefault('p_trace', []).append(_trace_step(
+        'EDGE_3_PLUS_HISTORY_60_GATE',
+        True,
+        (
+            'From v10.4, any candidate-side live edge of 3.00+ points '
+            'requires raw exact-line history of at least 60%.'
+        ),
+        {
+            'line_edge': gate.get('line_edge'),
+            'history_zone_rate_raw': gate.get('history_zone_rate_raw'),
+            'required_history_zone': gate.get('required_history_zone'),
+            'passed': gate.get('passed'),
+        },
+        item.get('p_final'),
+        item.get('p_final'),
+        [
+            entry.get('rule_id') for entry in item.get('blockers', [])
+            if entry.get('rule_id') in {
+                'LIVE_EDGE_BELOW_0_50',
+                'HISTORY_ZONE_BELOW_DYNAMIC_MIN',
+            }
+        ],
+    ))
+    return item
+
+
+SuperBasketCalculator.evaluate_market = _v104_evaluate_market
+
+
+_V104_FORMULA_REGISTRY = deepcopy(_V103_FORMULA_REGISTRY)
+_V104_FORMULA_REGISTRY.update({
+    'edge_history_gate_v10_4': (
+        'Raw exact-line history threshold: 0.50<=edge<3.00 -> 75%; '
+        'edge>=3.00 -> 60%; edge<0.50 -> PASS.'
+    ),
+    'signal_thresholds_v10_4': (
+        'P_final<65% PASS; 65-74.99% RISK; >=75% PLAY; odds>=1.44. '
+        'Directional/model conflicts are warnings; structural blockers remain active.'
+    ),
+})
+
+
+def _v104_calculate(
+    self: SuperBasketCalculator,
+    source: dict[str, Any],
+    dispatch_threshold: Optional[float]=None,
+    strict_schema: bool=False,
+) -> dict[str, Any]:
+    output = _V104_CALCULATE_BASE(self, source, dispatch_threshold, strict_schema)
+    calculation = output.get('super_basket_calculation', {})
+    calculation['engine_version'] = '10.4.0-EDGE3-HISTORY60'
+    calculation['formula_registry'] = deepcopy(_V104_FORMULA_REGISTRY)
+    calculation['signal_policy'] = {
+        'risk_min': 0.65,
+        'play_min': 0.75,
+        'edge_history_tiers': [
+            {
+                'edge_min': 0.50,
+                'edge_max_exclusive': 3.00,
+                'raw_history_zone_min': 0.75,
+            },
+            {
+                'edge_min': 3.00,
+                'edge_max_exclusive': None,
+                'raw_history_zone_min': 0.60,
+            },
+        ],
+        'edge_below_0_50': 'PASS',
+        'pre_match_raw_history_zone_min': 0.75,
+        'directional_conflicts_block_signal': False,
+        'directional_conflicts_logged_as_warnings': True,
+        'existing_probability_caps_preserved': True,
+        'structural_data_router_blockers_preserved': True,
+        'history_freshness_enabled': True,
+        'odds_min': float(self.config.get('odds_min', 1.44)),
+    }
+    output['super_basket_calculation'] = calculation
+    return output
+
+
+SuperBasketCalculator.calculate = _v104_calculate
+
+
+def summarize_line_evaluation(item: dict[str, Any]) -> dict[str, Any]:
+    summary = _V104_SUMMARIZE_BASE(item)
+    gate = item.get('dynamic_history_gate') or {}
+    summary.update({
+        'signal_policy_version': item.get('signal_policy_version'),
+        'minimum_live_edge_v10_4': gate.get('minimum_live_edge'),
+        'raw_history_required_v10_4': gate.get('required_history_zone'),
+        'edge_3_plus_history_min_v10_4': 0.60,
+    })
+    return summary
+
+
+def apply_risk_post_filter(decision: dict[str, Any]) -> dict[str, Any]:
+    return {
+        'enabled': False,
+        'applicable': False,
+        'p_final': to_number((decision.get('probabilities') or {}).get('p_final')),
+        'p_live': to_number((decision.get('probabilities') or {}).get('p_live')),
+        'passed': True,
+        'filtered': False,
+        'reason_code': None,
+        'policy': (
+            'RISK_65_TO_74_99_AFTER_V10_4_EDGE_HISTORY_GATE; '
+            'EDGE_3_PLUS_HISTORY_60; DIRECTIONAL_CONFLICTS_ARE_WARNINGS'
+        ),
+    }
+
+
+def deterministic_explanation(
+    evaluation: Optional[dict[str, Any]],
+    action: str,
+    mode: str,
+) -> tuple[str, str, str]:
+    explanation, risk, trigger = _V104_DETERMINISTIC_EXPLANATION_BASE(
+        evaluation, action, mode
+    )
+    old_text = (
+        'Історичний gate залежить від live edge: '
+        '0.5–2.99 очка → історія від 75%; '
+        '3–4.99 → від 70%; 5+ → від 65%.'
+    )
+    new_text = (
+        'Історичний gate v10.4: '
+        '0.5–2.99 очка → історія від 75%; '
+        '3+ очка → історія від 60%.'
+    )
+    trigger = trigger.replace(old_text, new_text)
+    risk = risk.replace('у v10.3', 'у v10.4')
+    if new_text not in trigger:
+        trigger = f'{trigger} {new_text}'.strip()
+    return explanation, risk, trigger
+
+
+SYSTEM_VERSION = '10.4.0-TELEGRAM-READY'
+DEFAULT_CONFIG['engine_version'] = '10.4.0-EDGE3-HISTORY60'
+
+
+# =====================================================================
+# v10.5 — CLEAN LIVE PROJECTION CHANNEL
+# =====================================================================
+# Critical fix:
+# 1) P_live is calculated from a live-only projection.
+# 2) Exact-line P_hist and P_scenario never shift Projection_used.
+# 3) FULL/PARTIAL_STAT:
+#       Current points + expected remaining points from live shot/FTA/
+#       ORB/TO rates, with shrinkage only to pre-game STAT rates.
+#       The previous second shrink to PreFinal and the
+#       HistoryScenarioAnchor median are removed.
+# 4) SCORE_TIME_HISTORY:
+#       Current segment points / elapsed segment time * full segment time.
+# 5) P_hist and P_scenario remain separate and enter only P_raw/P_final.
+# =====================================================================
+
+_V105_EVALUATE_BASE = SuperBasketCalculator.evaluate_market
+_V105_CALCULATE_BASE = SuperBasketCalculator.calculate
+_V105_FORMULA_REGISTRY = deepcopy(_V104_FORMULA_REGISTRY)
+_V105_FORMULA_REGISTRY.update({
+    'live_projection_no_stat_v10_5': (
+        'Projection_live = current segment points / elapsed segment seconds '
+        '* full segment seconds. P_hist and P_scenario are excluded.'
+    ),
+    'live_projection_full_stat_v10_5': (
+        'Projection_live = current points + expected remaining points from '
+        'live FGA/FTA/2PA/3PA/ORB/TO rates regressed only to pre-game '
+        'box-score rates. No exact-line history or scenario outcome anchor.'
+    ),
+    'live_edge_v10_5': (
+        'OVER edge = Projection_live-Line; UNDER edge = Line-Projection_live.'
+    ),
+    'p_live_v10_5': 'P_live = Phi(candidate-side live edge / sigma).',
+    'p_raw_v10_5': (
+        'P_raw = w_hist*P_hist + w_scenario*P_scenario + w_live*P_live.'
+    ),
+})
+
+
+def _v105_team_quarter_points(
+    canonical: dict[str, Any],
+    market: dict[str, Any],
+    quarter_index: int,
+) -> Optional[float]:
+    quarters = canonical.get('quarters') or []
+    if quarter_index < 1 or quarter_index > len(quarters):
+        return None
+    row = quarters[quarter_index - 1] or {}
+    team = market.get('team')
+    if team:
+        key = 'home' if team == canonical.get('home_team') else 'away'
+        return to_number(row.get(key))
+    return to_number(row.get('total'))
+
+
+def _v105_score_time_controls(
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+    clock: dict[str, float],
+) -> dict[str, Any]:
+    elapsed = float(clock.get('elapsed_seconds') or 0.0)
+    full = float(clock.get('full_seconds') or 0.0)
+    current = float(clock.get('current_points') or 0.0)
+    primary = current / elapsed * full if elapsed > 0 and full > 0 else None
+    quarter_seconds = float(canonical.get('quarter_seconds') or 600.0)
+    current_quarter = int(canonical.get('current_quarter') or 0)
+    segment = str(market.get('segment') or 'MATCH')
+    controls: dict[str, Optional[float]] = {'primary_scope_pace': primary}
+
+    # A half during its second quarter: actual first quarter + projected
+    # current quarter. This is independent from the whole-half pace channel.
+    if segment == 'H1' and current_quarter == 2:
+        q1 = _v105_team_quarter_points(canonical, market, 1)
+        q2 = _v105_team_quarter_points(canonical, market, 2)
+        q2_elapsed = max(
+            0.0,
+            quarter_seconds - float(canonical.get('quarter_seconds_remaining') or 0.0),
+        )
+        q2_projection = q2 / q2_elapsed * quarter_seconds if q2 is not None and q2_elapsed > 0 else None
+        controls['current_quarter_projection'] = q2_projection
+        controls['half_by_quarters_projection'] = (
+            q1 + q2_projection if q1 is not None and q2_projection is not None else None
+        )
+    elif segment == 'H2' and current_quarter == 4:
+        q3 = _v105_team_quarter_points(canonical, market, 3)
+        q4 = _v105_team_quarter_points(canonical, market, 4)
+        q4_elapsed = max(
+            0.0,
+            quarter_seconds - float(canonical.get('quarter_seconds_remaining') or 0.0),
+        )
+        q4_projection = q4 / q4_elapsed * quarter_seconds if q4 is not None and q4_elapsed > 0 else None
+        controls['current_quarter_projection'] = q4_projection
+        controls['half_by_quarters_projection'] = (
+            q3 + q4_projection if q3 is not None and q4_projection is not None else None
+        )
+
+    # At HT provide quarter-equivalent full-game pace checks.
+    if canonical.get('stage') == 'HT' and segment == 'MATCH':
+        q1 = _v105_team_quarter_points(canonical, market, 1)
+        q2 = _v105_team_quarter_points(canonical, market, 2)
+        game_quarters = max(1.0, float(canonical.get('full_game_seconds') or 2400.0) / quarter_seconds)
+        controls['q1_full_game_equivalent'] = q1 * game_quarters if q1 is not None else None
+        controls['q2_full_game_equivalent'] = q2 * game_quarters if q2 is not None else None
+
+    return controls
+
+
+def _v9_projection_alignment(
+    live: dict[str, Any],
+    scenario_active: bool,
+    side: str,
+    line: float,
+) -> dict[str, Any]:
+    """v10.5 NO_STAT support uses live-only channels.
+
+    It no longer asks history/scenario projections to agree with P_live.
+    For a live half, both whole-half pace and quarter-control pace must
+    support the candidate. At HT, at least two live pace channels must
+    support the candidate. A lone early current-quarter pace does not
+    satisfy the old 2-of-3 alignment point by itself.
+    """
+    controls = live.get('live_projection_controls') or {}
+    values = {
+        key: to_number(value)
+        for key, value in controls.items()
+        if to_number(value) is not None
+    }
+    side = str(side).upper()
+
+    def aligned(value: float) -> bool:
+        return value > line if side == 'OVER' else value < line
+
+    flags = {key: aligned(float(value)) for key, value in values.items()}
+    segment = str(live.get('segment') or '')
+    market_type = str(live.get('market_type') or '')
+
+    if 'half_by_quarters_projection' in values:
+        selected_keys = [
+            key for key in ('primary_scope_pace', 'half_by_quarters_projection')
+            if key in values
+        ]
+        required = 2
+    elif 'q1_full_game_equivalent' in values or 'q2_full_game_equivalent' in values:
+        selected_keys = [
+            key for key in (
+                'primary_scope_pace',
+                'q1_full_game_equivalent',
+                'q2_full_game_equivalent',
+            ) if key in values
+        ]
+        required = min(2, len(selected_keys)) if len(selected_keys) >= 2 else 2
+    elif market_type in {'CURRENT_QUARTER_TOTAL', 'CURRENT_QUARTER_TEAM_IT'}:
+        selected_keys = list(values)
+        required = 2
+    else:
+        selected_keys = list(values)
+        required = 1
+
+    selected_flags = {key: flags[key] for key in selected_keys}
+    count = sum(bool(value) for value in selected_flags.values())
+    return {
+        'values': {key: values[key] for key in selected_keys},
+        'aligned_flags': selected_flags,
+        'aligned_count': count,
+        'required_count': required,
+        'passed': bool(selected_flags) and count >= required,
+        'policy': 'v10.5 live-only multi-clock alignment; no history/scenario projection',
+    }
+
+
+def calculate_live_projection(
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+    history: dict[str, Any],
+    scenario: dict[str, Any],
+    config: dict[str, Any],
+    stat: Optional[dict[str, Any]]=None,
+) -> dict[str, Any]:
+    mode = str(
+        canonical.get('data_mode')
+        or canonical.get('data_gate', {}).get('data_mode')
+        or 'DATA_OFF'
+    )
+    clock = _segment_clock(market, canonical)
+    line = float(market['line'])
+    side = str(market['side']).upper()
+    sigma_base = _stage_sigma(market['market_type'], canonical['stage'], config)
+    controls = _v105_score_time_controls(market, canonical, clock)
+    projection_score_time = to_number(controls.get('primary_scope_pace'))
+    projection_stat = None
+    stat_details: dict[str, Any] = {}
+    fallback_to_score_time = False
+
+    if mode in {'FULL_STAT', 'PARTIAL_STAT'}:
+        # Current-quarter stats in the source are cumulative for the game,
+        # so a quarter market uses quarter score/time rather than pretending
+        # cumulative FGA/FTA belong only to that quarter.
+        if market['market_type'] in {
+            'CURRENT_QUARTER_TOTAL',
+            'CURRENT_QUARTER_TEAM_IT',
+        }:
+            projection_used = projection_score_time
+            formula_mode = f'{mode}_CURRENT_QUARTER_SCORE_TIME'
+            formula_text = (
+                'Current-quarter points / elapsed quarter time * full quarter time; '
+                'cumulative game box score is not reassigned to one quarter.'
+            )
+            fallback_to_score_time = True
+        else:
+            rho, k_stage, minutes_played = _v10_stage_trust(canonical)
+            remaining_minutes = float(clock['remaining_seconds']) / 60.0
+            pre_home = _v10_pre_stat_team('home', market, canonical)
+            pre_away = _v10_pre_stat_team('away', market, canonical)
+            live_home = _v10_live_stat_team(
+                'home', market, canonical, pre_home, rho, remaining_minutes
+            )
+            live_away = _v10_live_stat_team(
+                'away', market, canonical, pre_away, rho, remaining_minutes
+            )
+            if market.get('team'):
+                selected = (
+                    live_home
+                    if market['team'] == canonical['home_team']
+                    else live_away
+                )
+                # LiveRaw_Team already equals current score plus expected
+                # remaining points from the regressed live stat rates.
+                projection_stat = to_number(selected.get('LiveRaw_Team'))
+            else:
+                home_value = to_number(live_home.get('LiveRaw_Team'))
+                away_value = to_number(live_away.get('LiveRaw_Team'))
+                projection_stat = (
+                    home_value + away_value
+                    if home_value is not None and away_value is not None
+                    else None
+                )
+            projection_used = (
+                projection_stat
+                if projection_stat is not None
+                else projection_score_time
+            )
+            fallback_to_score_time = projection_stat is None
+            formula_mode = (
+                'FULL_STAT_LIVE_ONLY'
+                if mode == 'FULL_STAT'
+                else 'PARTIAL_STAT_LIVE_ONLY'
+            )
+            formula_text = (
+                'Current points + expected remaining points from live '
+                'FGA/FTA/2PA/3PA/ORB/TO rates. Live rates are shrunk once '
+                'to pre-game box-score rates; exact-line P_hist and '
+                'P_scenario do not enter Projection_used.'
+            )
+            stat_details = {
+                'rho_stage': rho,
+                'K_stage': k_stage,
+                'minutes_played': minutes_played,
+                'remaining_minutes_scope': remaining_minutes,
+                'pre_home': pre_home,
+                'pre_away': pre_away,
+                'live_home': live_home,
+                'live_away': live_away,
+                'stat_projection_selected': projection_stat,
+                'important_change': (
+                    'Uses LiveRaw_Team. Removed second PreFinal shrink and '
+                    'removed Projection_control/HistoryScenarioAnchor median.'
+                ),
+            }
+        sigma_multiplier = (
+            float(
+                config.get('projection', {})
+                .get('core_live', {})
+                .get('partial_sigma_multiplier', 1.15)
+            )
+            if mode == 'PARTIAL_STAT'
+            else 1.0
+        )
+        sigma = sigma_base * sigma_multiplier
+    elif mode == 'SCORE_TIME_HISTORY':
+        projection_used = projection_score_time
+        sigma = sigma_base * float(
+            config.get('projection', {})
+            .get('core_live', {})
+            .get('no_stat_sigma_multiplier', 1.20)
+        )
+        formula_mode = 'SCORE_TIME_LIVE_ONLY'
+        formula_text = (
+            'Current segment points / elapsed segment time * full segment time. '
+            'P_hist, historical remaining median and P_scenario are excluded.'
+        )
+    else:
+        projection_used = line
+        sigma = sigma_base
+        formula_mode = 'DATA_OFF'
+        formula_text = 'DATA_OFF'
+
+    if projection_used is None:
+        projection_used = line
+        fallback_to_score_time = True
+
+    line_edge_over = projection_used - line
+    line_edge_under = line - projection_used
+    line_edge = line_edge_over if side == 'OVER' else line_edge_under
+    z_score = line_edge / sigma if sigma > 0 else 0.0
+    p_live = normal_cdf(z_score) if sigma > 0 else 0.50
+
+    components = {
+        'projection_score_time': {
+            'value': projection_score_time,
+            'included': mode == 'SCORE_TIME_HISTORY' or fallback_to_score_time,
+            'role': 'live_only',
+        },
+        'projection_stat_live_only': {
+            'value': projection_stat,
+            'included': (
+                mode in {'FULL_STAT', 'PARTIAL_STAT'}
+                and projection_stat is not None
+                and not fallback_to_score_time
+            ),
+            'role': 'live_only',
+        },
+        'projection_history': {
+            'value': None,
+            'included': False,
+            'role': 'separate_P_hist_only',
+        },
+        'projection_scenario': {
+            'value': None,
+            'included': False,
+            'role': 'separate_P_scenario_only',
+        },
+    }
+
+    return {
+        'clock': canonical.get('clock'),
+        'elapsed_seconds': clock['elapsed_seconds'],
+        'remaining_seconds': clock['remaining_seconds'],
+        'elapsed_game_seconds': canonical['elapsed_game_seconds'],
+        'remaining_game_seconds': canonical['remaining_game_seconds'],
+        'current_points': clock['current_points'],
+        'market_type': market.get('market_type'),
+        'segment': market.get('segment'),
+        'team': market.get('team'),
+        'data_mode': mode,
+        'components': components,
+        'projection_simple': projection_score_time,
+        'projection_score_time': projection_score_time,
+        'projection_regressed': None,
+        'projection_segment': projection_score_time,
+        'projection_model_live': projection_used,
+        'projection_history': None,
+        'projection_scenario': None,
+        'scenario_projection_method': 'SEPARATE_P_SCENARIO_ONLY',
+        'projection_stat_adjusted': projection_stat,
+        'projection_stat_live_only': projection_stat,
+        'projection_control': None,
+        'projection_history_scenario_anchor': None,
+        'projection_used': projection_used,
+        'Projection_used': projection_used,
+        'line': line,
+        'line_edge': line_edge,
+        'line_edge_over': line_edge_over,
+        'line_edge_under': line_edge_under,
+        'projection_minus_line': projection_used - line,
+        'sigma_base': sigma_base,
+        'sigma': sigma,
+        'z_score': z_score,
+        'p_live': p_live,
+        'required_history': _v9_required_history(market, canonical),
+        'projection_formula_mode': formula_mode,
+        'projection_formula': formula_text,
+        'live_projection_controls': controls,
+        'live_projection_independent_from_p_hist_scenario': True,
+        'history_scenario_used_in_live_projection': False,
+        'fallback_to_score_time': fallback_to_score_time,
+        'no_stat_components': {
+            'score_time_primary': projection_score_time,
+            'half_by_quarters': controls.get('half_by_quarters_projection'),
+            'q1_full_game_equivalent': controls.get('q1_full_game_equivalent'),
+            'q2_full_game_equivalent': controls.get('q2_full_game_equivalent'),
+        } if mode == 'SCORE_TIME_HISTORY' else {},
+        'no_stat_configured_weights': {
+            'score_time_primary': 1.0,
+            'history': 0.0,
+            'scenario': 0.0,
+        } if mode == 'SCORE_TIME_HISTORY' else {},
+        'projection_conflict': False,
+        'projection_conflict_threshold': None,
+        'stat_projection_details': stat_details,
+        'core_live_formula_version': 'v10.5_CLEAN_LIVE_CHANNEL',
+    }
+
+
+def _v105_evaluate_market(
+    self: SuperBasketCalculator,
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+) -> dict[str, Any]:
+    item = _V105_EVALUATE_BASE(self, market, canonical)
+    item['signal_policy_version'] = 'V10_5_CLEAN_LIVE_PROJECTION'
+    live = item.get('live') or {}
+
+    for step in item.get('p_trace') or []:
+        if step.get('step') == 'P_LIVE':
+            step['formula'] = (
+                'v10.5 P_live = Phi(candidate-side edge / sigma), where edge '
+                'comes only from clean live projection. P_hist/P_scenario do '
+                'not shift Projection_used.'
+            )
+            step['inputs'] = {
+                'data_mode': live.get('data_mode'),
+                'projection_formula_mode': live.get('projection_formula_mode'),
+                'projection_score_time': live.get('projection_score_time'),
+                'projection_stat_live_only': live.get('projection_stat_live_only'),
+                'projection_used': live.get('projection_used'),
+                'line': item.get('line'),
+                'projection_minus_line': live.get('projection_minus_line'),
+                'candidate_side_edge': live.get('line_edge'),
+                'sigma': live.get('sigma'),
+            }
+        elif step.get('step') == 'STAGE_WEIGHTS':
+            step['formula'] = (
+                'P_raw = w_hist*P_hist + w_scenario*P_scenario + '
+                'w_live*P_live. The three channels stay separate.'
+            )
+
+    item.setdefault('p_trace', []).append(_trace_step(
+        'CLEAN_LIVE_PROJECTION_V10_5',
+        True,
+        (
+            'Projection_used is live-only. Exact-line history and matched '
+            'scenario outcomes enter P_final separately and cannot create '
+            'or reverse live edge.'
+        ),
+        {
+            'data_mode': live.get('data_mode'),
+            'formula_mode': live.get('projection_formula_mode'),
+            'score_time_projection': live.get('projection_score_time'),
+            'stat_projection': live.get('projection_stat_live_only'),
+            'projection_used': live.get('projection_used'),
+            'line': item.get('line'),
+            'projection_minus_line': live.get('projection_minus_line'),
+            'candidate_edge': live.get('line_edge'),
+            'p_live': live.get('p_live'),
+            'history_scenario_used_in_live_projection': False,
+        },
+        item.get('p_raw'),
+        item.get('p_final'),
+        [],
+    ))
+    return item
+
+
+SuperBasketCalculator.evaluate_market = _v105_evaluate_market
+
+
+def _v105_calculate(
+    self: SuperBasketCalculator,
+    source: dict[str, Any],
+    dispatch_threshold: Optional[float]=None,
+    strict_schema: bool=False,
+) -> dict[str, Any]:
+    output = _V105_CALCULATE_BASE(
+        self, source, dispatch_threshold, strict_schema
+    )
+    calculation = output.get('super_basket_calculation', {})
+    calculation['engine_version'] = '10.5.0-CLEAN-LIVE-PROJECTION'
+    calculation['formula_registry'] = deepcopy(_V105_FORMULA_REGISTRY)
+    calculation['live_projection_policy'] = {
+        'channel_separation': True,
+        'p_hist_used_in_projection': False,
+        'p_scenario_used_in_projection': False,
+        'no_stat_formula': (
+            'current segment points / elapsed segment time * full segment time'
+        ),
+        'full_stat_formula': (
+            'current points + expected remaining points from live box-score '
+            'rates, with one regression to pre-game stat rates'
+        ),
+        'full_stat_removed_operations': [
+            'second PreFinal shrink',
+            'median with Projection_control',
+            'median with HistoryScenarioAnchor',
+        ],
+        'p_live_formula': 'Phi(candidate-side edge / sigma)',
+        'p_raw_formula': (
+            'w_hist*P_hist + w_scenario*P_scenario + w_live*P_live'
+        ),
+    }
+    output['super_basket_calculation'] = calculation
+    return output
+
+
+SuperBasketCalculator.calculate = _v105_calculate
+
+
+def apply_risk_post_filter(decision: dict[str, Any]) -> dict[str, Any]:
+    return {
+        'enabled': False,
+        'applicable': False,
+        'p_final': to_number((decision.get('probabilities') or {}).get('p_final')),
+        'p_live': to_number((decision.get('probabilities') or {}).get('p_live')),
+        'passed': True,
+        'filtered': False,
+        'reason_code': None,
+        'policy': (
+            'V10_5_CLEAN_LIVE_PROJECTION; RISK_65_TO_74_99; '
+            'PLAY_75_PLUS; EDGE_3_PLUS_HISTORY_60'
+        ),
+    }
+
+
+SYSTEM_VERSION = '10.5.0-TELEGRAM-READY'
+DEFAULT_CONFIG['engine_version'] = '10.5.0-CLEAN-LIVE-PROJECTION'
+
+
+# =====================================================================
+# v10.6 — LIVE DIRECTION + HISTORY/SCENARIO CONFIRMATION
+# =====================================================================
+# Live determines the only eligible side.
+# History and scenario may confirm or reject that side, but never alter
+# Projection_used or create a live edge.
+#
+# Dynamic weights:
+#   edge 0.50–3.99  -> history 40%, scenario 15%, live 45%
+#   edge 4.00–7.99  -> history 30%, scenario 15%, live 55%
+#   edge 8.00–11.99 -> history 25%, scenario 10%, live 65%
+#   edge 12.00+     -> history 15%, scenario 10%, live 75%
+#
+# Dynamic confirmation:
+#   edge 0.50–3.99  -> P_hist >=65%, P_scenario >=60%
+#   edge 4.00–7.99  -> P_hist >=60%, P_scenario >=55%
+#   edge 8.00–11.99 -> P_hist >=55%, P_scenario >=55%
+#   edge 12.00+     -> P_hist >=50%, P_scenario >=50%
+# =====================================================================
+
+_V106_EVALUATE_BASE = SuperBasketCalculator.evaluate_market
+_V106_CALCULATE_BASE = SuperBasketCalculator.calculate
+_V106_FORMULA_REGISTRY = deepcopy(_V105_FORMULA_REGISTRY)
+_V106_FORMULA_REGISTRY.update({
+    'live_direction_lock_v10_6': (
+        'Clean live projection determines the only eligible side. '
+        'Candidate-side edge must be >=0.50.'
+    ),
+    'dynamic_weights_v10_6': (
+        '0.50-3.99 H40/S15/L45; 4-7.99 H30/S15/L55; '
+        '8-11.99 H25/S10/L65; 12+ H15/S10/L75.'
+    ),
+    'dynamic_confirmation_v10_6': (
+        'History/scenario confirmation minima decline as clean live edge grows: '
+        '65/60, 60/55, 55/55, 50/50.'
+    ),
+})
+
+
+def _v106_dynamic_policy(edge: Optional[float]) -> dict[str, Any]:
+    value = to_number(edge)
+    if value is None or value < 0.50:
+        return {
+            'tier': 'EDGE_BELOW_0_50',
+            'weights': {'hist': 0.40, 'scenario': 0.15, 'live': 0.45},
+            'hist_min': None,
+            'scenario_min': None,
+        }
+    if value < 4.00:
+        return {
+            'tier': 'EDGE_0_50_TO_3_99',
+            'weights': {'hist': 0.40, 'scenario': 0.15, 'live': 0.45},
+            'hist_min': 0.65,
+            'scenario_min': 0.60,
+        }
+    if value < 8.00:
+        return {
+            'tier': 'EDGE_4_00_TO_7_99',
+            'weights': {'hist': 0.30, 'scenario': 0.15, 'live': 0.55},
+            'hist_min': 0.60,
+            'scenario_min': 0.55,
+        }
+    if value < 12.00:
+        return {
+            'tier': 'EDGE_8_00_TO_11_99',
+            'weights': {'hist': 0.25, 'scenario': 0.10, 'live': 0.65},
+            'hist_min': 0.55,
+            'scenario_min': 0.55,
+        }
+    return {
+        'tier': 'EDGE_12_PLUS',
+        'weights': {'hist': 0.15, 'scenario': 0.10, 'live': 0.75},
+        'hist_min': 0.50,
+        'scenario_min': 0.50,
+    }
+
+
+def _v106_drop_old_direction_gates(
+    blockers: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    obsolete = {
+        'HISTORY_ZONE_BELOW_75',
+        'HISTORY_ZONE_BELOW_DYNAMIC_MIN',
+        'LIVE_EDGE_BELOW_3',
+        'LIVE_EDGE_BELOW_0_50',
+        'SCENARIO_DIRECTION_CONFLICT',
+    }
+    return [
+        entry for entry in blockers
+        if entry.get('rule_id') not in obsolete
+    ]
+
+
+def _v106_evaluate_market(
+    self: SuperBasketCalculator,
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+) -> dict[str, Any]:
+    item = _V106_EVALUATE_BASE(self, market, canonical)
+    live = item.get('live') or {}
+    history = item.get('history') or {}
+    scenario = item.get('scenario') or {}
+
+    # Empty/unsupported market evaluations stay untouched.
+    if live.get('projection_used') is None or not history or not scenario:
+        item['signal_policy_version'] = 'V10_6_LIVE_DIRECTION_CONFIRMATION'
+        return item
+
+    edge = to_number(live.get('line_edge'))
+    p_live = float(live.get('p_live') or 0.50)
+    p_hist = float(history.get('p_hist') or 0.50)
+    p_scenario = float(scenario.get('p_scenario') or 0.50)
+    policy = _v106_dynamic_policy(edge)
+    weights = policy['weights']
+
+    p_raw = (
+        weights['hist'] * p_hist
+        + weights['scenario'] * p_scenario
+        + weights['live'] * p_live
+    )
+
+    blockers = _v106_drop_old_direction_gates(
+        deepcopy(item.get('blockers') or [])
+    )
+    caps = deepcopy(item.get('caps') or [])
+
+    if canonical.get('stage') != 'PRE_MATCH':
+        if edge is None or edge < 0.50:
+            blockers.append(_blocker(
+                'LIVE_DIRECTION_OR_EDGE_FAILED',
+                (
+                    'Clean live projection does not support this side by '
+                    'at least 0.50 points. History/scenario cannot create edge.'
+                ),
+                {
+                    'candidate_side': market.get('side'),
+                    'projection_used': live.get('projection_used'),
+                    'line': market.get('line'),
+                    'candidate_side_edge': edge,
+                },
+            ))
+        else:
+            hist_min = float(policy['hist_min'])
+            scenario_min = float(policy['scenario_min'])
+            if p_hist < hist_min:
+                blockers.append(_blocker(
+                    'HISTORY_CONFIRMATION_BELOW_DYNAMIC_MIN',
+                    'History does not confirm the clean live direction',
+                    {
+                        'p_hist': p_hist,
+                        'required': hist_min,
+                        'edge_tier': policy['tier'],
+                    },
+                ))
+            if p_scenario < scenario_min:
+                blockers.append(_blocker(
+                    'SCENARIO_CONFIRMATION_BELOW_DYNAMIC_MIN',
+                    'Scenario does not confirm the clean live direction',
+                    {
+                        'p_scenario': p_scenario,
+                        'required': scenario_min,
+                        'edge_tier': policy['tier'],
+                    },
+                ))
+
+    # Remove duplicates while preserving all structural/stat/router gates.
+    deduped = []
+    seen = set()
+    for entry in blockers:
+        code = str(entry.get('rule_id'))
+        if code in seen:
+            continue
+        seen.add(code)
+        deduped.append(entry)
+    blockers = deduped
+
+    active_cap = min(
+        (float(entry.get('cap', 1.0)) for entry in caps),
+        default=1.0,
+    )
+    p_final = min(p_raw, active_cap)
+
+    stat = item.get('stat_comparison') or {}
+    strong_clean = bool(
+        not blockers
+        and not caps
+        and stat.get('stat_gate_status') == 'CONFIRMED'
+        and p_live >= 0.75
+        and p_hist >= 0.75
+        and p_scenario >= 0.68
+    )
+    verdict = _verdict(
+        p_final,
+        blockers,
+        strong_clean,
+        p_hist,
+    )
+
+    item['signal_policy_version'] = 'V10_6_LIVE_DIRECTION_CONFIRMATION'
+    item['weights']['normalized'] = deepcopy(weights)
+    item['weights']['dynamic_policy_v10_6'] = deepcopy(policy)
+    item['p_raw'] = p_raw
+    item['p_final'] = p_final
+    item['caps'] = caps
+    item['blockers'] = blockers
+    item['hard_conflict'] = bool(blockers)
+    item['verdict'] = verdict
+    item['confirmation_policy_v10_6'] = {
+        'live_defines_direction': True,
+        'history_changes_projection': False,
+        'scenario_changes_projection': False,
+        'candidate_side_edge': edge,
+        **deepcopy(policy),
+    }
+
+    for step in item.get('p_trace') or []:
+        if step.get('step') == 'STAGE_WEIGHTS':
+            step['formula'] = (
+                'v10.6 dynamic weights by clean candidate-side live edge.'
+            )
+            step['inputs'] = {
+                'edge': edge,
+                'tier': policy['tier'],
+                'weights': weights,
+                'p_hist': p_hist,
+                'p_scenario': p_scenario,
+                'p_live': p_live,
+            }
+            step['probability_after'] = p_raw
+        elif step.get('step') == 'P_FINAL_RULE':
+            step['inputs'] = {
+                'p_raw_v10_6': p_raw,
+                'active_cap': active_cap,
+                'blockers_v10_6': blockers,
+            }
+            step['probability_after'] = p_final
+            step['reason_codes'] = [verdict]
+
+    item.setdefault('p_trace', []).append(_trace_step(
+        'LIVE_DIRECTION_CONFIRMATION_V10_6',
+        True,
+        (
+            'Live determines side; history and scenario only confirm/reject. '
+            'They cannot modify Projection_used.'
+        ),
+        {
+            'projection_used': live.get('projection_used'),
+            'line': market.get('line'),
+            'candidate_side_edge': edge,
+            'p_live': p_live,
+            'p_hist': p_hist,
+            'p_scenario': p_scenario,
+            'policy': policy,
+        },
+        p_raw,
+        p_final,
+        [entry.get('rule_id') for entry in blockers],
+    ))
+    return item
+
+
+SuperBasketCalculator.evaluate_market = _v106_evaluate_market
+
+
+def _v106_calculate(
+    self: SuperBasketCalculator,
+    source: dict[str, Any],
+    dispatch_threshold: Optional[float]=None,
+    strict_schema: bool=False,
+) -> dict[str, Any]:
+    output = _V106_CALCULATE_BASE(
+        self,
+        source,
+        dispatch_threshold,
+        strict_schema,
+    )
+    calculation = output.get('super_basket_calculation', {})
+    calculation['engine_version'] = '10.6.0-LIVE-DIRECTION-CONFIRMATION'
+    calculation['formula_registry'] = deepcopy(_V106_FORMULA_REGISTRY)
+    calculation['signal_policy'] = {
+        'risk_min': 0.65,
+        'play_min': 0.75,
+        'minimum_live_edge': 0.50,
+        'live_defines_direction': True,
+        'history_and_scenario_are_confirmation_only': True,
+        'dynamic_tiers': [
+            {
+                'edge': '0.50-3.99',
+                'weights': {'hist': 0.40, 'scenario': 0.15, 'live': 0.45},
+                'hist_min': 0.65,
+                'scenario_min': 0.60,
+            },
+            {
+                'edge': '4.00-7.99',
+                'weights': {'hist': 0.30, 'scenario': 0.15, 'live': 0.55},
+                'hist_min': 0.60,
+                'scenario_min': 0.55,
+            },
+            {
+                'edge': '8.00-11.99',
+                'weights': {'hist': 0.25, 'scenario': 0.10, 'live': 0.65},
+                'hist_min': 0.55,
+                'scenario_min': 0.55,
+            },
+            {
+                'edge': '12.00+',
+                'weights': {'hist': 0.15, 'scenario': 0.10, 'live': 0.75},
+                'hist_min': 0.50,
+                'scenario_min': 0.50,
+            },
+        ],
+        'telegram': 'PLAY/RISK only; PASS is never sent',
+    }
+    output['super_basket_calculation'] = calculation
+    return output
+
+
+SuperBasketCalculator.calculate = _v106_calculate
+
+
+def apply_risk_post_filter(decision: dict[str, Any]) -> dict[str, Any]:
+    return {
+        'enabled': False,
+        'applicable': False,
+        'p_final': to_number((decision.get('probabilities') or {}).get('p_final')),
+        'p_live': to_number((decision.get('probabilities') or {}).get('p_live')),
+        'passed': True,
+        'filtered': False,
+        'reason_code': None,
+        'policy': (
+            'V10_6_LIVE_DIRECTION_CONFIRMATION; '
+            'RISK_65_TO_74_99; PLAY_75_PLUS'
+        ),
+    }
+
+
+SYSTEM_VERSION = '10.6.0-TELEGRAM-READY'
+DEFAULT_CONFIG['engine_version'] = '10.6.0-LIVE-DIRECTION-CONFIRMATION'
+DEFAULT_CONFIG['dispatch_threshold'] = 0.65
+
+
+# =====================================================================
+# v10.9 — RESULT-PATTERN DECISION SELECTOR
+# =====================================================================
+# This layer does not change P_hist, P_scenario, P_live, Projection_used,
+# P_raw or P_final. It only filters/ranks already calculated real lines.
+# Seed patterns were mined from completed line outcomes in tmpmatches_3d.
+# Every new match and every new line is evaluated; no bucket is permanently
+# disabled. Rolling results are a small ranking modifier only.
+# =====================================================================
+
+_V109_APPLY_LEARNING_BASE = apply_learning_to_evaluation
+_V109_SUMMARIZE_LINE_BASE = summarize_line_evaluation
+
+DECISION_FILTER_VERSION = '10.9.0-RESULT-PATTERN-SELECTOR'
+DECISION_FILTER_PROFILE = os.getenv(
+    'SUPER_BASKET_DECISION_PROFILE', 'RESULT_PATTERN_60_73'
+).strip().upper()
+DECISION_FILTER_RISK_P_FINAL = float(os.getenv(
+    'SUPER_BASKET_DECISION_RISK_P_FINAL', '0.60'
+))
+DECISION_FILTER_PLAY_P_FINAL = float(os.getenv(
+    'SUPER_BASKET_DECISION_PLAY_P_FINAL', '0.73'
+))
+DECISION_FILTER_RISK_PATTERN_SCORE = float(os.getenv(
+    'SUPER_BASKET_DECISION_RISK_PATTERN_SCORE', '0.74'
+))
+DECISION_FILTER_PLAY_PATTERN_SCORE = float(os.getenv(
+    'SUPER_BASKET_DECISION_PLAY_PATTERN_SCORE', '0.84'
+))
+DECISION_FILTER_ROLLING_LIMIT = int(os.getenv(
+    'SUPER_BASKET_DECISION_ROLLING_LIMIT', '60'
+))
+DECISION_FILTER_EMPIRICAL_MIN_SAMPLES = int(os.getenv(
+    'SUPER_BASKET_DECISION_EMPIRICAL_MIN_SAMPLES', '20'
+))
+
+# Seed pattern outcome counts from the supplied completed archive.
+# Laplace smoothing is applied at runtime: (wins+1)/(samples+2).
+_V109_PATTERN_SEEDS = {
+    'OVER_SCENARIO_75': {'wins': 9, 'samples': 9, 'unique_matches': 6},
+    'OVER_LIVE_75': {'wins': 11, 'samples': 11, 'unique_matches': 4},
+    'OVER_REQUIRED_HISTORY_55': {'wins': 12, 'samples': 12, 'unique_matches': 6},
+    'UNDER_SCENARIO_75_EDGE_POSITIVE': {'wins': 3, 'samples': 3, 'unique_matches': 2},
+}
+
+_V109_SOFT_BLOCKERS = {
+    'HISTORY_ZONE_BELOW_75',
+    'LIVE_EDGE_BELOW_3',
+    'LIVE_EDGE_BELOW_0_50',
+    'SCENARIO_DIRECTION_CONFLICT',
+    'NO_STAT_SUPPORT_TOO_LOW',
+    'LIVE_DIRECTION_OR_EDGE_FAILED',
+    'HISTORY_CONFIRMATION_BELOW_DYNAMIC_MIN',
+    'SCENARIO_CONFIRMATION_BELOW_DYNAMIC_MIN',
+    'REQUIRED_HISTORY_UNAVAILABLE',
+}
+
+
+def _v109_checkpoint(calculation: dict[str, Any]) -> Optional[int]:
+    snapshot = calculation.get('canonical_snapshot') or {}
+    trigger = to_int(snapshot.get('trigger_checkpoint'))
+    if trigger in (1, 2, 3):
+        return trigger
+    stage = str(snapshot.get('stage') or '').upper()
+    if stage == 'HT':
+        return 2
+    if stage in {'AFTER_3Q', 'Q4_CONFIRMATION'}:
+        return 3
+    if stage in {'EARLY_LIVE', 'CURRENT_Q1_Q3'}:
+        return 1
+    return None
+
+
+def _v109_allowed_market(checkpoint: Optional[int], market_type: str) -> bool:
+    if checkpoint == 1:
+        return market_type in {'H1_TOTAL', 'TEAM_IT_H1'}
+    if checkpoint == 2:
+        return market_type in {'MATCH_TOTAL', 'H2_TOTAL', 'TEAM_IT_MATCH', 'TEAM_IT_H2'}
+    if checkpoint == 3:
+        return market_type in {'MATCH_TOTAL', 'CURRENT_QUARTER_TEAM_IT'}
+    return False
+
+
+def _v109_blocker_codes(item: dict[str, Any]) -> list[str]:
+    output: list[str] = []
+    for row in item.get('blockers') or []:
+        code = str(row.get('rule_id') if isinstance(row, dict) else row or '').strip()
+        if code:
+            output.append(code)
+    return list(dict.fromkeys(output))
+
+
+def _v109_empirical_context(store: LearningStore, item: dict[str, Any], calculation: dict[str, Any]) -> dict[str, Any]:
+    snapshot = calculation.get('canonical_snapshot') or {}
+    stage = str(snapshot.get('stage') or 'UNKNOWN')
+    market_type = str(item.get('market_type') or 'UNKNOWN')
+    side = str(item.get('side') or 'UNKNOWN')
+    results: list[str] = []
+    try:
+        rows = store.connection.execute(
+            """SELECT result FROM signals
+               WHERE result IN ('WIN','LOSS')
+                 AND stage=? AND market_type=? AND side=?
+               ORDER BY COALESCE(settled_at, created_at) DESC
+               LIMIT ?""",
+            (stage, market_type, side, DECISION_FILTER_ROLLING_LIMIT),
+        ).fetchall()
+        results = [str(row['result']) for row in rows]
+    except Exception:
+        results = []
+    samples = len(results)
+    wins = sum(result == 'WIN' for result in results)
+    rate = wins / samples if samples else None
+    adjustment = 0.0
+    label = 'INSUFFICIENT_SAMPLE'
+    if samples >= DECISION_FILTER_EMPIRICAL_MIN_SAMPLES and rate is not None:
+        if rate >= 0.73:
+            adjustment = 0.02
+            label = 'ROLLING_73_PLUS'
+        elif rate >= 0.60:
+            label = 'ROLLING_60_TO_72'
+        elif rate >= 0.50:
+            adjustment = -0.01
+            label = 'ROLLING_50_TO_59'
+        else:
+            adjustment = -0.02
+            label = 'ROLLING_BELOW_50'
+    return {
+        'scope': 'rolling stage+market_type+side',
+        'samples': samples,
+        'wins': wins,
+        'win_rate': rate,
+        'label': label,
+        'pattern_score_adjustment': adjustment,
+        'hard_block': False,
+    }
+
+
+def _v109_seed_pattern_matches(
+    checkpoint: Optional[int],
+    market_type: str,
+    side: str,
+    p_final: float,
+    p_live: float,
+    p_scenario: float,
+    required_history: Optional[float],
+    edge: float,
+) -> list[dict[str, Any]]:
+    matches: list[dict[str, Any]] = []
+
+    def add(pattern_id: str, condition: bool, description: str) -> None:
+        if not condition:
+            return
+        seed = _V109_PATTERN_SEEDS[pattern_id]
+        posterior = (float(seed['wins']) + 1.0) / (float(seed['samples']) + 2.0)
+        matches.append({
+            'pattern_id': pattern_id,
+            'description': description,
+            'seed_wins': seed['wins'],
+            'seed_samples': seed['samples'],
+            'seed_unique_matches': seed['unique_matches'],
+            'laplace_reliability': posterior,
+        })
+
+    add(
+        'OVER_SCENARIO_75',
+        side == 'OVER' and p_final >= 0.60 and p_scenario >= 0.75,
+        'OVER: P_final >=60% and P_scenario >=75%',
+    )
+    add(
+        'OVER_LIVE_75',
+        side == 'OVER' and p_final >= 0.60 and p_live >= 0.75,
+        'OVER: P_final >=60% and P_live >=75%',
+    )
+    add(
+        'OVER_REQUIRED_HISTORY_55',
+        side == 'OVER' and p_final >= 0.60 and required_history is not None and required_history >= 0.55,
+        'OVER: P_final >=60% and RequiredHistoryP >=55%',
+    )
+    add(
+        'UNDER_SCENARIO_75_EDGE_POSITIVE',
+        side == 'UNDER' and p_final >= 0.60 and p_scenario >= 0.75 and edge >= 0.0,
+        'UNDER: P_final >=60%, P_scenario >=75%, projection supports UNDER',
+    )
+    return matches
+
+
+def _v109_decision_gate(item: dict[str, Any], store: LearningStore, calculation: dict[str, Any]) -> dict[str, Any]:
+    checkpoint = _v109_checkpoint(calculation)
+    market_type = str(item.get('market_type') or '')
+    side = str(item.get('side') or '')
+    p_final = float(item.get('p_final') or 0.0)
+    history = item.get('history') or {}
+    scenario = item.get('scenario') or {}
+    live = item.get('live') or {}
+    p_hist = float(history.get('p_hist') or 0.50)
+    p_scenario = float(scenario.get('p_scenario') or 0.50)
+    p_live = float(live.get('p_live') or 0.50)
+    edge = float(live.get('line_edge') or 0.0)
+    projection = to_number(live.get('projection_used'))
+    required_history = to_number((live.get('required_history') or {}).get('p_required_history'))
+    odds = to_number(item.get('odds'))
+    data_mode = str(item.get('data_mode') or '')
+    stat = item.get('stat_comparison') or {}
+    stat_status = str(stat.get('stat_gate_status') or 'OFF')
+    router = item.get('router') or {}
+    router_status = str(router.get('status') or '')
+    parser_issues = list(item.get('parser_issues') or [])
+    snapshot = calculation.get('canonical_snapshot') or {}
+    data_gate = calculation.get('data_gate') or snapshot.get('data_gate') or {}
+    blocker_codes = _v109_blocker_codes(item)
+    hard_blockers = [code for code in blocker_codes if code not in _V109_SOFT_BLOCKERS]
+    soft_blockers = [code for code in blocker_codes if code in _V109_SOFT_BLOCKERS]
+
+    if DECISION_FILTER_PROFILE in {'LEGACY', 'OFF', 'DISABLED'}:
+        return {
+            'version': DECISION_FILTER_VERSION,
+            'profile': DECISION_FILTER_PROFILE,
+            'enabled': False,
+            'passed': item.get('system_action') != 'PASS',
+            'recommended_action': item.get('system_action') or 'PASS',
+            'pattern_score': p_final,
+            'reason_codes': [],
+        }
+
+    reasons: list[str] = []
+    warnings: list[str] = []
+    if parser_issues:
+        reasons.append('RP60_PARSER_OR_LINE_ISSUE')
+    if odds is None or odds < float(DEFAULT_CONFIG.get('odds_min', 1.44)):
+        reasons.append('RP60_ODDS_FAILED')
+    if router_status not in {'ALLOW', 'PRIORITY', 'DOWNGRADE'}:
+        reasons.append('RP60_ROUTER_NOT_ALLOWED')
+    if not _v109_allowed_market(checkpoint, market_type):
+        reasons.append('RP60_STAGE_MARKET_NOT_ALLOWED')
+    if projection is None:
+        reasons.append('RP60_PROJECTION_UNAVAILABLE')
+    if not bool(data_gate.get('time_reliable', True)):
+        reasons.append('RP60_TIME_NOT_RELIABLE')
+    if hard_blockers:
+        reasons.append('RP60_HARD_BLOCKER_PRESENT')
+    if p_final < DECISION_FILTER_RISK_P_FINAL:
+        reasons.append('RP60_P_FINAL_BELOW_60')
+    if data_mode == 'FULL_STAT' and stat_status == 'AGAINST':
+        reasons.append('RP60_FULL_STAT_AGAINST')
+
+    matched = _v109_seed_pattern_matches(
+        checkpoint, market_type, side, p_final, p_live, p_scenario,
+        required_history, edge,
+    )
+    if not matched:
+        reasons.append('RP60_NO_VALIDATED_RESULT_PATTERN')
+
+    pattern_reliability = (
+        sum(float(row['laplace_reliability']) for row in matched) / len(matched)
+        if matched else 0.50
+    )
+    # Decision score, not a recalculated match probability.
+    pattern_score = 0.65 * pattern_reliability + 0.35 * p_final
+    if data_mode == 'FULL_STAT':
+        if stat_status == 'CONFIRMED':
+            pattern_score += 0.02
+        elif stat_status == 'CONFLICT':
+            pattern_score -= 0.01
+            warnings.append('RP60_FULL_STAT_CONFLICT')
+    empirical = _v109_empirical_context(store, item, calculation)
+    pattern_score += float(empirical.get('pattern_score_adjustment') or 0.0)
+    pattern_score = max(0.0, min(1.0, pattern_score))
+
+    if pattern_score < DECISION_FILTER_RISK_PATTERN_SCORE:
+        reasons.append('RP60_PATTERN_SCORE_BELOW_RISK_MIN')
+
+    passed = not reasons
+    recommended_action = 'PASS'
+    if passed:
+        play_ready = (
+            p_final >= DECISION_FILTER_PLAY_P_FINAL
+            and pattern_score >= DECISION_FILTER_PLAY_PATTERN_SCORE
+            and len(matched) >= 2
+            and not (data_mode == 'FULL_STAT' and stat_status == 'CONFLICT')
+        )
+        recommended_action = 'PLAY' if play_ready else 'RISK'
+
+    return {
+        'version': DECISION_FILTER_VERSION,
+        'profile': DECISION_FILTER_PROFILE,
+        'enabled': True,
+        'checkpoint': checkpoint,
+        'market_type': market_type,
+        'side': side,
+        'data_mode': data_mode,
+        'stat_gate_status': stat_status,
+        'p_final_unchanged': p_final,
+        'p_live_unchanged': p_live,
+        'p_hist_unchanged': p_hist,
+        'p_scenario_unchanged': p_scenario,
+        'projection_used_unchanged': projection,
+        'required_history_p': required_history,
+        'line_edge_unchanged': edge,
+        'matched_result_patterns': matched,
+        'matched_pattern_count': len(matched),
+        'pattern_reliability': pattern_reliability,
+        'pattern_score': pattern_score,
+        'pattern_score_is_probability': False,
+        'empirical_results': empirical,
+        'soft_blockers_reconsidered': soft_blockers,
+        'hard_blockers_preserved': hard_blockers,
+        'risk_p_final_minimum': DECISION_FILTER_RISK_P_FINAL,
+        'play_p_final_minimum': DECISION_FILTER_PLAY_P_FINAL,
+        'risk_pattern_score_minimum': DECISION_FILTER_RISK_PATTERN_SCORE,
+        'play_pattern_score_minimum': DECISION_FILTER_PLAY_PATTERN_SCORE,
+        'passed': passed,
+        'recommended_action': recommended_action,
+        'reason_codes': list(dict.fromkeys(reasons)),
+        'warning_codes': list(dict.fromkeys(warnings)),
+    }
+
+
+def apply_learning_to_evaluation(
+    evaluation: dict[str, Any],
+    store: LearningStore,
+    calculation: dict[str, Any],
+    mode: str,
+) -> dict[str, Any]:
+    item = _V109_APPLY_LEARNING_BASE(evaluation, store, calculation, mode)
+    gate = _v109_decision_gate(item, store, calculation)
+    item['decision_filter'] = gate
+    item['decision_pattern_score'] = gate.get('pattern_score', 0.0)
+    item['decision_quality_score'] = gate.get('pattern_score', 0.0)
+    item.setdefault('system_reason_codes', [])
+
+    if not gate.get('enabled'):
+        return item
+    if not gate.get('passed'):
+        item['system_action'] = 'PASS'
+        item['system_status'] = 'PASS — RESULT PATTERN FILTER'
+        item['stake'] = '0%'
+        item['system_reason_codes'].extend(gate.get('reason_codes') or [])
+    else:
+        action = str(gate.get('recommended_action') or 'RISK')
+        item['system_action'] = action
+        if action == 'PLAY':
+            item['system_status'] = 'PLAY — RESULT PATTERN VERIFIED'
+            item['stake'] = '15-20% live-limit'
+        else:
+            item['system_status'] = 'RISK PLAY — RESULT PATTERN VERIFIED'
+            item['stake'] = '10-15% live-limit'
+        item['system_reason_codes'].append('RP60_PATTERN_GATE_PASSED')
+        item['system_reason_codes'].extend(gate.get('warning_codes') or [])
+
+    item.setdefault('p_trace', []).append(_trace_step(
+        'DECISION_FILTER_V10_9_RESULT_PATTERNS',
+        bool(gate.get('passed')),
+        (
+            'Decision-only result-pattern selector. P_hist, P_scenario, P_live, '
+            'Projection_used, P_raw and P_final remain unchanged.'
+        ),
+        deepcopy(gate),
+        item.get('p_final'),
+        item.get('p_final'),
+        gate.get('reason_codes') or ['RP60_PATTERN_GATE_PASSED'],
+    ))
+    return item
+
+
+def select_one_decision(
+    evaluations: list[dict[str, Any]],
+    mode: str,
+) -> tuple[Optional[dict[str, Any]], Optional[dict[str, Any]]]:
+    active = _candidate_pool(evaluations)
+    eligible = [item for item in active if item.get('system_action') != 'PASS']
+
+    def rank(item: dict[str, Any]) -> tuple[float, ...]:
+        action_rank = 2.0 if item.get('system_action') == 'PLAY' else 1.0
+        gate = item.get('decision_filter') or {}
+        return (
+            action_rank,
+            float(item.get('decision_pattern_score') or 0.0),
+            float(gate.get('matched_pattern_count') or 0.0),
+            float(item.get('p_final_system') or item.get('p_final') or 0.0),
+            float((item.get('live') or {}).get('p_live') or 0.0),
+            float(item.get('odds') or 0.0),
+        )
+
+    eligible.sort(key=rank, reverse=True)
+    active.sort(
+        key=lambda item: (
+            float(item.get('decision_pattern_score') or 0.0),
+            float(item.get('p_final_system') or item.get('p_final') or 0.0),
+            -len(item.get('blockers') or []),
+            float(item.get('odds') or 0.0),
+        ),
+        reverse=True,
+    )
+    closest = active[0] if active else (evaluations[0] if evaluations else None)
+    return (eligible[0] if eligible else None, closest)
+
+
+def summarize_line_evaluation(item: dict[str, Any]) -> dict[str, Any]:
+    output = _V109_SUMMARIZE_LINE_BASE(item)
+    output['decision_pattern_score'] = item.get('decision_pattern_score')
+    output['decision_filter'] = deepcopy(item.get('decision_filter') or {})
+    return output
+
+
+SYSTEM_VERSION = '10.9.0-RESULT-PATTERN-SELECTOR-TELEGRAM-READY'
+DEFAULT_CONFIG['engine_version'] = SYSTEM_VERSION
+
+
+# ===== v11.0 TELEGRAM ADVISOR + SCENARIO MINER OVERRIDES =====
+# This layer preserves the v10.6 calculation chain and replaces only routing,
+# adviser selection, rich scenario explanations, theoretical line search and
+# Telegram delivery policy.
+
+ADVISOR_VERSION = '11.0.0-LIVE-ADVISOR-SCENARIO-MINER'
+ADVISOR_HISTORY_ZONE_MIN = float(os.getenv('SUPER_BASKET_ADVISOR_HISTORY_ZONE_MIN', '0.75'))
+ADVISOR_EXCEPTIONAL_EDGE_MIN = float(os.getenv('SUPER_BASKET_ADVISOR_EXCEPTIONAL_EDGE_MIN', '15.0'))
+ADVISOR_PLAY_MIN = float(os.getenv('SUPER_BASKET_ADVISOR_PLAY_MIN', '0.75'))
+ADVISOR_RISK_MIN = float(os.getenv('SUPER_BASKET_ADVISOR_RISK_MIN', '0.60'))
+ADVISOR_MAX_PRIMARY = max(1, int(os.getenv('SUPER_BASKET_ADVISOR_MAX_PRIMARY', '3')))
+ADVISOR_MODEL_ODDS = float(os.getenv('SUPER_BASKET_ADVISOR_MODEL_ODDS', '1.90'))
+ADVISOR_MODEL_OFFSETS = (0.5, 1.5, 2.5, 3.5, 5.5, 7.5, 10.5, 15.5, 20.5)
+
+_V11_ROUTER_BASE = _router
+
+
+def _router(market: dict[str, Any], canonical: dict[str, Any]) -> dict[str, Any]:
+    """Advisor router.
+
+    Q2 and Q3 totals/IT are full calculation markets. Match totals/IT are
+    calculated at every checkpoint. Completed segments remain blocked.
+    """
+    market_type = str(market.get('market_type') or '')
+    segment = str(market.get('segment') or '')
+    elapsed = float(canonical.get('elapsed_game_seconds') or 0.0)
+    full = float(canonical.get('full_game_seconds') or 2400.0)
+    half = full / 2.0
+    current = to_int(canonical.get('current_quarter'))
+    trigger = to_int(canonical.get('trigger_checkpoint'))
+
+    if market_type in {'MATCH_TOTAL', 'TEAM_IT_MATCH'}:
+        if canonical.get('stage') == 'AFTER_3Q':
+            return {'status': 'PRIORITY', 'reason': 'ADVISOR_MATCH_MARKET_AFTER_Q3', 'cap': None, 'hard_block': False}
+        return {'status': 'ALLOW', 'reason': 'ADVISOR_MATCH_MARKET_ALL_CHECKPOINTS', 'cap': None, 'hard_block': False}
+
+    if market_type in {'H1_TOTAL', 'TEAM_IT_H1'}:
+        if elapsed >= half:
+            return {'status': 'BLOCK', 'reason': 'H1_ALREADY_COMPLETE', 'cap': None, 'hard_block': True}
+        return {'status': 'PRIORITY' if trigger == 1 else 'ALLOW', 'reason': 'ADVISOR_H1_ACTIVE', 'cap': None, 'hard_block': False}
+
+    if market_type in {'H2_TOTAL', 'TEAM_IT_H2'}:
+        if elapsed >= full:
+            return {'status': 'BLOCK', 'reason': 'MATCH_ALREADY_COMPLETE', 'cap': None, 'hard_block': True}
+        if elapsed < half:
+            # Calculate and report as forward-looking RISK/model context, but do
+            # not permit a clean play before half-time.
+            return {'status': 'DOWNGRADE', 'reason': 'H2_EARLY_FORWARD_LOOK', 'cap': 0.74, 'hard_block': False}
+        return {'status': 'PRIORITY', 'reason': 'ADVISOR_H2_ACTIVE', 'cap': None, 'hard_block': False}
+
+    if market_type in {'CURRENT_QUARTER_TOTAL', 'CURRENT_QUARTER_TEAM_IT'}:
+        target = to_int(segment[1:]) if segment.startswith('Q') else None
+        expected = (trigger + 1) if trigger in {1, 2, 3} else current
+        if target is None:
+            return {'status': 'BLOCK', 'reason': 'UNKNOWN_QUARTER', 'cap': None, 'hard_block': True}
+        if expected is not None and target != expected:
+            return {'status': 'BLOCK', 'reason': 'QUARTER_NOT_ACTIVE_FOR_CHECKPOINT', 'cap': None, 'hard_block': True}
+        if target < 1 or target > 4:
+            return {'status': 'BLOCK', 'reason': 'INVALID_QUARTER', 'cap': None, 'hard_block': True}
+        if target == 4:
+            return {'status': 'CONTEXT_GATE', 'reason': 'Q4_REQUIRES_CONTEXT_GATE', 'cap': None, 'hard_block': False}
+        return {'status': 'PRIORITY', 'reason': f'ADVISOR_Q{target}_STANDALONE_ALLOWED', 'cap': None, 'hard_block': False}
+
+    return _V11_ROUTER_BASE(market, canonical)
+
+
+def _v11_round_half(value: float) -> float:
+    return math.floor(float(value)) + 0.5
+
+
+def _v11_completed_quarters(canonical: dict[str, Any]) -> int:
+    trigger = to_int(canonical.get('trigger_checkpoint'))
+    if trigger in {1, 2, 3}:
+        return trigger
+    count = 0
+    for quarter in canonical.get('quarters') or []:
+        if quarter.get('home') is None or quarter.get('away') is None:
+            break
+        count += 1
+    # A quarter with a partial score can appear as known; do not treat it as
+    # completed unless the elapsed clock crossed the boundary.
+    elapsed = float(canonical.get('elapsed_game_seconds') or 0.0)
+    qsec = float(canonical.get('quarter_seconds') or 600.0)
+    return min(count, int(elapsed // qsec))
+
+
+def _v11_relevant_market_specs(canonical: dict[str, Any]) -> list[dict[str, Any]]:
+    cp = _v11_completed_quarters(canonical)
+    home, away = canonical['home_team'], canonical['away_team']
+    specs: list[dict[str, Any]] = []
+
+    def add(market_type: str, segment: str, team: Optional[str] = None) -> None:
+        specs.append({'market_type': market_type, 'segment': segment, 'team': team})
+
+    next_q = cp + 1 if cp in {1, 2, 3} else canonical.get('current_quarter')
+    if next_q in {2, 3, 4}:
+        add('CURRENT_QUARTER_TOTAL', f'Q{next_q}')
+        add('CURRENT_QUARTER_TEAM_IT', f'Q{next_q}', home)
+        add('CURRENT_QUARTER_TEAM_IT', f'Q{next_q}', away)
+    if cp <= 1:
+        add('H1_TOTAL', 'H1')
+        add('TEAM_IT_H1', 'H1', home)
+        add('TEAM_IT_H1', 'H1', away)
+    if cp <= 2:
+        add('H2_TOTAL', 'H2')
+        add('TEAM_IT_H2', 'H2', home)
+        add('TEAM_IT_H2', 'H2', away)
+    add('MATCH_TOTAL', 'MATCH')
+    add('TEAM_IT_MATCH', 'MATCH', home)
+    add('TEAM_IT_MATCH', 'MATCH', away)
+    return specs
+
+
+def _v11_market_key(item: dict[str, Any]) -> tuple[str, Optional[str], str]:
+    return (str(item.get('market_type') or ''), item.get('team'), str(item.get('segment') or ''))
+
+
+def _v11_market_label(item: dict[str, Any]) -> str:
+    labels = {
+        'MATCH_TOTAL': 'Тотал матчу',
+        'H1_TOTAL': 'Тотал 1-ї половини',
+        'H2_TOTAL': 'Тотал 2-ї половини',
+        'CURRENT_QUARTER_TOTAL': f"Тотал {item.get('segment')}",
+        'TEAM_IT_MATCH': 'Індивідуальний тотал матчу',
+        'TEAM_IT_H1': 'Індивідуальний тотал 1H',
+        'TEAM_IT_H2': 'Індивідуальний тотал 2H',
+        'CURRENT_QUARTER_TEAM_IT': f"Індивідуальний тотал {item.get('segment')}",
+    }
+    label = labels.get(str(item.get('market_type')), str(item.get('market_type')))
+    if item.get('team'):
+        label += f" — {item['team']}"
+    return label
+
+
+def _v11_segment_indices(segment: str) -> list[int]:
+    if segment == 'MATCH':
+        return [0, 1, 2, 3]
+    if segment == 'H1':
+        return [0, 1]
+    if segment == 'H2':
+        return [2, 3]
+    if segment.startswith('Q') and segment[1:].isdigit():
+        idx = int(segment[1:]) - 1
+        return [idx] if 0 <= idx <= 3 else []
+    return []
+
+
+def _v11_view_game(game: dict[str, Any], perspective: str = 'team') -> dict[str, Any]:
+    if perspective == 'team':
+        tq = list(game.get('team_quarters') or [])
+        oq = list(game.get('opponent_quarters') or [])
+        team_score = to_number(game.get('team_score'))
+        opp_score = to_number(game.get('opponent_score'))
+    else:
+        tq = list(game.get('opponent_quarters') or [])
+        oq = list(game.get('team_quarters') or [])
+        team_score = to_number(game.get('opponent_score'))
+        opp_score = to_number(game.get('team_score'))
+    return {
+        'id': game.get('id'),
+        'team_q': tq,
+        'opp_q': oq,
+        'team_score': team_score,
+        'opp_score': opp_score,
+        'total': to_number(game.get('total')),
+    }
+
+
+def _v11_sum(values: list[Optional[float]], indices: list[int]) -> Optional[float]:
+    selected = [to_number(values[i]) if i < len(values) else None for i in indices]
+    if not selected or any(v is None for v in selected):
+        return None
+    return float(sum(selected))
+
+
+def _v11_outcome_from_view(
+    view: dict[str, Any],
+    market: dict[str, Any],
+    source_team: str,
+    target_team: Optional[str],
+) -> Optional[float]:
+    indices = _v11_segment_indices(str(market.get('segment') or 'MATCH'))
+    is_team_market = str(market.get('market_type') or '').startswith('TEAM_IT') or market.get('market_type') == 'CURRENT_QUARTER_TEAM_IT'
+    if not is_team_market:
+        tq = _v11_sum(view['team_q'], indices)
+        oq = _v11_sum(view['opp_q'], indices)
+        return None if tq is None or oq is None else tq + oq
+    target_is_source = target_team == source_team
+    values = view['team_q'] if target_is_source else view['opp_q']
+    if str(market.get('segment')) == 'MATCH':
+        return view['team_score'] if target_is_source else view['opp_score']
+    return _v11_sum(values, indices)
+
+
+def _v11_hit(value: Optional[float], line: float, side: str) -> Optional[bool]:
+    if value is None:
+        return None
+    if value == line:
+        return None
+    return value > line if side == 'OVER' else value < line
+
+
+def _v11_margin_bucket(value: float) -> tuple[int, int]:
+    absolute = abs(value)
+    if absolute <= 3:
+        return (0, 3)
+    if absolute <= 5:
+        return (4, 5)
+    if absolute <= 10:
+        return (6, 10)
+    if absolute <= 15:
+        return (11, 15)
+    if absolute <= 20:
+        return (16, 20)
+    return (21, 999)
+
+
+def _v11_active_scenario_conditions(canonical: dict[str, Any], source_team: str) -> list[dict[str, Any]]:
+    home = source_team == canonical['home_team']
+    side = 'home' if home else 'away'
+    opp_side = 'away' if home else 'home'
+    completed = _v11_completed_quarters(canonical)
+    qrows = canonical.get('quarters') or []
+    tq = [to_number(q.get(side)) for q in qrows]
+    oq = [to_number(q.get(opp_side)) for q in qrows]
+    conditions: list[dict[str, Any]] = []
+
+    def add(pid: str, title: str, group: str, matcher: Callable[[dict[str, Any]], bool], description: str) -> None:
+        conditions.append({'scenario_id': pid, 'title': title, 'group': group, 'matcher': matcher, 'description': description})
+
+    for i in range(min(completed, 3)):
+        if tq[i] is None or oq[i] is None:
+            continue
+        qn = i + 1
+        team_points = float(tq[i])
+        opp_points = float(oq[i])
+        if team_points > opp_points:
+            add(
+                f'WON_Q{qn}', f'{source_team} виграла Q{qn}', f'Q{qn}_RESULT',
+                lambda v, idx=i: v['team_q'][idx] is not None and v['opp_q'][idx] is not None and v['team_q'][idx] > v['opp_q'][idx],
+                f'{source_team} виграла {qn}-ту чверть {team_points:g}:{opp_points:g}.',
+            )
+        elif team_points < opp_points:
+            add(
+                f'LOST_Q{qn}', f'{source_team} програла Q{qn}', f'Q{qn}_RESULT',
+                lambda v, idx=i: v['team_q'][idx] is not None and v['opp_q'][idx] is not None and v['team_q'][idx] < v['opp_q'][idx],
+                f'{source_team} програла {qn}-ту чверть {team_points:g}:{opp_points:g}.',
+            )
+        else:
+            add(
+                f'TIED_Q{qn}', f'{source_team} зіграла Q{qn} внічию', f'Q{qn}_RESULT',
+                lambda v, idx=i: v['team_q'][idx] is not None and v['opp_q'][idx] is not None and v['team_q'][idx] == v['opp_q'][idx],
+                f'{source_team} завершила {qn}-ту чверть унічию.',
+            )
+        for threshold in (18, 21, 24, 27):
+            if team_points >= threshold:
+                add(
+                    f'Q{qn}_SCORED_{threshold}_PLUS', f'{source_team} набрала {threshold}+ у Q{qn}', f'Q{qn}_POINTS',
+                    lambda v, idx=i, t=threshold: v['team_q'][idx] is not None and v['team_q'][idx] >= t,
+                    f'{source_team} набрала {team_points:g} у Q{qn}, тобто {threshold}+.',
+                )
+        if team_points <= 18:
+            add(
+                f'Q{qn}_SCORED_18_OR_LESS', f'{source_team} набрала ≤18 у Q{qn}', f'Q{qn}_POINTS_LOW',
+                lambda v, idx=i: v['team_q'][idx] is not None and v['team_q'][idx] <= 18,
+                f'{source_team} набрала лише {team_points:g} у Q{qn}.',
+            )
+        qtotal = team_points + opp_points
+        if qtotal >= 45:
+            add(
+                f'Q{qn}_TOTAL_45_PLUS', f'Q{qn} завершилася на 45+', f'Q{qn}_TOTAL',
+                lambda v, idx=i: None not in (v['team_q'][idx], v['opp_q'][idx]) and v['team_q'][idx] + v['opp_q'][idx] >= 45,
+                f'Загальний тотал Q{qn} становив {qtotal:g}.',
+            )
+        if qtotal <= 39:
+            add(
+                f'Q{qn}_TOTAL_39_OR_LESS', f'Q{qn} завершилася на ≤39', f'Q{qn}_TOTAL',
+                lambda v, idx=i: None not in (v['team_q'][idx], v['opp_q'][idx]) and v['team_q'][idx] + v['opp_q'][idx] <= 39,
+                f'Загальний тотал Q{qn} становив лише {qtotal:g}.',
+            )
+        if qn == 1 and team_points > opp_points and team_points >= 24:
+            add(
+                'WON_Q1_AND_SCORED_24_PLUS', f'{source_team} виграла Q1 і набрала 24+', 'Q1_COMBO',
+                lambda v: None not in (v['team_q'][0], v['opp_q'][0]) and v['team_q'][0] > v['opp_q'][0] and v['team_q'][0] >= 24,
+                f'{source_team} виграла Q1 та набрала {team_points:g} очок.',
+            )
+        if qn == 1 and team_points < opp_points and team_points <= 18:
+            add(
+                'LOST_Q1_AND_SCORED_18_OR_LESS', f'{source_team} програла Q1 і набрала ≤18', 'Q1_COMBO_LOW',
+                lambda v: None not in (v['team_q'][0], v['opp_q'][0]) and v['team_q'][0] < v['opp_q'][0] and v['team_q'][0] <= 18,
+                f'{source_team} програла Q1 та набрала лише {team_points:g}.',
+            )
+
+    if completed >= 2 and all(v is not None for v in tq[:2] + oq[:2]):
+        wins = [tq[i] > oq[i] for i in range(2)]
+        if all(wins):
+            add('LEADS_2_0', f'{source_team} веде по чвертях 2–0', 'SEQUENCE_2Q', lambda v: all(None not in (v['team_q'][i], v['opp_q'][i]) and v['team_q'][i] > v['opp_q'][i] for i in range(2)), f'{source_team} виграла Q1 і Q2.')
+        elif not any(wins):
+            add('TRAILS_0_2', f'{source_team} програє по чвертях 0–2', 'SEQUENCE_2Q', lambda v: all(None not in (v['team_q'][i], v['opp_q'][i]) and v['team_q'][i] < v['opp_q'][i] for i in range(2)), f'{source_team} програла Q1 і Q2.')
+        elif wins == [True, False]:
+            add('WON_Q1_LOST_Q2', f'{source_team} виграла Q1, але програла Q2', 'SEQUENCE_2Q', lambda v: None not in (v['team_q'][0], v['opp_q'][0], v['team_q'][1], v['opp_q'][1]) and v['team_q'][0] > v['opp_q'][0] and v['team_q'][1] < v['opp_q'][1], 'Після виграної Q1 команда віддала Q2.')
+        else:
+            add('LOST_Q1_WON_Q2', f'{source_team} програла Q1, але виграла Q2', 'SEQUENCE_2Q', lambda v: None not in (v['team_q'][0], v['opp_q'][0], v['team_q'][1], v['opp_q'][1]) and v['team_q'][0] < v['opp_q'][0] and v['team_q'][1] > v['opp_q'][1], 'Після програної Q1 команда виграла Q2.')
+        if all(float(v) < 21 for v in tq[:2]):
+            add('NO_21_IN_Q1_Q2', f'{source_team} не набрала 21 у Q1 і Q2', 'POINT_SEQUENCE_2Q', lambda v: all(v['team_q'][i] is not None and v['team_q'][i] < 21 for i in range(2)), f'{source_team} не дійшла до 21 очка у двох перших чвертях.')
+
+    if completed >= 3 and all(v is not None for v in tq[:3] + oq[:3]):
+        won_count = sum(tq[i] > oq[i] for i in range(3))
+        if won_count == 3:
+            add('LEADS_3_0', f'{source_team} веде по чвертях 3–0', 'SEQUENCE_3Q', lambda v: all(None not in (v['team_q'][i], v['opp_q'][i]) and v['team_q'][i] > v['opp_q'][i] for i in range(3)), f'{source_team} виграла перші три чверті.')
+        elif won_count == 0:
+            add('TRAILS_0_3', f'{source_team} програє по чвертях 0–3', 'SEQUENCE_3Q', lambda v: all(None not in (v['team_q'][i], v['opp_q'][i]) and v['team_q'][i] < v['opp_q'][i] for i in range(3)), f'{source_team} програла перші три чверті.')
+        elif won_count == 2:
+            add('WON_2_OF_3', f'{source_team} виграла 2 із 3 чвертей', 'SEQUENCE_3Q', lambda v: sum(None not in (v['team_q'][i], v['opp_q'][i]) and v['team_q'][i] > v['opp_q'][i] for i in range(3)) == 2, f'{source_team} виграла дві з трьох завершених чвертей.')
+        else:
+            add('LOST_2_OF_3', f'{source_team} програла 2 із 3 чвертей', 'SEQUENCE_3Q', lambda v: sum(None not in (v['team_q'][i], v['opp_q'][i]) and v['team_q'][i] < v['opp_q'][i] for i in range(3)) == 2, f'{source_team} програла дві з трьох завершених чвертей.')
+        if all(float(v) < 21 for v in tq[:3]):
+            add('NO_21_IN_FIRST_3Q', f'{source_team} не набрала 21 у жодній із Q1–Q3', 'POINT_SEQUENCE_3Q', lambda v: all(v['team_q'][i] is not None and v['team_q'][i] < 21 for i in range(3)), f'{source_team} жодного разу не набрала 21 у перших трьох чвертях.')
+
+    if completed >= 1 and all(v is not None for v in tq[:completed] + oq[:completed]):
+        margin = float(sum(tq[:completed]) - sum(oq[:completed]))
+        low, high = _v11_margin_bucket(margin)
+        sign = 1 if margin >= 0 else -1
+        add(
+            f'MARGIN_{"LEAD" if sign > 0 else "TRAIL"}_{low}_{high}',
+            f'{source_team}: відрив {abs(margin):g} після {completed}Q',
+            f'MARGIN_{completed}Q',
+            lambda v, n=completed, lo=low, hi=high, s=sign: (
+                all(None not in (v['team_q'][i], v['opp_q'][i]) for i in range(n))
+                and (1 if sum(v['team_q'][:n]) - sum(v['opp_q'][:n]) >= 0 else -1) == s
+                and lo <= abs(sum(v['team_q'][:n]) - sum(v['opp_q'][:n])) <= hi
+            ),
+            f'Після {completed} чвертей різниця для {source_team}: {margin:+g}.',
+        )
+
+    # Keep one exact id per logical pattern.
+    unique: dict[str, dict[str, Any]] = {}
+    for condition in conditions:
+        unique.setdefault(condition['scenario_id'], condition)
+    return list(unique.values())
+
+
+def _v11_scenario_sample_stats(
+    games: list[dict[str, Any]],
+    perspective: str,
+    condition: dict[str, Any],
+    market: dict[str, Any],
+    source_team: str,
+    target_team: Optional[str],
+) -> dict[str, Any]:
+    matched: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for game in games:
+        view = _v11_view_game(game, perspective)
+        try:
+            ok = bool(condition['matcher'](view))
+        except (IndexError, TypeError, ValueError):
+            ok = False
+        if ok:
+            matched.append((game, view))
+    line = float(market['line'])
+    side = str(market['side'])
+    outcomes: list[float] = []
+    hits = 0
+    pushes = 0
+    for _, view in matched:
+        value = _v11_outcome_from_view(view, market, source_team, target_team)
+        if value is None:
+            continue
+        outcomes.append(float(value))
+        hit = _v11_hit(float(value), line, side)
+        if hit is True:
+            hits += 1
+        elif hit is None:
+            pushes += 1
+    n = len(outcomes)
+    raw = hits / n if n else None
+    smooth = smoothed_probability(hits, n) if n else None
+
+    completed = None
+    scenario_id = str(condition.get('scenario_id') or '')
+    if '3_0' in scenario_id or '3Q' in str(condition.get('group')):
+        completed = 3
+    elif '2_0' in scenario_id or '2Q' in str(condition.get('group')):
+        completed = 2
+    elif 'Q1' in scenario_id:
+        completed = 1
+    next_q_win = None
+    swept_4_0 = None
+    no_21_all_4 = None
+    match_win = None
+    if matched:
+        match_values = []
+        next_values = []
+        sweep_values = []
+        no21_values = []
+        for _, view in matched:
+            if view['team_score'] is not None and view['opp_score'] is not None:
+                match_values.append(view['team_score'] > view['opp_score'])
+            if completed and completed < 4 and len(view['team_q']) > completed and len(view['opp_q']) > completed:
+                a, b = view['team_q'][completed], view['opp_q'][completed]
+                if a is not None and b is not None:
+                    next_values.append(a > b)
+            if len(view['team_q']) >= 4 and len(view['opp_q']) >= 4 and all(None not in (view['team_q'][i], view['opp_q'][i]) for i in range(4)):
+                sweep_values.append(all(view['team_q'][i] > view['opp_q'][i] for i in range(4)))
+                no21_values.append(all(view['team_q'][i] < 21 for i in range(4)))
+        match_win = sum(match_values) / len(match_values) if match_values else None
+        next_q_win = sum(next_values) / len(next_values) if next_values else None
+        swept_4_0 = sum(sweep_values) / len(sweep_values) if sweep_values else None
+        no_21_all_4 = sum(no21_values) / len(no21_values) if no21_values else None
+
+    return {
+        'matched_games': len(matched),
+        'n': n,
+        'hits': hits,
+        'pushes': pushes,
+        'raw_rate': raw,
+        'smoothed_rate': smooth,
+        'outcome_median': statistics.median(outcomes) if outcomes else None,
+        'team_won_match_rate': match_win,
+        'won_next_quarter_rate': next_q_win,
+        'won_all_4_quarters_rate': swept_4_0,
+        'under_21_all_4_quarters_rate': no_21_all_4,
+    }
+
+
+def _v11_sample_label(n: int) -> str:
+    if n < 5:
+        return 'INSUFFICIENT'
+    if n < 8:
+        return 'SMALL_SAMPLE'
+    if n < 15:
+        return 'NORMAL'
+    if n < 25:
+        return 'RELIABLE'
+    return 'STRONG_SAMPLE'
+
+
+def _v11_effect(rate: Optional[float], n: int) -> str:
+    if rate is None or n < 5:
+        return 'INSUFFICIENT'
+    if rate >= 0.80 and n >= 8:
+        return 'STRONG_SUPPORT'
+    if rate >= 0.70:
+        return 'SUPPORT'
+    if rate <= 0.30:
+        return 'STRONG_CONFLICT'
+    if rate < 0.45:
+        return 'WEAKEN'
+    return 'NEUTRAL'
+
+
+def _v11_mine_scenarios(market: dict[str, Any], canonical: dict[str, Any]) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    target_team = market.get('team')
+    for source_team, own_key, opp_key in (
+        (canonical['home_team'], 'team_a', 'team_b'),
+        (canonical['away_team'], 'team_b', 'team_a'),
+    ):
+        conditions = _v11_active_scenario_conditions(canonical, source_team)
+        own_pool = canonical.get('history', {}).get(own_key) or []
+        opponent_pool = canonical.get('history', {}).get(opp_key) or []
+        for condition in conditions:
+            own = _v11_scenario_sample_stats(own_pool, 'team', condition, market, source_team, target_team)
+            allowed = _v11_scenario_sample_stats(opponent_pool, 'opponent', condition, market, source_team, target_team)
+            total_n = int(own['n']) + int(allowed['n'])
+            if total_n < 5:
+                continue
+            own_rate = own.get('smoothed_rate')
+            allowed_rate = allowed.get('smoothed_rate')
+            weighted = None
+            if own_rate is not None or allowed_rate is not None:
+                numerator = (float(own_rate or 0.0) * int(own['n'])) + (float(allowed_rate or 0.0) * int(allowed['n']))
+                denominator = int(own['n']) + int(allowed['n'])
+                weighted = numerator / denominator if denominator else None
+            if own_rate is not None and allowed_rate is not None:
+                same_direction = (own_rate >= 0.5) == (allowed_rate >= 0.5)
+                intersection = 'ALIGNED' if same_direction else 'CONFLICT'
+            elif own_rate is not None or allowed_rate is not None:
+                intersection = 'ONE_SIDED'
+            else:
+                intersection = 'OFF'
+            effect = _v11_effect(weighted, total_n)
+            credibility = min(1.0, total_n / 15.0)
+            rank = abs(float(weighted or 0.5) - 0.5) * credibility
+            rows.append({
+                'scenario_id': condition['scenario_id'],
+                'title': condition['title'],
+                'description': condition['description'],
+                'group': condition['group'],
+                'source_team': source_team,
+                'target_market': _v11_market_label(market),
+                'target_side': market.get('side'),
+                'target_line': market.get('line'),
+                'own': own,
+                'opponent_allowed': allowed,
+                'combined_n': total_n,
+                'combined_rate': weighted,
+                'intersection': intersection,
+                'effect': effect,
+                'sample_label': _v11_sample_label(total_n),
+                'rank': rank,
+            })
+    # Do not count overlapping variants from one family as independent. Keep the
+    # strongest result per source team and group.
+    best: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in rows:
+        key = (str(row['source_team']), str(row['group']))
+        if key not in best or float(row['rank']) > float(best[key]['rank']):
+            best[key] = row
+    selected = sorted(best.values(), key=lambda r: (float(r['rank']), int(r['combined_n'])), reverse=True)
+    support = [r for r in selected if r['effect'] in {'STRONG_SUPPORT', 'SUPPORT'}]
+    conflict = [r for r in selected if r['effect'] in {'STRONG_CONFLICT', 'WEAKEN'}]
+    used = support[:3] + conflict[:1]
+    if used:
+        weights = [max(0.01, float(r['rank'])) for r in used]
+        scenario_probability = sum(float(r['combined_rate']) * w for r, w in zip(used, weights)) / sum(weights)
+        scenario_n = max(int(r['combined_n']) for r in used)
+    else:
+        scenario_probability = 0.50
+        scenario_n = 0
+    return {
+        'p_scenario_miner': scenario_probability,
+        'scenario_n': scenario_n,
+        'support_count': len(support),
+        'conflict_count': len(conflict),
+        'top_support': support[:3],
+        'top_conflict': conflict[:2],
+        'all_selected_patterns': selected,
+    }
+
+
+def _v11_history_values(canonical: dict[str, Any], spec: dict[str, Any]) -> list[float]:
+    market = {**spec, 'side': 'OVER', 'line': 0.5}
+    values: list[float] = []
+    if spec.get('team'):
+        team = spec['team']
+        own_key = 'team_a' if team == canonical['home_team'] else 'team_b'
+        opp_key = 'team_b' if own_key == 'team_a' else 'team_a'
+        for game in canonical.get('history', {}).get(own_key) or []:
+            value = _segment_value(game, market, team)
+            if value is not None:
+                values.extend([float(value)] * 5)
+        for game in canonical.get('history', {}).get(opp_key) or []:
+            value = _segment_value(game, market, team, opponent_allowed=True)
+            if value is not None:
+                values.extend([float(value)] * 3)
+    else:
+        for key in ('team_a', 'team_b'):
+            for game in canonical.get('history', {}).get(key) or []:
+                value = _segment_value(game, market)
+                if value is not None:
+                    values.append(float(value))
+    return values
+
+
+def _v11_model_center(canonical: dict[str, Any], spec: dict[str, Any]) -> Optional[float]:
+    values = _v11_history_values(canonical, spec)
+    if not values:
+        return None
+    return _v11_round_half(statistics.median(values))
+
+
+def _v11_synthetic_market(spec: dict[str, Any], line: float, side: str, *, tag: str = 'MODEL') -> dict[str, Any]:
+    stable = f"{spec.get('market_type')}|{spec.get('team')}|{spec.get('segment')}|{side}|{line}|{tag}"
+    return {
+        'market_id': 'V11-' + hashlib.sha256(stable.encode('utf-8')).hexdigest()[:16],
+        'source_market_id': None,
+        'market_type': spec['market_type'],
+        'team': spec.get('team'),
+        'segment': spec['segment'],
+        'side': side,
+        'line': float(line),
+        'odds': ADVISOR_MODEL_ODDS,
+        'bookmaker': 'MODEL',
+        'source_bucket': 'advisor_model',
+        'source_scope': spec['segment'],
+        'raw_line_row': {'is_real_bookmaker_line': False, 'advisor_model': True},
+        'parser_issues': [],
+        'eligible_market': True,
+        'is_model_line': True,
+    }
+
+
+def _v11_serious_blockers(evaluation: dict[str, Any], *, exceptional_edge: bool = False) -> list[str]:
+    ignored = {
+        'HISTORY_ZONE_BELOW_75',
+        'LIVE_EDGE_BELOW_3',
+        'LIVE_EDGE_BELOW_0_50',
+        'Q3_EXCEPTIONAL_PROBABILITY_BELOW_80',
+        'Q3_EXCEPTIONAL_STATS_REQUIRED',
+        'PRODUCTION_ROUTER_BLOCK',
+    }
+    if exceptional_edge:
+        ignored.add('SCENARIO_DIRECTION_CONFLICT')
+    serious = []
+    for blocker in evaluation.get('blockers') or []:
+        code = str(blocker.get('rule_id') or '')
+        if code not in ignored:
+            serious.append(code)
+    return serious
+
+
+def _v11_enrich_evaluation(evaluation: dict[str, Any], canonical: dict[str, Any], *, is_model: bool = False, mine_scenarios: bool = True) -> dict[str, Any]:
+    item = evaluation
+    history = item.get('history') or {}
+    live = item.get('live') or {}
+    stat = item.get('stat_comparison') or {}
+    zone = to_number(history.get('history_zone_rate'))
+    p_final = float(item.get('p_final_system') or item.get('p_final') or 0.50)
+    edge = to_number(live.get('line_edge'))
+    p_live = float(live.get('p_live') or 0.50)
+    p_hist = float(history.get('p_hist') or 0.50)
+    p_scenario = float((item.get('scenario') or {}).get('p_scenario') or 0.50)
+    exceptional = edge is not None and edge >= ADVISOR_EXCEPTIONAL_EDGE_MIN
+    serious = _v11_serious_blockers(item, exceptional_edge=exceptional)
+    if str(stat.get('stat_gate_status') or '') == 'AGAINST' and 'STAT_GATE_AGAINST' not in serious:
+        serious.append('STAT_GATE_AGAINST')
+    fake_against = bool(
+        (item.get('side') == 'OVER' and stat.get('fake_over'))
+        or (item.get('side') == 'UNDER' and stat.get('fake_under'))
+    )
+    odds = to_number(item.get('odds'))
+    edge_ok = edge is not None and edge >= 0.0
+    zone_ok = zone is not None and zone >= ADVISOR_HISTORY_ZONE_MIN
+    scenario_miner = _v11_mine_scenarios(item, canonical) if mine_scenarios else {
+        'p_scenario_miner': p_scenario, 'scenario_n': 0, 'support_count': 0,
+        'conflict_count': 0, 'top_support': [], 'top_conflict': [],
+        'all_selected_patterns': [], 'deferred': True,
+    }
+
+    if is_model:
+        action = 'PASS'
+        status = 'MODEL LINE / THEORETICAL TRIGGER'
+    elif odds is None or odds < float(DEFAULT_CONFIG.get('odds_min', 1.44)):
+        action, status = 'PASS', 'PASS — ODDS'
+    elif serious or fake_against or not edge_ok:
+        action, status = 'PASS', 'PASS — CONFLICT/BLOCKER'
+    elif (zone_ok or exceptional) and p_final >= ADVISOR_PLAY_MIN:
+        action, status = 'PLAY', 'PLAY — ADVISOR CLEAN'
+    elif (zone_ok or exceptional) and p_final >= ADVISOR_RISK_MIN:
+        action, status = 'RISK', 'RISK — ADVISOR'
+    else:
+        action, status = 'PASS', 'PASS — ADVISOR'
+
+    directions = []
+    directions.append('HISTORY_' + ('SUPPORT' if p_hist >= 0.60 else 'AGAINST' if p_hist <= 0.40 else 'NEUTRAL'))
+    directions.append('SCENARIO_' + ('SUPPORT' if p_scenario >= 0.60 else 'AGAINST' if p_scenario <= 0.40 else 'NEUTRAL'))
+    directions.append('LIVE_' + ('SUPPORT' if p_live >= 0.60 and edge_ok else 'AGAINST' if p_live <= 0.40 or (edge is not None and edge < 0) else 'NEUTRAL'))
+    support_n = sum(code.endswith('SUPPORT') for code in directions)
+    against_n = sum(code.endswith('AGAINST') for code in directions)
+    if support_n == 3:
+        alignment = 'TRIPLE ALIGNED'
+    elif against_n and support_n:
+        alignment = 'HARD CONFLICT' if against_n >= 1 and support_n >= 2 else 'SOFT CONFLICT'
+    elif support_n >= 2:
+        alignment = 'PARTIAL ALIGNED'
+    else:
+        alignment = 'NEUTRAL'
+
+    item['advisor'] = {
+        'version': ADVISOR_VERSION,
+        'is_model_line': is_model,
+        'history_zone_rate': zone,
+        'history_zone_eligible': zone_ok,
+        'exceptional_edge': exceptional,
+        'exceptional_edge_min': ADVISOR_EXCEPTIONAL_EDGE_MIN,
+        'telegram_line_eligible': zone_ok or exceptional,
+        'p_hist': p_hist,
+        'p_scenario_core': p_scenario,
+        'p_scenario_miner': scenario_miner['p_scenario_miner'],
+        'p_live': p_live,
+        'p_final': p_final,
+        'projection_used': live.get('projection_used'),
+        'line_edge': edge,
+        'alignment': alignment,
+        'direction_components': directions,
+        'fake_over': bool(stat.get('fake_over')),
+        'fake_under': bool(stat.get('fake_under')),
+        'stat_gate_status': stat.get('stat_gate_status'),
+        'serious_blockers': serious,
+        'scenario_miner': scenario_miner,
+        'action': action,
+        'status': status,
+    }
+    item['system_action'] = action
+    item['system_status'] = status
+    item['stake'] = '0%' if action == 'PASS' else ('10-15% live-limit' if action == 'RISK' else '15-20% live-limit')
+    item['p_final_system'] = p_final
+    return item
+
+
+def _v11_light_model_evaluation(
+    spec: dict[str, Any],
+    line: float,
+    side: str,
+    projection: float,
+    values: list[float],
+    canonical: dict[str, Any],
+    probe: Optional[dict[str, Any]],
+) -> dict[str, Any]:
+    wins = sum(1 for value in values if _v11_hit(value, line, side) is True)
+    pushes = sum(1 for value in values if _v11_hit(value, line, side) is None)
+    n = len(values)
+    raw = wins / n if n else None
+    p_hist = smoothed_probability(wins, n) if n else 0.50
+    sigma = _stage_sigma(str(spec.get('market_type')), str(canonical.get('stage')), DEFAULT_CONFIG)
+    if canonical.get('data_mode') == 'SCORE_TIME_HISTORY':
+        sigma *= 1.20
+    edge = projection - line if side == 'OVER' else line - projection
+    p_live = normal_cdf(edge / max(0.1, sigma))
+    # Preliminary model grid uses the exact-line history as a conservative
+    # scenario prior. The full Scenario Miner is run only for selected lines.
+    p_scenario = 0.50 + 0.50 * (p_hist - 0.50)
+    market = _v11_synthetic_market(spec, line, side)
+    weights = _v9_stage_weights(market, canonical, DEFAULT_CONFIG)
+    p_raw = weights['hist'] * p_hist + weights['scenario'] * p_scenario + weights['live'] * p_live
+    cap = 1.0
+    if n < 15:
+        cap = min(cap, 0.72)
+    elif n < 20:
+        cap = min(cap, 0.74)
+    if canonical.get('data_mode') == 'SCORE_TIME_HISTORY':
+        cap = min(cap, 0.79)
+    stat = deepcopy((probe or {}).get('stat_comparison') or {
+        'stat_gate_status': 'OFF', 'fake_over': False, 'fake_under': False,
+    })
+    if str(stat.get('stat_gate_status') or '') == 'AGAINST':
+        cap = min(cap, 0.67)
+    p_final = min(p_raw, cap)
+    history = {
+        'p_hist': p_hist,
+        'history_zone_rate': raw,
+        'history_zone_hits': wins,
+        'history_zone_n': n,
+        'history_zone_source': 'V11_MODEL_EXACT_HISTORY',
+        'pooled': {'wins': wins, 'pushes': pushes, 'n': n, 'raw_pct': raw, 'p_smoothed': p_hist},
+    }
+    return {
+        **market,
+        'history': history,
+        'scenario': {
+            'p_scenario': p_scenario,
+            'scenario_support': 'MODEL_GRID_PRIOR',
+            'patterns_found': [], 'patterns_used': [], 'patterns_rejected': [],
+        },
+        'live': {
+            'projection_used': projection,
+            'line_edge': edge,
+            'p_live': p_live,
+            'projection_source': 'V11_MODEL_HISTORY_LIVE_CENTER',
+        },
+        'stat_comparison': stat,
+        'q4_context': deepcopy((probe or {}).get('q4_context') or {'applicable': False, 'status': 'OFF'}),
+        'weights': {'normalized': weights},
+        'p_raw': p_raw,
+        'p_final': p_final,
+        'p_final_system': p_final,
+        'router': _router(market, canonical),
+        'caps': ([{'rule_id': 'V11_MODEL_CAP', 'cap': cap, 'reason': 'Model-line sample/data cap'}] if cap < 1.0 else []),
+        'blockers': [],
+        'parser_issues': [],
+        'is_model_line': True,
+    }
+
+
+def _v11_evaluate_model_grid(
+    calculator: SuperBasketCalculator,
+    canonical: dict[str, Any],
+    spec: dict[str, Any],
+) -> list[dict[str, Any]]:
+    values = _v11_history_values(canonical, spec)
+    center = _v11_model_center(canonical, spec)
+    if center is None or not values:
+        return []
+    # One full probe per market gives live/stat context. The line grid itself is
+    # evaluated with a lightweight exact-history/Phi calculation.
+    probe_market = _v11_synthetic_market(spec, center, 'OVER', tag='PROBE')
+    probe = calculator.evaluate_market(probe_market, canonical)
+    core_projection = to_number((probe.get('live') or {}).get('projection_used'))
+    projection = core_projection
+    if projection is None or projection <= 0 or projection < center * 0.55 or projection > center * 1.65:
+        projection = center
+
+    p10 = percentile(values, 0.10) or min(values)
+    p90 = percentile(values, 0.90) or max(values)
+    realistic_low = max(0.5, _v11_round_half(p10 - 2.0))
+    realistic_high = _v11_round_half(p90 + 2.0)
+
+    candidate_lines: set[tuple[str, float]] = set()
+    candidate_lines.add(('OVER', _v11_round_half(projection)))
+    candidate_lines.add(('UNDER', _v11_round_half(projection)))
+    for offset in ADVISOR_MODEL_OFFSETS:
+        candidate_lines.add(('OVER', _v11_round_half(projection - offset)))
+        candidate_lines.add(('UNDER', _v11_round_half(projection + offset)))
+    evaluations: list[dict[str, Any]] = []
+    for side, line in sorted(candidate_lines, key=lambda row: (row[0], row[1])):
+        if line < realistic_low or line > realistic_high:
+            continue
+        evaluated = _v11_light_model_evaluation(spec, line, side, float(projection), values, canonical, probe)
+        evaluations.append(_v11_enrich_evaluation(evaluated, canonical, is_model=True, mine_scenarios=False))
+    return evaluations
+
+def _v112_number(value: Any, default: float) -> float:
+    number = to_number(value)
+    return default if number is None else float(number)
+
+
+def _v112_edge(item: dict[str, Any], default: float = -999.0) -> float:
+    return _v112_number((item.get('advisor') or {}).get('line_edge'), default)
+
+
+def _v112_market_is_currently_supported(item: dict[str, Any]) -> bool:
+    """Exclude settled/invalid markets from dispatch and primary selection."""
+    terminal_issues = {
+        'NO_LINE', 'SYNTHETIC_LINE', 'UNSUPPORTED_MARKET', 'UNKNOWN_QUARTER',
+        'INVALID_QUARTER', 'PAST_QUARTER', 'FUTURE_QUARTER',
+        'NO_CURRENT_QUARTER', 'NO_EXACT_CURRENT_QUARTER_TIME',
+        'NO_CURRENT_QUARTER_SCORE',
+    }
+    if any(str(code) in terminal_issues for code in item.get('parser_issues') or []):
+        return False
+    router = item.get('router') or {}
+    if str(router.get('status') or '').upper() == 'BLOCK' and bool(router.get('hard_block', True)):
+        return False
+    return item.get('line') is not None
+
+
+def _v112_input_state_gate(source: dict[str, Any], canonical: dict[str, Any], checkpoint: Optional[int]) -> dict[str, Any]:
+    """Prevent final-score/future-checkpoint leakage from stale parser files."""
+    match = source.get('match') if isinstance(source.get('match'), dict) else {}
+    raw_stage = str(match.get('stage') or source.get('stage') or source.get('status') or '').upper().strip()
+    finished = raw_stage in {'FT', 'FINAL', 'FINISHED', 'ENDED', 'COMPLETED', 'AFTER_OT'}
+    current = to_int(canonical.get('current_quarter'))
+    expected = checkpoint + 1 if checkpoint in {1, 2, 3} else None
+    stale = bool(expected is not None and current is not None and current > expected)
+    allowed = not finished and not stale
+    if finished:
+        reason = 'MATCH_ALREADY_FINISHED'
+    elif stale:
+        reason = f'CHECKPOINT_STALE: expected Q{expected}, source already at Q{current}'
+    else:
+        reason = 'OK'
+    return {
+        'allowed': allowed,
+        'finished': finished,
+        'stale_checkpoint': stale,
+        'reason': reason,
+        'raw_stage': raw_stage or None,
+        'checkpoint': checkpoint,
+        'current_quarter': current,
+        'expected_quarter': expected,
+    }
+
+
+def _v11_model_summary(model_evaluations: list[dict[str, Any]], canonical: dict[str, Any]) -> list[dict[str, Any]]:
+    groups: dict[tuple[str, Optional[str], str], list[dict[str, Any]]] = {}
+    for item in model_evaluations:
+        groups.setdefault(_v11_market_key(item), []).append(item)
+    output: list[dict[str, Any]] = []
+    for key, rows in groups.items():
+        projection = next((to_number((r.get('live') or {}).get('projection_used')) for r in rows if to_number((r.get('live') or {}).get('projection_used')) is not None), None)
+        side_rows: dict[str, list[dict[str, Any]]] = {'OVER': [], 'UNDER': []}
+        for row in rows:
+            side_rows[str(row.get('side'))].append(row)
+        recommendation: dict[str, Any] = {'market_key': list(key), 'projection_used': projection, 'market_label': _v11_market_label(rows[0])}
+        for side in ('OVER', 'UNDER'):
+            candidates = sorted(
+                side_rows[side],
+                key=lambda r: (
+                    abs(_v112_edge(r, 999.0)),
+                    -float((r.get('advisor') or {}).get('p_final') or 0.0),
+                ),
+            )
+            risk_pool = [r for r in candidates if (r.get('advisor') or {}).get('p_final', 0) >= ADVISOR_RISK_MIN and (r.get('advisor') or {}).get('history_zone_eligible') and _v112_edge(r, -999.0) >= 0 and not (r.get('advisor') or {}).get('serious_blockers')]
+            play_pool = [r for r in candidates if (r.get('advisor') or {}).get('p_final', 0) >= ADVISOR_PLAY_MIN and (r.get('advisor') or {}).get('history_zone_eligible') and _v112_edge(r, -999.0) >= 0 and not (r.get('advisor') or {}).get('serious_blockers')]
+            # The nearest qualifying line is authoritative, not the easiest
+            # absurdly distant line with the highest model probability.
+            risk = min(risk_pool, key=lambda r: abs(_v112_edge(r, 999.0)), default=None)
+            play = min(play_pool, key=lambda r: abs(_v112_edge(r, 999.0)), default=None)
+            best = candidates[0] if candidates else None
+            for selected_row in (best, risk, play):
+                if selected_row and (selected_row.get('advisor') or {}).get('scenario_miner', {}).get('deferred'):
+                    mined = _v11_mine_scenarios(selected_row, canonical)
+                    selected_row['advisor']['scenario_miner'] = mined
+                    selected_row['advisor']['p_scenario_miner'] = mined.get('p_scenario_miner')
+            recommendation[side.lower()] = {
+                'best_model': _v11_compact_line(best) if best else None,
+                'risk_trigger': _v11_compact_line(risk) if risk else None,
+                'play_trigger': _v11_compact_line(play) if play else None,
+            }
+        output.append(recommendation)
+    def summary_rank(row: dict[str, Any]) -> tuple[float, float, float]:
+        trigger, _ = _v11_best_model_trigger(row)
+        if not trigger:
+            return (0.0, -999.0, 0.0)
+        is_play = 1.0 if float(trigger.get('p_final') or 0.0) >= ADVISOR_PLAY_MIN else 0.0
+        return (is_play, -abs(_v112_number(trigger.get('line_edge'), 999.0)), float(trigger.get('p_final') or 0.0))
+    output.sort(key=summary_rank, reverse=True)
+    return output
+
+
+def _v11_compact_line(item: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    if not item:
+        return None
+    adv = item.get('advisor') or {}
+    hist = item.get('history') or {}
+    return {
+        'market_type': item.get('market_type'),
+        'team': item.get('team'),
+        'segment': item.get('segment'),
+        'side': item.get('side'),
+        'line': item.get('line'),
+        'odds': item.get('odds'),
+        'bookmaker': item.get('bookmaker'),
+        'is_model_line': bool(adv.get('is_model_line')),
+        'action': adv.get('action'),
+        'status': adv.get('status'),
+        'history_zone_rate': adv.get('history_zone_rate'),
+        'history_zone_hits': hist.get('history_zone_hits'),
+        'history_zone_n': hist.get('history_zone_n'),
+        'p_hist': adv.get('p_hist'),
+        'p_scenario_core': adv.get('p_scenario_core'),
+        'p_scenario_miner': adv.get('p_scenario_miner'),
+        'p_live': adv.get('p_live'),
+        'p_raw': item.get('p_raw'),
+        'p_final': adv.get('p_final'),
+        'projection_used': adv.get('projection_used'),
+        'line_edge': adv.get('line_edge'),
+        'alignment': adv.get('alignment'),
+        'fake_over': adv.get('fake_over'),
+        'fake_under': adv.get('fake_under'),
+        'stat_gate_status': adv.get('stat_gate_status'),
+        'serious_blockers': adv.get('serious_blockers'),
+        'scenario_miner': adv.get('scenario_miner'),
+    }
+
+
+def _v11_primary_sort(item: dict[str, Any]) -> tuple[float, ...]:
+    adv = item.get('advisor') or {}
+    action_rank = {'PLAY': 3.0, 'RISK': 2.0, 'PASS': 1.0}.get(str(adv.get('action')), 0.0)
+    return (
+        action_rank,
+        float(adv.get('p_final') or 0.0),
+        float(adv.get('history_zone_rate') or 0.0),
+        _v112_number(adv.get('line_edge'), -999.0),
+        float(item.get('odds') or 0.0),
+    )
+
+
+def _v11_select_advisor_lines(evaluations: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    qualifying = [
+        item for item in evaluations
+        if not (item.get('advisor') or {}).get('is_model_line')
+        and _v112_market_is_currently_supported(item)
+        and ((item.get('advisor') or {}).get('history_zone_eligible') or (item.get('advisor') or {}).get('exceptional_edge'))
+    ]
+    qualifying.sort(key=_v11_primary_sort, reverse=True)
+    primary = qualifying[:ADVISOR_MAX_PRIMARY]
+    return primary, qualifying
+
+
+def _v11_theoretical_for_pass(
+    calculator: SuperBasketCalculator,
+    canonical: dict[str, Any],
+    evaluation: Optional[dict[str, Any]],
+) -> Optional[dict[str, Any]]:
+    if not evaluation:
+        return None
+    projection = to_number((evaluation.get('live') or {}).get('projection_used'))
+    if projection is None:
+        return None
+    spec = {k: evaluation.get(k) for k in ('market_type', 'team', 'segment')}
+    side = str(evaluation.get('side') or '')
+    rows = []
+    for offset in ADVISOR_MODEL_OFFSETS:
+        line = _v11_round_half(projection - offset if side == 'OVER' else projection + offset)
+        if line <= 0:
+            continue
+        model = calculator.evaluate_market(_v11_synthetic_market(spec, line, side, tag='PASS_TRIGGER'), canonical)
+        rows.append(_v11_enrich_evaluation(model, canonical, is_model=True))
+    candidates = sorted(rows, key=lambda r: float((r.get('advisor') or {}).get('p_final') or 0.0), reverse=True)
+    play = next((r for r in candidates if (r.get('advisor') or {}).get('history_zone_eligible') and (r.get('advisor') or {}).get('p_final', 0) >= ADVISOR_PLAY_MIN and _v112_edge(r, -999.0) >= 0 and not (r.get('advisor') or {}).get('serious_blockers')), None)
+    risk = next((r for r in candidates if (r.get('advisor') or {}).get('history_zone_eligible') and (r.get('advisor') or {}).get('p_final', 0) >= ADVISOR_RISK_MIN and _v112_edge(r, -999.0) >= 0 and not (r.get('advisor') or {}).get('serious_blockers')), None)
+    return {
+        'market_label': _v11_market_label(evaluation),
+        'side': side,
+        'projection_used': projection,
+        'risk_trigger': _v11_compact_line(risk),
+        'play_trigger': _v11_compact_line(play),
+    }
+
+
+def _v11_pct(value: Any) -> str:
+    number = to_number(value)
+    return 'N/A' if number is None else f'{number:.1%}'
+
+
+def _v11_num(value: Any, digits: int = 1) -> str:
+    number = to_number(value)
+    return 'N/A' if number is None else f'{number:.{digits}f}'
+
+
+def _v11_scenario_lines(scenario: dict[str, Any], limit: int = 2) -> list[str]:
+    rows = (scenario or {}).get('top_support') or []
+    if not rows:
+        rows = (scenario or {}).get('top_conflict') or []
+    output: list[str] = []
+    for row in rows[:limit]:
+        rate = row.get('combined_rate')
+        own = row.get('own') or {}
+        allowed = row.get('opponent_allowed') or {}
+        output.append(
+            f"• {row.get('title')}: {_v11_pct(rate)} для цієї лінії "
+            f"(N={row.get('combined_n')}, own {own.get('hits')}/{own.get('n')}, "
+            f"суперник {allowed.get('hits')}/{allowed.get('n')}); {row.get('effect')}."
+        )
+        impacts = own
+        impact_bits = []
+        if impacts.get('team_won_match_rate') is not None:
+            impact_bits.append(f"виграш матчу {_v11_pct(impacts.get('team_won_match_rate'))}")
+        if impacts.get('won_next_quarter_rate') is not None:
+            impact_bits.append(f"виграш наступної чверті {_v11_pct(impacts.get('won_next_quarter_rate'))}")
+        if impacts.get('won_all_4_quarters_rate') is not None:
+            impact_bits.append(f"4–0 по чвертях {_v11_pct(impacts.get('won_all_4_quarters_rate'))}")
+        if impacts.get('under_21_all_4_quarters_rate') is not None:
+            impact_bits.append(f"<21 у всіх чвертях {_v11_pct(impacts.get('under_21_all_4_quarters_rate'))}")
+        if impact_bits:
+            output.append('  Далі: ' + '; '.join(impact_bits) + '.')
+    return output
+
+
+def _v11_line_block(item: dict[str, Any], index: int) -> str:
+    adv = item.get('advisor') or {}
+    hist = item.get('history') or {}
+    scenario = adv.get('scenario_miner') or {}
+    line_type = 'MODEL' if adv.get('is_model_line') else 'REAL'
+    side = str(item.get('side') or '')
+    action = str(adv.get('action') or 'PASS')
+    zone = adv.get('history_zone_rate')
+    hits = hist.get('history_zone_hits')
+    n = hist.get('history_zone_n')
+    zone_fact = f'{hits}/{n}' if hits is not None and n else 'N/A'
+    lines = [
+        f'<b>#{index} {html.escape(action)} — {html.escape(_v11_market_label(item))}</b>',
+        f'<b>Лінія:</b> {html.escape(side)} {float(item.get("line")):.1f} | {line_type}' + (f' | @{float(item.get("odds")):.2f}' if not adv.get('is_model_line') and item.get('odds') else ''),
+        f'<b>Історична зона:</b> {_v11_pct(zone)} ({html.escape(zone_fact)})',
+        f'<b>P_history:</b> {_v11_pct(adv.get("p_hist"))} | <b>P_scenario:</b> {_v11_pct(adv.get("p_scenario_core"))} | <b>P_live:</b> {_v11_pct(adv.get("p_live"))}',
+        f'<b>P_final:</b> {_v11_pct(adv.get("p_final"))}',
+        f'<b>LiveProjection:</b> {_v11_num(adv.get("projection_used"))} | <b>Edge:</b> {_v11_num(adv.get("line_edge"))}',
+        f'<b>History/Scenario/Live:</b> {html.escape(str(adv.get("alignment")))}',
+        f'<b>Стата:</b> {html.escape(str(adv.get("stat_gate_status") or "OFF"))} | FAKE OVER: {"YES" if adv.get("fake_over") else "NO"} | FAKE UNDER: {"YES" if adv.get("fake_under") else "NO"}',
+    ]
+    scenario_lines = _v11_scenario_lines(scenario)
+    if scenario_lines:
+        lines.append('<b>Сценарії та вплив:</b>')
+        lines.extend(html.escape(text) for text in scenario_lines)
+    if adv.get('serious_blockers'):
+        lines.append('<b>Чому не брати:</b> ' + html.escape(', '.join(adv['serious_blockers'])))
+    return '\n'.join(lines)
+
+
+def _v11_best_model_trigger(summary: dict[str, Any]) -> tuple[Optional[dict[str, Any]], str]:
+    plays = []
+    risks = []
+    for side_key, side_label in (('over', 'OVER'), ('under', 'UNDER')):
+        group = summary.get(side_key) or {}
+        if group.get('play_trigger'):
+            plays.append((group['play_trigger'], side_label))
+        if group.get('risk_trigger'):
+            risks.append((group['risk_trigger'], side_label))
+    pool = plays if plays else risks
+    if not pool:
+        return None, ''
+    row, side_label = min(
+        pool,
+        key=lambda pair: (
+            abs(_v112_number(pair[0].get('line_edge'), 999.0)),
+            -float(pair[0].get('p_final') or 0.0),
+        ),
+    )
+    return row, side_label
+
+
+def _v11_model_trigger_text(summary: dict[str, Any], index: int) -> str:
+    lines = [f'<b>MODEL #{index}: {html.escape(str(summary.get("market_label")))}</b>', f'<b>LiveProjection:</b> {_v11_num(summary.get("projection_used"))}']
+    row, side_label = _v11_best_model_trigger(summary)
+    if row:
+        label = 'theoretical PLAY' if float(row.get('p_final') or 0.0) >= ADVISOR_PLAY_MIN else 'theoretical RISK'
+        lines.append(html.escape(
+            f'• {side_label} {float(row["line"]):.1f}: {label}, '
+            f'P_final {_v11_pct(row.get("p_final"))}, зона {_v11_pct(row.get("history_zone_rate"))}, '
+            f'edge {_v11_num(row.get("line_edge"))}'
+        ))
+    else:
+        lines.append('Підтвердженого theoretical trigger у зоні 75–100% не знайдено.')
+    return '\n'.join(lines)
+
+
+
+def _v11_audit_block(items: list[dict[str, Any]], primary: list[dict[str, Any]]) -> str:
+    primary_keys = {
+        (row.get('market_type'), row.get('team'), row.get('segment'), row.get('side'), to_number(row.get('line')))
+        for row in primary
+    }
+    remaining = [
+        row for row in items
+        if (row.get('market_type'), row.get('team'), row.get('segment'), row.get('side'), to_number(row.get('line'))) not in primary_keys
+    ]
+    if not remaining:
+        return ''
+    lines = ['<b>ДОДАТКОВИЙ АУДИТ УСІХ ЛІНІЙ 75–100% / EXCEPTIONAL EDGE</b>']
+    for row in remaining:
+        adv = row.get('advisor') or {}
+        market = html.escape(_v11_market_label(row))
+        side = html.escape(str(row.get('side') or 'N/A'))
+        line = _v11_num(row.get('line'))
+        action = html.escape(str(adv.get('action') or 'PASS'))
+        lines.append(
+            f'• <b>{action}</b> — {market}: {side} {line}; '
+            f'зона {_v11_pct(adv.get("history_zone_rate"))}; '
+            f'P_h {_v11_pct(adv.get("p_hist"))}; P_s {_v11_pct(adv.get("p_scenario_core"))}; '
+            f'P_l {_v11_pct(adv.get("p_live"))}; P_f {_v11_pct(adv.get("p_final"))}; '
+            f'Proj {_v11_num(adv.get("projection_used"))}; edge {_v11_num(adv.get("line_edge"))}; '
+            f'{html.escape(str(adv.get("alignment") or "N/A"))}; '
+            f'FO={"YES" if adv.get("fake_over") else "NO"}; FU={"YES" if adv.get("fake_under") else "NO"}'
+        )
+    return '\n'.join(lines)
+
+def _v11_build_messages(advisor: dict[str, Any], calculation: dict[str, Any]) -> list[str]:
+    snapshot = calculation['canonical_snapshot']
+    score = snapshot.get('score') or {}
+    quarters = snapshot.get('quarters') or []
+    qtext = ' | '.join(
+        f"Q{i + 1} {q.get('home')}:{q.get('away')}"
+        for i, q in enumerate(quarters)
+        if q.get('home') is not None and q.get('away') is not None
+    )
+    action = advisor['action']
+    icon = '✅' if action == 'PLAY' else '⚠️' if action == 'RISK' else '❌'
+    header = '\n'.join([
+        f'<b>{icon} {html.escape(action)}</b>',
+        f'<b>Матч:</b> {html.escape(str(snapshot.get("name")))}',
+        f'<b>Стадія:</b> {html.escape(str(snapshot.get("stage")))} | <b>Рахунок:</b> {score.get("home")}:{score.get("away")}',
+        f'<b>Чверті:</b> {html.escape(qtext or "N/A")}',
+        f'<b>Чому матч у Telegram:</b> {html.escape(str(advisor.get("dispatch_reason")))}',
+    ])
+    primary_lines = advisor.get('primary_lines') or []
+    blocks = [_v11_line_block(item, idx) for idx, item in enumerate(primary_lines, 1)]
+    if not blocks:
+        blocks = [_v11_model_trigger_text(row, idx) for idx, row in enumerate((advisor.get('model_summary') or [])[:ADVISOR_MAX_PRIMARY], 1)]
+    audit_block = _v11_audit_block(advisor.get('all_qualifying_real_lines') or [], primary_lines)
+    if audit_block:
+        blocks.append(audit_block)
+    theoretical = advisor.get('nearest_theoretical_play')
+    if theoretical:
+        trigger_lines = ['<b>НАЙБЛИЖЧИЙ ТЕОРЕТИЧНИЙ PLAY</b>', f'<b>Ринок:</b> {html.escape(str(theoretical.get("market_label")))}', f'<b>LiveProjection:</b> {_v11_num(theoretical.get("projection_used"))}']
+        if theoretical.get('play_trigger'):
+            row = theoretical['play_trigger']
+            trigger_lines.append(f"PLAY при {html.escape(str(row.get('side')))} {float(row.get('line')):.1f}; P_final {_v11_pct(row.get('p_final'))}; зона {_v11_pct(row.get('history_zone_rate'))}")
+        elif theoretical.get('risk_trigger'):
+            row = theoretical['risk_trigger']
+            trigger_lines.append(f"Поки лише RISK при {html.escape(str(row.get('side')))} {float(row.get('line')):.1f}; P_final {_v11_pct(row.get('p_final'))}")
+        else:
+            trigger_lines.append('Підтвердженої лінії 75–100% поки немає.')
+        blocks.append('\n'.join(trigger_lines))
+    if not blocks:
+        blocks.append('Розрахунок виконано, але придатної реальної або модельної лінії не знайдено.')
+
+    messages: list[str] = []
+    current = header
+    for block in blocks:
+        candidate = current + '\n\n' + block
+        if len(candidate) > 3900 and current != header:
+            messages.append(current)
+            current = '<b>Продовження розрахунку</b>\n' + block
+        elif len(candidate) > 3900:
+            # Hard split long block by lines.
+            messages.append(current)
+            current = '<b>Продовження розрахунку</b>'
+            for line in block.splitlines():
+                if len(current) + len(line) + 1 > 3900:
+                    messages.append(current)
+                    current = '<b>Продовження розрахунку</b>\n' + line
+                else:
+                    current += '\n' + line
+        else:
+            current = candidate
+    if current:
+        messages.append(current)
+    return messages
+
+
+def _v11_delivery_connect(db_path: str | Path) -> sqlite3.Connection:
+    path = Path(db_path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(path)
+    connection.execute(
+        '''CREATE TABLE IF NOT EXISTS advisor_deliveries (
+               advisor_key TEXT PRIMARY KEY,
+               match_id TEXT NOT NULL,
+               input_hash TEXT NOT NULL,
+               action TEXT NOT NULL,
+               status TEXT NOT NULL,
+               telegram_status TEXT NOT NULL,
+               created_at TEXT NOT NULL
+           )'''
+    )
+    connection.commit()
+    return connection
+
+
+def _v11_send_messages(
+    messages: list[str],
+    *,
+    telegram_sender: Optional[Callable[[str], dict[str, Any]]] = None,
+) -> dict[str, Any]:
+    sender = telegram_sender or (lambda value: send_telegram_message(value))
+    results: list[dict[str, Any]] = []
+    for message in messages:
+        raw = sender(message)
+        results.append(raw if isinstance(raw, dict) else {'sent': False, 'status': 'INVALID_SENDER_RESPONSE'})
+    sent_count = sum(bool(row.get('sent')) for row in results)
+    all_sent = bool(results) and sent_count == len(results)
+    any_sent = sent_count > 0
+    if all_sent:
+        status = 'SENT'
+    elif any_sent:
+        status = 'PARTIAL_SEND_FAILED'
+    else:
+        status = results[0].get('status') if results else 'NO_MESSAGES'
+    return {
+        'status': status,
+        'sent': all_sent,
+        'partially_sent': any_sent and not all_sent,
+        'sent_count': sent_count,
+        'message_id': next((row.get('message_id') for row in results if row.get('message_id')), None),
+        'parts': results,
+        'message_count': len(messages),
+    }
+
+
+def process_vps_match_file(
+    match_path: str | Path,
+    *,
+    output_path: str | Path | None = None,
+    zones_path: str | Path | None = None,
+    db_path: str | Path = 'super_basket.sqlite3',
+    mode: str = 'ACTION',
+    require_gpt: bool = False,
+    enable_gpt: bool = False,
+    enable_telegram: bool = True,
+    dry_run: bool = False,
+    strict_schema: bool = False,
+    checkpoint: Optional[int] = None,
+    gpt_reviewer: Optional[Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]] = None,
+    telegram_sender: Optional[Callable[[str], dict[str, Any]]] = None,
+) -> dict[str, Any]:
+    """Process one parser JSON as a full Telegram adviser.
+
+    Telegram dispatch is intentionally narrow:
+      1) at least one real line has an exact historical zone >=75%; or
+      2) no supported real total/IT line exists; or
+      3) a real line has a directional live edge >= configured 15 points.
+    """
+    del require_gpt, enable_gpt, gpt_reviewer  # deterministic advisor; GPT is not required
+    mode = mode.upper()
+    if mode not in {'ACTION', 'STRICT'}:
+        raise ValueError('mode must be ACTION or STRICT')
+    source_path = Path(match_path).expanduser().resolve()
+    source = load_json(source_path)
+    if checkpoint is None:
+        checkpoint = _v11_checkpoint_from_filename(source_path)
+    if checkpoint is not None:
+        checkpoint = int(checkpoint)
+        if checkpoint not in {1, 2, 3}:
+            raise ValueError('checkpoint must be 1, 2 or 3')
+        context = source.get('analysis_context') if isinstance(source.get('analysis_context'), dict) else {}
+        source['analysis_context'] = {**context, 'trigger_checkpoint': checkpoint}
+    zones, zones_metadata = resolve_team_relative_zones(source, zones_path=zones_path)
+    calculator = SuperBasketCalculator(deepcopy(DEFAULT_CONFIG), zones, zones_metadata)
+    core_result = calculator.calculate(source, dispatch_threshold=float(DEFAULT_CONFIG['dispatch_threshold']), strict_schema=strict_schema)
+    calculation = core_result['super_basket_calculation']
+    canonical = adapt_match(source, deepcopy(DEFAULT_CONFIG), strict_schema)
+    canonical['data_gate']['team_relative_zones'] = deepcopy(zones_metadata)
+    canonical['coursework_forecast'] = build_coursework_remaining_forecast(canonical)
+    input_state_gate = _v112_input_state_gate(source, canonical, checkpoint)
+
+    real_evaluations = [_v11_enrich_evaluation(item, canonical, is_model=False) for item in calculation.get('market_evaluations') or []]
+    calculation['market_evaluations'] = real_evaluations
+    primary, qualifying = _v11_select_advisor_lines(real_evaluations)
+
+    real_keys = {
+        _v11_market_key(item)
+        for item in real_evaluations
+        if _v112_market_is_currently_supported(item)
+    }
+    supported_real_count = len(real_keys)
+    model_evaluations: list[dict[str, Any]] = []
+    for spec in _v11_relevant_market_specs(canonical):
+        if _v11_market_key(spec) not in real_keys:
+            model_evaluations.extend(_v11_evaluate_model_grid(calculator, canonical, spec))
+    model_summary = _v11_model_summary(model_evaluations, canonical)
+
+    supported_real_evaluations = [item for item in real_evaluations if _v112_market_is_currently_supported(item)]
+    zone_dispatch = any((item.get('advisor') or {}).get('history_zone_eligible') for item in supported_real_evaluations)
+    edge_dispatch = any((item.get('advisor') or {}).get('exceptional_edge') for item in supported_real_evaluations)
+    no_line_dispatch = supported_real_count == 0
+    should_dispatch = bool(input_state_gate['allowed'] and (zone_dispatch or edge_dispatch or no_line_dispatch))
+    reasons: list[str] = []
+    if zone_dispatch:
+        reasons.append('Є реальна лінія в історичній зоні 75–100%.')
+    if edge_dispatch:
+        reasons.append(f'Є винятковий live-edge ≥{ADVISOR_EXCEPTIONAL_EDGE_MIN:g} очок.')
+    if no_line_dispatch:
+        reasons.append('Підтримуваних реальних total/IT ліній немає — показано model triggers.')
+    dispatch_reason = ' '.join(reasons) if reasons else 'Матч не відповідає Telegram-фільтру.'
+    if not input_state_gate['allowed']:
+        dispatch_reason = 'Telegram заблоковано: ' + str(input_state_gate['reason'])
+
+    active = [item for item in primary if (item.get('advisor') or {}).get('action') in {'PLAY', 'RISK'}]
+    active.sort(key=_v11_primary_sort, reverse=True)
+    if active and input_state_gate['allowed']:
+        top = active[0]
+        action = str((top.get('advisor') or {}).get('action'))
+    else:
+        top = primary[0] if primary else None
+        action = 'PASS'
+
+    theoretical = None
+    if action == 'PASS' and top and input_state_gate['allowed']:
+        theoretical = _v11_theoretical_for_pass(calculator, canonical, top)
+    if action == 'PASS' and input_state_gate['allowed'] and theoretical is None and model_summary:
+        # The model summary itself is the theoretical recommendation when no
+        # real market exists.
+        first_summary = model_summary[0]
+        best_row, _ = _v11_best_model_trigger(first_summary)
+        is_play = bool(best_row and float(best_row.get('p_final') or 0.0) >= ADVISOR_PLAY_MIN)
+        theoretical = {
+            'market_label': first_summary.get('market_label'),
+            'projection_used': first_summary.get('projection_used'),
+            'side': (best_row or {}).get('side'),
+            'play_trigger': best_row if is_play else None,
+            'risk_trigger': best_row if best_row and not is_play else None,
+        }
+
+    advisor = {
+        'version': ADVISOR_VERSION,
+        'action': action,
+        'status': (
+            str((top.get('advisor') or {}).get('status'))
+            if top is not None and action in {'PLAY', 'RISK'}
+            else ('PASS — INPUT STATE GATE' if not input_state_gate['allowed'] else 'PASS — TELEGRAM ADVISOR')
+        ),
+        'dispatch': should_dispatch,
+        'dispatch_reason': dispatch_reason,
+        'filter': {
+            'history_zone_min': ADVISOR_HISTORY_ZONE_MIN,
+            'exceptional_edge_min': ADVISOR_EXCEPTIONAL_EDGE_MIN,
+            'supported_real_market_count': supported_real_count,
+            'zone_dispatch': zone_dispatch,
+            'edge_dispatch': edge_dispatch,
+            'no_line_dispatch': no_line_dispatch,
+            'input_state_gate': input_state_gate,
+        },
+        'primary_lines': primary,
+        'all_qualifying_real_lines': qualifying,
+        'model_summary': model_summary,
+        'nearest_theoretical_play': theoretical,
+    }
+    messages = _v11_build_messages(advisor, calculation) if should_dispatch else []
+    advisor['telegram_messages'] = messages
+
+    # Build a backwards-compatible decision block around the selected real line.
+    if top:
+        top['system_action'] = action
+        top['system_status'] = advisor['status']
+        decision = build_decision(top if action in {'PLAY', 'RISK'} else None, top, calculation, mode)
+    else:
+        decision = build_decision(None, None, calculation, mode)
+    decision['action'] = action
+    decision['deterministic_action'] = action
+    decision['status'] = advisor['status']
+    if not input_state_gate['allowed']:
+        decision['reason_codes'] = [str(input_state_gate['reason'])]
+        decision['market'] = None
+        decision['signal_id'] = None
+        decision['explanation_uk'] = 'Рекомендацію заблоковано через стан вхідного snapshot: ' + str(input_state_gate['reason'])
+        decision['main_risk_uk'] = 'Не використовувати завершені або застарілі дані для live-рекомендації.'
+        decision['trigger_uk'] = 'Очікувати новий актуальний snapshot поточного матчу.'
+    elif top:
+        top_adv = top.get('advisor') or {}
+        top_policy = top_adv.get('audit_zone_policy') or {}
+        decision['reason_codes'] = list(top_adv.get('serious_blockers') or [])
+        if top_policy.get('applied'):
+            decision['audit_policy_classification'] = top_policy.get('classification')
+        projection = to_number(top_adv.get('projection_used'))
+        line_value = to_number(top.get('line'))
+        edge_value = to_number(top_adv.get('line_edge'))
+        if projection is not None and line_value is not None:
+            relation = 'на рівні лінії'
+            if projection > line_value:
+                relation = f'вище лінії на {projection - line_value:.1f}'
+            elif projection < line_value:
+                relation = f'нижче лінії на {line_value - projection:.1f}'
+            decision['explanation_uk'] = (
+                f"P_final {float(top_adv.get('p_final') or 0.0):.1%}: "
+                f"LiveProjection {projection:.1f}, {relation}; "
+                f"лінія {line_value:.1f}; історична зона "
+                f"{float(top_adv.get('history_zone_rate') or 0.0):.1%}; "
+                f"edge сторони {edge_value:.1f}."
+            )
+        if action == 'RISK':
+            decision['main_risk_uk'] = (
+                f"RISK через P_final {float(top_adv.get('p_final') or 0.0):.1%} "
+                f"та/або неповне підтвердження. " + str(top_policy.get('reason_uk') or '')
+            ).strip()
+        elif action == 'PLAY':
+            decision['main_risk_uk'] = 'Основний ризик — зміна live-лінії, темпу або статистичного профілю після snapshot.'
+        else:
+            decision['main_risk_uk'] = 'PASS: ' + (', '.join(decision['reason_codes']) if decision['reason_codes'] else str(top_policy.get('reason_uk') or dispatch_reason))
+    else:
+        decision['reason_codes'] = []
+    decision['advisor_dispatch'] = should_dispatch
+    decision['advisor_dispatch_reason'] = dispatch_reason
+    decision['nearest_theoretical_play'] = theoretical
+    decision['gpt_status'] = 'NOT_REQUIRED_V11_DETERMINISTIC'
+    decision.pop('_evaluation', None)
+
+    target = Path(output_path).expanduser().resolve() if output_path else source_path.with_name(source_path.stem + '_advisor_result.json')
+    delivery = {'status': 'SKIPPED_FILTER', 'sent': False, 'message_id': None, 'message_count': len(messages)}
+    duplicate = False
+    advisor_key = hashlib.sha256((calculation['input_snapshot_hash'] + '|' + ADVISOR_VERSION).encode('utf-8')).hexdigest()
+    connection = _v11_delivery_connect(db_path)
+    try:
+        row = connection.execute('SELECT telegram_status FROM advisor_deliveries WHERE advisor_key=?', (advisor_key,)).fetchone()
+        duplicate = row is not None and row[0] == 'SENT'
+        if not should_dispatch:
+            delivery = {'status': 'SKIPPED_FILTER', 'sent': False, 'message_id': None, 'message_count': 0}
+        elif duplicate:
+            delivery = {'status': 'SKIPPED_DUPLICATE_ALREADY_SENT', 'sent': False, 'message_id': None, 'message_count': len(messages)}
+        elif dry_run:
+            delivery = {'status': 'DRY_RUN_NOT_SENT', 'sent': False, 'message_id': None, 'message_count': len(messages)}
+        elif not enable_telegram:
+            delivery = {'status': 'SKIPPED_TELEGRAM_DISABLED', 'sent': False, 'message_id': None, 'message_count': len(messages)}
+        else:
+            delivery = _v11_send_messages(messages, telegram_sender=telegram_sender)
+        connection.execute(
+            'INSERT OR REPLACE INTO advisor_deliveries(advisor_key,match_id,input_hash,action,status,telegram_status,created_at) VALUES(?,?,?,?,?,?,?)',
+            (advisor_key, canonical['match_id'], calculation['input_snapshot_hash'], action, advisor['status'], delivery['status'], utc_now()),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    # v11.0/v11.1 accidentally bypassed the LearningStore used by `report`,
+    # `settle` and `settle-match`. Persist every real PLAY/RISK again and mark
+    # every processed snapshot, while keeping Telegram delivery deduplication
+    # in the dedicated advisor_deliveries table.
+    learning_duplicate = False
+    learning_store = LearningStore(db_path)
+    try:
+        decision['telegram_status'] = delivery['status']
+        if action in {'PLAY', 'RISK'} and decision.get('signal_id') and decision.get('market'):
+            existing_signal, learning_duplicate = learning_store.record_signal(decision, calculation)
+            learning_store.update_delivery(
+                decision['signal_id'],
+                action,
+                decision.get('gpt_status', 'NOT_REQUIRED_V11_DETERMINISTIC'),
+                delivery['status'],
+                delivery.get('message_id'),
+            )
+        learning_store.mark_processed(
+            calculation['input_snapshot_hash'],
+            str(source_path),
+            str(target),
+            'OK' if input_state_gate['allowed'] else str(input_state_gate['reason']),
+        )
+    finally:
+        learning_store.close()
+
+    line_recommendations = [_v11_compact_line(item) for item in real_evaluations]
+    calculation['line_recommendations'] = line_recommendations
+    calculation['active_line_recommendations'] = [row for row in line_recommendations if row and row.get('action') in {'PLAY', 'RISK'}]
+    calculation['advisor_model_evaluations'] = [_v11_compact_line(item) for item in model_evaluations]
+    calculation['advisor'] = advisor
+
+    system = {
+        'version': ADVISOR_VERSION,
+        'processed_at': utc_now(),
+        'input_hash': calculation['input_snapshot_hash'],
+        'mode': mode,
+        'status': 'OK',
+        'data_gate': calculation.get('data_gate'),
+        'format_gate': format_gate(calculation),
+        'market_audit': calculation.get('market_audit'),
+        'line_coverage': calculation.get('line_coverage'),
+        'line_recommendations': line_recommendations,
+        'active_line_recommendations': calculation.get('active_line_recommendations'),
+        'decision': decision,
+        'decision_text': f'{action} | {dispatch_reason}',
+        'gpt_review': {'status': 'NOT_REQUIRED_V11_DETERMINISTIC', 'approved': True, 'action': action},
+        'risk_post_filter': {'enabled': False, 'policy': 'V11_ADVISOR'},
+        'telegram_delivery': {**delivery, 'duplicate_signal': duplicate},
+        'learning_store': {'signal_recorded': action in {'PLAY', 'RISK'} and bool(decision.get('signal_id')), 'duplicate_signal': learning_duplicate},
+        'advisor': advisor,
+        'input_state_gate': input_state_gate,
+        'files': {'source': str(source_path), 'result': str(target)},
+    }
+    core_result['super_basket_system'] = system
+    save_json(target, core_result)
+    append_verdict_log({
+        'timestamp': system['processed_at'],
+        'match_id': canonical['match_id'],
+        'match_name': canonical['name'],
+        'checkpoint': canonical['stage'],
+        'trigger_checkpoint': canonical.get('trigger_checkpoint'),
+        'verdict': action,
+        'verdict_status': advisor['status'],
+        'p_final': (top.get('advisor') or {}).get('p_final') if top else None,
+        'market': _v11_compact_line(top) if top else None,
+        'description': dispatch_reason,
+        'reason_codes': (top.get('advisor') or {}).get('serious_blockers') if top else [],
+        'input_hash': calculation['input_snapshot_hash'],
+        'gpt_status': 'NOT_REQUIRED_V11_DETERMINISTIC',
+        'telegram_status': delivery['status'],
+        'advisor_filter': advisor['filter'],
+        'nearest_theoretical_play': theoretical,
+        'files': {'source': str(source_path), 'result': str(target)},
+    })
+    if ENABLE_EXCEL_AUDIT:
+        append_excel_audit(core_result)
+    return core_result
+
+
+
+def _v11_checkpoint_from_filename(path: Path) -> Optional[int]:
+    match = re.search(r'(?:^|_)q([123])(?:_|$)', path.stem, flags=re.IGNORECASE)
+    return int(match.group(1)) if match else None
+
+
+def watch_inbox(
+    inbox: str | Path,
+    outbox: str | Path,
+    *,
+    zones_path: str | Path | None,
+    db_path: str | Path,
+    mode: str,
+    require_gpt: bool,
+    enable_gpt: bool,
+    enable_telegram: bool,
+    poll_seconds: float,
+) -> None:
+    """Watch parser JSONs, including names such as *_q1_result.json.
+
+    The legacy watcher skipped every *_result.json, which also skipped the
+    parser's own Q1/HT/Q3 files. v11 only skips files generated by the advisor
+    and infers checkpoint 1/2/3 from the parser filename when available.
+    """
+    inbox_path = Path(inbox).expanduser().resolve()
+    outbox_path = Path(outbox).expanduser().resolve()
+    inbox_path.mkdir(parents=True, exist_ok=True)
+    outbox_path.mkdir(parents=True, exist_ok=True)
+    signatures: dict[str, tuple[int, int]] = {}
+    stable: dict[str, int] = {}
+    processed: dict[str, tuple[int, int]] = {}
+    print(f'WATCHING {inbox_path} -> {outbox_path}', flush=True)
+    while True:
+        for path in sorted(inbox_path.glob('*.json')):
+            if path.name.endswith(('_advisor_result.json', '_calculated.json')):
+                continue
+            try:
+                stat_result = path.stat()
+                signature = (stat_result.st_size, stat_result.st_mtime_ns)
+            except OSError:
+                continue
+            key = str(path)
+            if signatures.get(key) == signature:
+                stable[key] = stable.get(key, 0) + 1
+            else:
+                signatures[key] = signature
+                stable[key] = 0
+            if stable[key] < 1 or processed.get(key) == signature:
+                continue
+            output = outbox_path / f'{path.stem}_advisor_result.json'
+            checkpoint = _v11_checkpoint_from_filename(path)
+            try:
+                result = process_vps_match_file(
+                    path,
+                    output_path=output,
+                    zones_path=zones_path,
+                    db_path=db_path,
+                    mode=mode,
+                    require_gpt=require_gpt,
+                    enable_gpt=enable_gpt,
+                    enable_telegram=enable_telegram,
+                    checkpoint=checkpoint,
+                )
+                decision = result['super_basket_system']['decision']
+                print(
+                    f"{utc_now()} {path.name}: checkpoint={checkpoint or 'auto'} "
+                    f"{decision['action']} {decision['status']}",
+                    flush=True,
+                )
+                processed[key] = signature
+            except (OSError, ValueError, KeyError, json.JSONDecodeError, sqlite3.Error) as exc:
+                print(f'{utc_now()} ERROR {path.name}: {type(exc).__name__}: {exc}', file=sys.stderr, flush=True)
+        time.sleep(max(0.5, poll_seconds))
+
+
+
+# ===== v11.1 ASYMMETRIC STRONG-ZONE AUDIT POLICY =====
+# The mathematical core remains unchanged. This layer only changes the final
+# adviser decision filter and explanation according to the completed strong-zone
+# audit. The audit found materially different behaviour for OVER and UNDER:
+# - strong OVER zones tolerated a modest negative live edge much better;
+# - strong UNDER zones failed frequently when live projection was above the line.
+# P_history, P_scenario, projections, P_live, P_raw and P_final are not modified.
+
+ADVISOR_VERSION = '11.2.0-BUGFIX-ASYMMETRIC-ZONE-ADVISOR'
+ADVISOR_OVER_AUDIT_ZONE_MIN = float(os.getenv('SUPER_BASKET_OVER_AUDIT_ZONE_MIN', '0.80'))
+ADVISOR_OVER_SMALL_DEFICIT_MAX = float(os.getenv('SUPER_BASKET_OVER_SMALL_DEFICIT_MAX', '8.0'))
+ADVISOR_OVER_LARGE_DEFICIT_MIN = float(os.getenv('SUPER_BASKET_OVER_LARGE_DEFICIT_MIN', '8.0'))
+ADVISOR_UNDER_AUDIT_ZONE_MIN = float(os.getenv('SUPER_BASKET_UNDER_AUDIT_ZONE_MIN', '0.80'))
+ADVISOR_UNDER_HARD_CONFLICT_EDGE = float(os.getenv('SUPER_BASKET_UNDER_HARD_CONFLICT_EDGE', '8.0'))
+ADVISOR_UNDER_ELITE_ZONE_MIN = float(os.getenv('SUPER_BASKET_UNDER_ELITE_ZONE_MIN', '0.90'))
+ADVISOR_OVER_SCENARIO_SUPPORT_MIN = float(os.getenv('SUPER_BASKET_OVER_SCENARIO_SUPPORT_MIN', '0.60'))
+ADVISOR_OVER_STRONG_SCENARIO_MIN = float(os.getenv('SUPER_BASKET_OVER_STRONG_SCENARIO_MIN', '0.75'))
+
+_V111_BASE_ENRICH = _v11_enrich_evaluation
+_V111_BASE_COMPACT = _v11_compact_line
+_V111_BASE_LINE_BLOCK = _v11_line_block
+
+
+def _v111_stat_confirmed(item: dict[str, Any], side: str) -> bool:
+    stat = item.get('stat_comparison') or {}
+    if side == 'OVER':
+        return bool(stat.get('real_over')) or str(stat.get('over_gate_status') or '') == 'CONFIRMED' or str(stat.get('stat_gate_status') or '') == 'CONFIRMED'
+    return bool(stat.get('real_under')) or str(stat.get('under_gate_status') or '') == 'CONFIRMED' or str(stat.get('stat_gate_status') or '') == 'CONFIRMED'
+
+
+def _v111_scenario_support(adv: dict[str, Any], *, strong: bool = False) -> bool:
+    core = float(adv.get('p_scenario_core') or 0.50)
+    miner = float(adv.get('p_scenario_miner') or 0.50)
+    scenario = adv.get('scenario_miner') or {}
+    n = int(scenario.get('scenario_n') or 0)
+    threshold = ADVISOR_OVER_STRONG_SCENARIO_MIN if strong else ADVISOR_OVER_SCENARIO_SUPPORT_MIN
+    # The core scenario may be based on a valid sample even when the miner has
+    # no matching pattern. The miner itself must have at least five cases.
+    return core >= threshold or (miner >= threshold and n >= 5)
+
+
+def _v111_remove_blockers(blockers: list[str], allowed: set[str]) -> list[str]:
+    return [code for code in blockers if code not in allowed]
+
+
+def _v111_audit_policy(
+    item: dict[str, Any],
+    adv: dict[str, Any],
+    canonical: dict[str, Any],
+) -> dict[str, Any]:
+    side = str(item.get('side') or '')
+    zone = to_number(adv.get('history_zone_rate'))
+    edge = to_number(adv.get('line_edge'))
+    stat = item.get('stat_comparison') or {}
+    p_final = float(adv.get('p_final') or 0.50)
+    p_live = float(adv.get('p_live') or 0.50)
+    scenario_support = _v111_scenario_support(adv, strong=False)
+    strong_scenario = _v111_scenario_support(adv, strong=True)
+    stat_confirmed = _v111_stat_confirmed(item, side)
+    fake_against = bool((side == 'OVER' and stat.get('fake_over')) or (side == 'UNDER' and stat.get('fake_under')))
+
+    result = {
+        'applied': False,
+        'side': side,
+        'zone': zone,
+        'edge': edge,
+        'classification': 'STANDARD',
+        'permission': False,
+        'hard_block': False,
+        'scenario_support': scenario_support,
+        'strong_scenario': strong_scenario,
+        'stat_confirmed': stat_confirmed,
+        'p_final_unchanged': p_final,
+        'p_live_unchanged': p_live,
+        'reason_uk': '',
+        'audit_evidence_uk': '',
+        'removed_blockers': [],
+        'added_blockers': [],
+    }
+    if zone is None or edge is None:
+        return result
+
+    if side == 'OVER' and zone >= ADVISOR_OVER_AUDIT_ZONE_MIN:
+        result['applied'] = True
+        if edge >= 0:
+            result.update({
+                'classification': 'OVER_ZONE_LIVE_ALIGNED',
+                'permission': True,
+                'reason_uk': 'Сильна OVER-зона та live-проєкція на/вище лінії.',
+                'audit_evidence_uk': 'В аудиті OVER 80%+ при проєкції на/вище лінії: 4/4 WIN.',
+            })
+        elif edge >= -ADVISOR_OVER_SMALL_DEFICIT_MAX:
+            result.update({
+                'classification': 'OVER_ZONE_SMALL_LIVE_DEFICIT',
+                'permission': bool(scenario_support or stat_confirmed),
+                'reason_uk': (
+                    f'Live-проєкція нижче OVER-лінії лише на {abs(edge):.1f} очка; '
+                    'невеликий мінус не є автоматичним блокером за умови підтримки сценарію або статистики.'
+                ),
+                'audit_evidence_uk': 'В аудиті сильні OVER-зони з дефіцитом live 0–8 очок дали 7/7 WIN.',
+            })
+        else:
+            result.update({
+                'classification': 'OVER_ZONE_LARGE_LIVE_DEFICIT',
+                'permission': bool(stat_confirmed or strong_scenario),
+                'reason_uk': (
+                    f'Live-проєкція нижче OVER-лінії на {abs(edge):.1f} очка; '
+                    'потрібне FULL_STAT або сильне сценарне підтвердження.'
+                ),
+                'audit_evidence_uk': 'В аудиті дефіцит OVER понад 8 очок дав 3/5 WIN, тому автоматичне підвищення заборонене.',
+            })
+        if fake_against:
+            result['permission'] = False
+            result['hard_block'] = True
+            result['added_blockers'].append('AUDIT_FAKE_OVER_BLOCK')
+            result['reason_uk'] += ' Виявлено FAKE OVER, тому дозвіл скасовано.'
+        return result
+
+    if side == 'UNDER' and zone >= ADVISOR_UNDER_AUDIT_ZONE_MIN:
+        result['applied'] = True
+        projection_above = edge < 0
+        if projection_above and abs(edge) > ADVISOR_UNDER_HARD_CONFLICT_EDGE:
+            result.update({
+                'classification': 'UNDER_ZONE_HARD_LIVE_CONFLICT_GT8',
+                'hard_block': True,
+                'permission': False,
+                'reason_uk': f'Live-проєкція вище UNDER-лінії на {abs(edge):.1f} очка — жорсткий конфлікт.',
+                'audit_evidence_uk': 'В аудиті UNDER 80%+ при проєкції вище лінії більш ніж на 8 очок: 0/7 WIN.',
+            })
+            result['added_blockers'].append('AUDIT_UNDER_LIVE_CONFLICT_GT8')
+        elif projection_above and zone >= ADVISOR_UNDER_ELITE_ZONE_MIN:
+            result.update({
+                'classification': 'UNDER_ELITE_ZONE_ANY_LIVE_CONFLICT',
+                'hard_block': True,
+                'permission': False,
+                'reason_uk': f'UNDER-зона {zone:.1%}, але live-проєкція вище лінії на {abs(edge):.1f} очка.',
+                'audit_evidence_uk': 'В аудиті UNDER 90–100% із live-проєкцією вище лінії: 0/4 WIN.',
+            })
+            result['added_blockers'].append('AUDIT_UNDER_90_LIVE_CONFLICT')
+        elif edge >= 0:
+            result.update({
+                'classification': 'UNDER_ZONE_LIVE_ALIGNED',
+                'permission': True,
+                'reason_uk': 'Сильна UNDER-зона підтверджена live-проєкцією на/нижче лінії.',
+                'audit_evidence_uk': 'В аудиті UNDER 80%+ при проєкції на/нижче лінії: 3/4 WIN; вибірка мала, тому потрібна обережність.',
+            })
+        else:
+            result.update({
+                'classification': 'UNDER_ZONE_SOFT_LIVE_CONFLICT',
+                'permission': False,
+                'reason_uk': f'Live-проєкція вище UNDER-лінії на {abs(edge):.1f} очка.',
+                'audit_evidence_uk': 'Сильні UNDER-зони в аудиті були значно слабші за OVER; конфлікт live не ігнорується.',
+            })
+        if fake_against:
+            result['hard_block'] = True
+            result['permission'] = False
+            result['added_blockers'].append('AUDIT_FAKE_UNDER_BLOCK')
+        return result
+
+    return result
+
+
+def _v11_enrich_evaluation(
+    evaluation: dict[str, Any],
+    canonical: dict[str, Any],
+    *,
+    is_model: bool = False,
+    mine_scenarios: bool = True,
+) -> dict[str, Any]:
+    """v11.1 final decision filter.
+
+    Calls the unchanged v11/core calculation first, then applies only an
+    asymmetric adviser policy to the final action. Numeric P values remain
+    exactly as calculated by the core.
+    """
+    item = _V111_BASE_ENRICH(evaluation, canonical, is_model=is_model, mine_scenarios=mine_scenarios)
+    adv = item.get('advisor') or {}
+    policy = _v111_audit_policy(item, adv, canonical)
+    side = str(item.get('side') or '')
+    zone = to_number(adv.get('history_zone_rate'))
+    edge = to_number(adv.get('line_edge'))
+    p_final = float(adv.get('p_final') or 0.50)
+    p_live = float(adv.get('p_live') or 0.50)
+    p_scenario = max(float(adv.get('p_scenario_core') or 0.50), float(adv.get('p_scenario_miner') or 0.50))
+    odds = to_number(item.get('odds'))
+    stat = item.get('stat_comparison') or {}
+    fake_against = bool((side == 'OVER' and stat.get('fake_over')) or (side == 'UNDER' and stat.get('fake_under')))
+    exceptional = bool(adv.get('exceptional_edge'))
+    zone_ok = zone is not None and zone >= ADVISOR_HISTORY_ZONE_MIN
+    serious = list(adv.get('serious_blockers') or [])
+
+    # The audit gives permission to remove only legacy no-stat/live-direction
+    # blockers. All metadata, fake-profile, router, Q4 and stat-against blockers
+    # remain in force.
+    removable = {
+        'LIVE_DIRECTION_OR_EDGE_FAILED',
+        'NO_STAT_SUPPORT_TOO_LOW',
+        'STRONG_HISTORY_LIVE_CONFLICT',
+        'LIVE_EDGE_BELOW_3',
+        'LIVE_EDGE_BELOW_0_50',
+    }
+    if side == 'OVER' and policy.get('permission'):
+        before = set(serious)
+        serious = _v111_remove_blockers(serious, removable)
+        policy['removed_blockers'] = sorted(before - set(serious))
+    for code in policy.get('added_blockers') or []:
+        if code not in serious:
+            serious.append(code)
+
+    # Recalculate only the final action. P_final and every component remain
+    # unchanged and are displayed alongside the audit decision.
+    if is_model:
+        action, status = 'PASS', 'MODEL LINE / THEORETICAL TRIGGER'
+    elif odds is None or odds < float(DEFAULT_CONFIG.get('odds_min', 1.44)):
+        action, status = 'PASS', 'PASS — ODDS'
+    elif serious or fake_against or policy.get('hard_block'):
+        action, status = 'PASS', 'PASS — AUDIT CONFLICT/BLOCKER'
+    else:
+        allowed_direction = bool(edge is not None and edge >= 0)
+        if side == 'OVER' and policy.get('permission'):
+            allowed_direction = True
+        eligible = bool(zone_ok or exceptional)
+        if eligible and allowed_direction and p_final >= ADVISOR_PLAY_MIN:
+            action, status = 'PLAY', 'PLAY — ASYMMETRIC ZONE ADVISOR'
+        elif eligible and allowed_direction and p_final >= ADVISOR_RISK_MIN:
+            action, status = 'RISK', 'RISK — ASYMMETRIC ZONE ADVISOR'
+        else:
+            action, status = 'PASS', 'PASS — ASYMMETRIC ZONE ADVISOR'
+
+    # Strong UNDER zones were much less reliable in the audit. Every settled
+    # strong UNDER in that audit was NO_STAT and the combined hit rate was only
+    # 29.4%. Therefore a non-confirmed-stat UNDER is capped at RISK even when
+    # history, scenario and live all look strong. FULL_STAT confirmation is
+    # required for a clean UNDER PLAY.
+    stat_confirmed = _v111_stat_confirmed(item, side)
+    if action == 'PLAY' and side == 'UNDER' and not stat_confirmed:
+        action = 'RISK'
+        status = 'RISK — UNDER AUDIT CAUTION'
+        policy['under_play_downgraded'] = True
+        policy['reason_uk'] = (policy.get('reason_uk') or '') + ' Без підтвердженої live-статистики сильний UNDER має максимум RISK, не clean PLAY.'
+
+    # Alignment is asymmetric too: a tolerated small OVER deficit is neutral,
+    # not a hard live conflict. The actual edge remains visible numerically.
+    if side == 'OVER' and policy.get('permission') and edge is not None and edge < 0:
+        if float(adv.get('p_hist') or 0.50) >= 0.60 and p_scenario >= 0.60:
+            adv['alignment'] = 'HISTORY + SCENARIO ALIGNED / LIVE SMALL DEFICIT'
+        else:
+            adv['alignment'] = 'OVER AUDIT TOLERANCE / LIVE DEFICIT'
+
+    adv['version'] = ADVISOR_VERSION
+    adv['audit_zone_policy'] = policy
+    adv['serious_blockers'] = serious
+    adv['action'] = action
+    adv['status'] = status
+    adv['p_final'] = p_final
+    adv['p_final_formula_changed'] = False
+    item['advisor'] = adv
+    item['system_action'] = action
+    item['system_status'] = status
+    item['stake'] = '0%' if action == 'PASS' else ('10-15% live-limit' if action == 'RISK' else '15-20% live-limit')
+    item['p_final_system'] = p_final
+    return item
+
+
+def _v11_compact_line(item: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    row = _V111_BASE_COMPACT(item)
+    if row is not None and item is not None:
+        row['audit_zone_policy'] = deepcopy((item.get('advisor') or {}).get('audit_zone_policy') or {})
+        row['p_final_formula_changed'] = False
+    return row
+
+
+def _v11_line_block(item: dict[str, Any], index: int) -> str:
+    text = _V111_BASE_LINE_BLOCK(item, index)
+    policy = (item.get('advisor') or {}).get('audit_zone_policy') or {}
+    if not policy.get('applied'):
+        return text
+    lines = [text, '<b>Асиметричний аудит зон:</b>']
+    lines.append(html.escape(str(policy.get('reason_uk') or 'Правило не активне.')))
+    if policy.get('audit_evidence_uk'):
+        lines.append(html.escape(str(policy.get('audit_evidence_uk'))))
+    if policy.get('removed_blockers'):
+        lines.append('<b>Не застосовані старі блокери:</b> ' + html.escape(', '.join(policy['removed_blockers'])))
+    lines.append('<b>Важливо:</b> P_history, P_scenario, P_live, P_raw і P_final не змінювалися; змінений лише фінальний advisor-filter.')
+    return '\n'.join(lines)
+
+
+DEFAULT_CONFIG.setdefault('advisor_audit_policy', {})
+DEFAULT_CONFIG['advisor_audit_policy'].update({
+    'version': ADVISOR_VERSION,
+    'formula_components_unchanged': ['P_history', 'P_scenario', 'projections', 'P_live', 'P_raw', 'P_final'],
+    'over_zone_min': ADVISOR_OVER_AUDIT_ZONE_MIN,
+    'over_small_live_deficit_tolerated': ADVISOR_OVER_SMALL_DEFICIT_MAX,
+    'under_hard_conflict_projection_above': ADVISOR_UNDER_HARD_CONFLICT_EDGE,
+    'under_elite_zone_min': ADVISOR_UNDER_ELITE_ZONE_MIN,
+    'source_note': 'SUPER_BASKET detailed audit of strong historical zones; v11.2 bugfixes quarter routing, stale snapshots, zero-edge selection and delivery integrity.',
+})
+
+SYSTEM_VERSION = ADVISOR_VERSION
+DEFAULT_CONFIG['engine_version'] = ADVISOR_VERSION
+
+
+# ============================================================================
+# v11.3 CLEAR TELEGRAM EXPLANATIONS — OUTPUT ONLY
+# ============================================================================
+# This release changes only the human-readable Telegram rendering. It does not
+# modify P_history, P_scenario, live projections, P_live, P_raw, P_final,
+# scenario mining, caps, blockers, routing or PLAY/RISK/PASS selection.
+
+ADVISOR_VERSION = '11.3.0-CLEAR-TELEGRAM-EXPLANATIONS'
+
+
+def _v113_side_uk(side: Any) -> str:
+    return 'БІЛЬШЕ' if str(side or '').upper() == 'OVER' else 'МЕНШЕ'
+
+
+def _v113_effect_uk(effect: Any) -> str:
+    return {
+        'STRONG_SUPPORT': 'сильно підсилює',
+        'SUPPORT': 'підсилює',
+        'NEUTRAL': 'не дає помітної переваги',
+        'WEAKEN': 'послаблює',
+        'STRONG_CONFLICT': 'сильно суперечить',
+        'INSUFFICIENT': 'має недостатню вибірку',
+    }.get(str(effect or '').upper(), str(effect or 'невідомий вплив'))
+
+
+def _v113_sample_uk(label: Any) -> str:
+    return {
+        'STRONG_SAMPLE': 'велика вибірка',
+        'RELIABLE': 'надійна вибірка',
+        'NORMAL': 'нормальна вибірка',
+        'SMALL_SAMPLE': 'мала вибірка',
+        'INSUFFICIENT': 'недостатня вибірка',
+    }.get(str(label or '').upper(), str(label or 'вибірка не визначена'))
+
+
+def _v113_intersection_uk(value: Any) -> str:
+    return {
+        'ALIGNED': 'історія команди та профіль суперника підтверджують один напрямок',
+        'CONFLICT': 'історія команди та профіль суперника суперечать одне одному',
+        'ONE_SIDED': 'підтвердження є лише з одного боку',
+        'OFF': 'достатнього перетину немає',
+    }.get(str(value or '').upper(), str(value or 'перетин не визначений'))
+
+
+def _v113_segment_phrase(item: dict[str, Any]) -> str:
+    market_type = str(item.get('market_type') or '')
+    segment = str(item.get('segment') or '')
+    if market_type in {'MATCH_TOTAL', 'TEAM_IT_MATCH'} or segment == 'MATCH':
+        return 'за весь матч'
+    if market_type in {'H1_TOTAL', 'TEAM_IT_H1'} or segment == 'H1':
+        return 'у 1-й половині'
+    if market_type in {'H2_TOTAL', 'TEAM_IT_H2'} or segment == 'H2':
+        return 'у 2-й половині'
+    if segment.startswith('Q'):
+        return f'у {segment}'
+    return f'у сегменті {segment}' if segment else 'у цьому ринку'
+
+
+def _v113_bet_sentence(item: dict[str, Any], *, with_odds: bool = True) -> str:
+    side = _v113_side_uk(item.get('side'))
+    line = _v11_num(item.get('line'))
+    team = str(item.get('team') or '').strip()
+    market_type = str(item.get('market_type') or '')
+    period = _v113_segment_phrase(item)
+    if market_type in {'TEAM_IT_MATCH', 'TEAM_IT_H1', 'TEAM_IT_H2', 'CURRENT_QUARTER_TEAM_IT'} or team:
+        text = f'{team or "Команда"} набере {side} {line} очка {period}'
+    else:
+        text = f'команди разом наберуть {side} {line} очка {period}'
+    odds = to_number(item.get('odds'))
+    if with_odds and odds is not None and not bool((item.get('advisor') or {}).get('is_model_line')):
+        text += f' за коефіцієнт {odds:.2f}'
+    return text
+
+
+def _v113_target_sentence_from_pattern(row: dict[str, Any], fallback_item: dict[str, Any]) -> str:
+    # The pattern already stores the exact target market/side/line. Rebuild a
+    # human sentence from the current evaluated item so team names are never lost.
+    item = dict(fallback_item)
+    if row.get('target_side'):
+        item['side'] = row.get('target_side')
+    if row.get('target_line') is not None:
+        item['line'] = row.get('target_line')
+    return _v113_bet_sentence(item, with_odds=False)
+
+
+def _v113_meaningful_rate(label: str, value: Any) -> Optional[str]:
+    number = to_number(value)
+    if number is None:
+        return None
+    # Do not clutter Telegram with ordinary 40–60% observations. Show only
+    # genuinely informative continuation patterns.
+    if 0.30 < number < 0.70:
+        return None
+    qualifier = 'часто' if number >= 0.70 else 'рідко'
+    return f'{label} {qualifier}: {_v11_pct(number)}'
+
+
+def _v113_scenario_lines(scenario: dict[str, Any], item: dict[str, Any], limit: int = 2) -> list[str]:
+    support = list((scenario or {}).get('top_support') or [])
+    conflict = list((scenario or {}).get('top_conflict') or [])
+    rows = support[:limit]
+    if not rows and conflict:
+        rows = conflict[:limit]
+    elif conflict and len(rows) < limit:
+        rows += conflict[: limit - len(rows)]
+    output: list[str] = []
+    for idx, row in enumerate(rows, 1):
+        own = row.get('own') or {}
+        allowed = row.get('opponent_allowed') or {}
+        own_hits, own_n = int(own.get('hits') or 0), int(own.get('n') or 0)
+        opp_hits, opp_n = int(allowed.get('hits') or 0), int(allowed.get('n') or 0)
+        total_hits, total_n = own_hits + opp_hits, own_n + opp_n
+        target = _v113_target_sentence_from_pattern(row, item)
+        source_team = str(row.get('source_team') or 'Команда')
+        description = str(row.get('description') or row.get('title') or 'Схожий сценарій')
+        rate = row.get('combined_rate')
+        effect = _v113_effect_uk(row.get('effect'))
+        sample = _v113_sample_uk(row.get('sample_label'))
+        intersection = _v113_intersection_uk(row.get('intersection'))
+
+        output.append(f'<b>Сценарій {idx}:</b> {html.escape(description)}')
+        if total_n:
+            output.append(
+                f'У схожих матчах варіант «{html.escape(target)}» пройшов '
+                f'<b>{total_hits} із {total_n}</b> разів; скоригована сценарна оцінка — <b>{_v11_pct(rate)}</b>.'
+            )
+        else:
+            output.append(f'Скоригована сценарна оцінка для цієї лінії — <b>{_v11_pct(rate)}</b>.')
+        detail_bits = []
+        if own_n:
+            detail_bits.append(f'за історією {source_team}: {own_hits}/{own_n}')
+        if opp_n:
+            detail_bits.append(f'за дзеркальним профілем суперника: {opp_hits}/{opp_n}')
+        if detail_bits:
+            output.append(html.escape('Джерела: ' + '; '.join(detail_bits) + '.'))
+        output.append(
+            f'<b>Вплив:</b> сценарій {html.escape(effect)} цю рекомендацію; '
+            f'{html.escape(intersection)}; {html.escape(sample)}.'
+        )
+
+        continuation = []
+        # Match/next-quarter outcomes are useful at both strong and very weak
+        # frequencies. Rare 4–0 or <21-in-all-four facts are omitted unless they
+        # are genuinely common, otherwise the message becomes harder to read.
+        for label, value in (
+            (f'{source_team} вигравала матч', own.get('team_won_match_rate')),
+            (f'{source_team} вигравала наступну чверть', own.get('won_next_quarter_rate')),
+        ):
+            text = _v113_meaningful_rate(label, value)
+            if text:
+                continuation.append(text)
+        sweep = to_number(own.get('won_all_4_quarters_rate'))
+        if sweep is not None and sweep >= 0.50:
+            continuation.append(f'{source_team} завершувала матч 4–0 по чвертях часто: {_v11_pct(sweep)}')
+        no21 = to_number(own.get('under_21_all_4_quarters_rate'))
+        if no21 is not None and no21 >= 0.50:
+            continuation.append(f'{source_team} не набирала 21 очко в жодній чверті часто: {_v11_pct(no21)}')
+        if continuation:
+            output.append('<b>Що часто відбувалося далі:</b> ' + html.escape('; '.join(continuation) + '.'))
+    return output
+
+
+def _v113_projection_explanation(item: dict[str, Any]) -> str:
+    adv = item.get('advisor') or {}
+    projection = to_number(adv.get('projection_used'))
+    line = to_number(item.get('line'))
+    edge = to_number(adv.get('line_edge'))
+    if projection is None or line is None:
+        return 'Live-проєкція або лінія відсутня.'
+    side = str(item.get('side') or '').upper()
+    if projection > line:
+        relative = f'на {projection - line:.1f} очка вище лінії'
+    elif projection < line:
+        relative = f'на {line - projection:.1f} очка нижче лінії'
+    else:
+        relative = 'точно на рівні лінії'
+    direction = 'підтримує ставку' if edge is not None and edge >= 0 else 'не підтримує ставку'
+    return f'Модель очікує {projection:.1f} очка — це {relative}; для {side} така проєкція {direction}.'
+
+
+def _v113_plain_conclusion(item: dict[str, Any]) -> list[str]:
+    adv = item.get('advisor') or {}
+    action = str(adv.get('action') or 'PASS')
+    bet = _v113_bet_sentence(item)
+    zone = _v11_pct(adv.get('history_zone_rate'))
+    p_final = _v11_pct(adv.get('p_final'))
+    scenario_miner = adv.get('scenario_miner') or {}
+    scenario_rate = scenario_miner.get('p_scenario_miner')
+    lines = ['<b>ПРОСТИЙ ВИСНОВОК</b>']
+    if action == 'PLAY':
+        lines.append(f'<b>БРАТИ:</b> {html.escape(bet)}.')
+    elif action == 'RISK':
+        lines.append(f'<b>МОЖНА РОЗГЛЯДАТИ ЯК RISK:</b> {html.escape(bet)}.')
+    else:
+        lines.append(f'<b>ЗАРАЗ НЕ БРАТИ:</b> {html.escape(bet)}.')
+    lines.append(
+        f'Історична зона — <b>{zone}</b>, підсумкова оцінка P_final — <b>{p_final}</b>. '
+        + html.escape(_v113_projection_explanation(item))
+    )
+    if scenario_rate is not None:
+        lines.append(
+            f'Автоматичний пошук схожих сценаріїв оцінює підтримку цієї конкретної лінії у <b>{_v11_pct(scenario_rate)}</b>. '
+            'Це пояснювальна сценарна оцінка; формулу P_final вона не підміняє.'
+        )
+    blockers = list(adv.get('serious_blockers') or [])
+    if action == 'PASS' and blockers:
+        lines.append('<b>Головна причина PASS:</b> ' + html.escape(', '.join(blockers)) + '.')
+    elif action == 'PLAY':
+        lines.append('Історія, сценарії та live не мають критичного конфлікту, тому це найкращий чистий варіант із поточного snapshot.')
+    elif action == 'RISK':
+        lines.append('Напрямок має підтримку, але не всі умови достатньо сильні для чистого PLAY.')
+    return lines
+
+
+def _v11_line_block(item: dict[str, Any], index: int) -> str:
+    adv = item.get('advisor') or {}
+    hist = item.get('history') or {}
+    scenario = adv.get('scenario_miner') or {}
+    line_type = 'MODEL' if adv.get('is_model_line') else 'REAL'
+    action = str(adv.get('action') or 'PASS')
+    zone = adv.get('history_zone_rate')
+    hits = hist.get('history_zone_hits')
+    n = hist.get('history_zone_n')
+    zone_fact = f'{hits}/{n}' if hits is not None and n else 'N/A'
+    recommendation = _v113_bet_sentence(item)
+    lines = [
+        f'<b>#{index} {html.escape(action)}</b>',
+        f'<b>Конкретна рекомендація:</b> {html.escape(recommendation)}.',
+        f'<b>Тип лінії:</b> {line_type}' + (f' | <b>Букмекер:</b> {html.escape(str(item.get("bookmaker") or "N/A"))}' if not adv.get('is_model_line') else ''),
+        f'<b>Історична зона:</b> {_v11_pct(zone)} ({html.escape(zone_fact)})',
+        f'<b>P_history:</b> {_v11_pct(adv.get("p_hist"))}',
+        f'<b>P_scenario у формулі:</b> {_v11_pct(adv.get("p_scenario_core"))}',
+        f'<b>P_live:</b> {_v11_pct(adv.get("p_live"))} | <b>P_final:</b> {_v11_pct(adv.get("p_final"))}',
+        f'<b>LiveProjection:</b> {_v11_num(adv.get("projection_used"))} | <b>Edge для ставки:</b> {_v11_num(adv.get("line_edge"))}',
+        f'<b>Пояснення проєкції:</b> {html.escape(_v113_projection_explanation(item))}',
+        f'<b>Узгодження:</b> {html.escape(str(adv.get("alignment") or "N/A"))}',
+        f'<b>Статистика:</b> {html.escape(str(adv.get("stat_gate_status") or "OFF"))} | FAKE OVER: {"YES" if adv.get("fake_over") else "NO"} | FAKE UNDER: {"YES" if adv.get("fake_under") else "NO"}',
+    ]
+    scenario_lines = _v113_scenario_lines(scenario, item)
+    if scenario_lines:
+        lines.append('<b>ЩО ОЗНАЧАЮТЬ СЦЕНАРІЇ ДЛЯ ЦІЄЇ СТАВКИ</b>')
+        lines.extend(scenario_lines)
+    else:
+        lines.append('<b>Сценарії:</b> достатнього повторюваного сценарію для зрозумілого висновку не знайдено.')
+    policy = adv.get('audit_zone_policy') or {}
+    if policy.get('applied'):
+        lines.append('<b>Асиметричний аудит OVER/UNDER:</b>')
+        lines.append(html.escape(str(policy.get('reason_uk') or 'Правило не активне.')))
+        if policy.get('audit_evidence_uk'):
+            lines.append(html.escape(str(policy.get('audit_evidence_uk'))))
+        lines.append('Математичні P_history, P_scenario, P_live, P_raw і P_final не змінювалися; це лише фінальний advisor-filter.')
+    if adv.get('serious_blockers'):
+        lines.append('<b>Що блокує ставку:</b> ' + html.escape(', '.join(adv['serious_blockers'])))
+    lines.extend(_v113_plain_conclusion(item))
+    return '\n'.join(lines)
+
+
+def _v113_trigger_sentence(row: dict[str, Any], *, play: bool) -> str:
+    item = {
+        'market_type': row.get('market_type'),
+        'team': row.get('team'),
+        'segment': row.get('segment'),
+        'side': row.get('side'),
+        'line': row.get('line'),
+        'odds': row.get('odds'),
+        'advisor': {'is_model_line': True},
+    }
+    side = str(row.get('side') or '').upper()
+    threshold = 'або нижче' if side == 'OVER' else 'або вище'
+    kind = 'PLAY' if play else 'RISK'
+    return (
+        f'{kind} може з’явитися, якщо букмекер дасть лінію, за якої '
+        f'{_v113_bet_sentence(item, with_odds=False)} ({threshold}). '
+        f'Очікуваний P_final — {_v11_pct(row.get("p_final"))}, edge — {_v11_num(row.get("line_edge"))}.'
+    )
+
+
+def _v11_model_trigger_text(summary: dict[str, Any], index: int) -> str:
+    lines = [
+        f'<b>MODEL #{index}: {html.escape(str(summary.get("market_label")))}</b>',
+        f'<b>Поточна live-проєкція:</b> {_v11_num(summary.get("projection_used"))}',
+    ]
+    row, _ = _v11_best_model_trigger(summary)
+    if row:
+        is_play = float(row.get('p_final') or 0.0) >= ADVISOR_PLAY_MIN
+        lines.append(html.escape(_v113_trigger_sentence(row, play=is_play)))
+    else:
+        lines.append('Підтвердженого theoretical trigger в історичній зоні 75–100% не знайдено.')
+    return '\n'.join(lines)
+
+
+def _v11_audit_block(items: list[dict[str, Any]], primary: list[dict[str, Any]]) -> str:
+    primary_keys = {
+        (row.get('market_type'), row.get('team'), row.get('segment'), row.get('side'), to_number(row.get('line')))
+        for row in primary
+    }
+    remaining = [
+        row for row in items
+        if (row.get('market_type'), row.get('team'), row.get('segment'), row.get('side'), to_number(row.get('line'))) not in primary_keys
+    ]
+    if not remaining:
+        return ''
+    lines = ['<b>ДОДАТКОВІ ЛІНІЇ 75–100% / EXCEPTIONAL EDGE</b>']
+    for row in remaining:
+        adv = row.get('advisor') or {}
+        action = str(adv.get('action') or 'PASS')
+        bet = _v113_bet_sentence(row)
+        lines.append(
+            f'• <b>{html.escape(action)}</b>: {html.escape(bet)}. '
+            f'Зона {_v11_pct(adv.get("history_zone_rate"))}; '
+            f'P_final {_v11_pct(adv.get("p_final"))}; '
+            f'live-проєкція {_v11_num(adv.get("projection_used"))}; '
+            f'edge {_v11_num(adv.get("line_edge"))}.'
+        )
+    return '\n'.join(lines)
+
+
+def _v113_global_conclusion(advisor: dict[str, Any]) -> str:
+    action = str(advisor.get('action') or 'PASS')
+    primary = list(advisor.get('primary_lines') or [])
+    selected = next((row for row in primary if str((row.get('advisor') or {}).get('action') or '') == action), None)
+    selected = selected or (primary[0] if primary else None)
+    lines = ['<b>ФІНАЛЬНА РЕКОМЕНДАЦІЯ ПРОСТИМИ СЛОВАМИ</b>']
+    if selected:
+        bet = _v113_bet_sentence(selected)
+        if action == 'PLAY':
+            lines.append(f'<b>Найкращий варіант зараз:</b> {html.escape(bet)}.')
+            lines.append('Це PLAY: ставка має найкраще узгодження історії, сценаріїв і live серед перевірених ліній.')
+        elif action == 'RISK':
+            lines.append(f'<b>Найкращий ризиковий варіант:</b> {html.escape(bet)}.')
+            lines.append('Це не чистий PLAY: підтримка є, але залишається ризик або неповне підтвердження.')
+        else:
+            lines.append(f'<b>Поточну лінію не брати:</b> {html.escape(bet)}.')
+    else:
+        lines.append('<b>Зараз немає реальної лінії, яку радник дозволяє брати.</b>')
+
+    theoretical = advisor.get('nearest_theoretical_play') or {}
+    trigger = theoretical.get('play_trigger') or theoretical.get('risk_trigger')
+    if trigger:
+        lines.append('<b>Що може стати хорошою ставкою далі:</b> ' + html.escape(
+            _v113_trigger_sentence(trigger, play=bool(theoretical.get('play_trigger')))
+        ))
+    elif action == 'PASS':
+        lines.append('Зрозумілого теоретичного тригера в історичній зоні 75–100% поки немає.')
+    return '\n'.join(lines)
+
+
+def _v11_build_messages(advisor: dict[str, Any], calculation: dict[str, Any]) -> list[str]:
+    snapshot = calculation['canonical_snapshot']
+    score = snapshot.get('score') or {}
+    quarters = snapshot.get('quarters') or []
+    qtext = ' | '.join(
+        f"Q{i + 1} {q.get('home')}:{q.get('away')}"
+        for i, q in enumerate(quarters)
+        if q.get('home') is not None and q.get('away') is not None
+    )
+    action = advisor['action']
+    icon = '✅' if action == 'PLAY' else '⚠️' if action == 'RISK' else '❌'
+    header = '\n'.join([
+        f'<b>{icon} {html.escape(action)}</b>',
+        f'<b>Матч:</b> {html.escape(str(snapshot.get("name")))}',
+        f'<b>Стадія:</b> {html.escape(str(snapshot.get("stage")))} | <b>Рахунок:</b> {score.get("home")}:{score.get("away")}',
+        f'<b>Чверті:</b> {html.escape(qtext or "N/A")}',
+        f'<b>Чому матч надіслано:</b> {html.escape(str(advisor.get("dispatch_reason")))}',
+    ])
+    primary_lines = advisor.get('primary_lines') or []
+    blocks = [_v11_line_block(item, idx) for idx, item in enumerate(primary_lines, 1)]
+    if not blocks:
+        blocks = [_v11_model_trigger_text(row, idx) for idx, row in enumerate((advisor.get('model_summary') or [])[:ADVISOR_MAX_PRIMARY], 1)]
+    audit_block = _v11_audit_block(advisor.get('all_qualifying_real_lines') or [], primary_lines)
+    if audit_block:
+        blocks.append(audit_block)
+    theoretical = advisor.get('nearest_theoretical_play')
+    if theoretical:
+        trigger_lines = [
+            '<b>НАЙБЛИЖЧА ТЕОРЕТИЧНА МОЖЛИВІСТЬ</b>',
+            f'<b>Ринок:</b> {html.escape(str(theoretical.get("market_label")))}',
+            f'<b>Поточна live-проєкція:</b> {_v11_num(theoretical.get("projection_used"))}',
+        ]
+        if theoretical.get('play_trigger'):
+            trigger_lines.append(html.escape(_v113_trigger_sentence(theoretical['play_trigger'], play=True)))
+        elif theoretical.get('risk_trigger'):
+            trigger_lines.append(html.escape(_v113_trigger_sentence(theoretical['risk_trigger'], play=False)))
+        else:
+            trigger_lines.append('Підтвердженої лінії 75–100% поки немає.')
+        blocks.append('\n'.join(trigger_lines))
+    blocks.append(_v113_global_conclusion(advisor))
+
+    messages: list[str] = []
+    current = header
+    for block in blocks:
+        candidate = current + '\n\n' + block
+        if len(candidate) > 3900 and current != header:
+            messages.append(current)
+            current = '<b>Продовження розрахунку</b>\n' + block
+        elif len(candidate) > 3900:
+            messages.append(current)
+            current = '<b>Продовження розрахунку</b>'
+            for line in block.splitlines():
+                if len(current) + len(line) + 1 > 3900:
+                    messages.append(current)
+                    current = '<b>Продовження розрахунку</b>\n' + line
+                else:
+                    current += '\n' + line
+        else:
+            current = candidate
+    if current:
+        messages.append(current)
+    return messages
+
+
+DEFAULT_CONFIG.setdefault('telegram_explanation_policy', {})
+DEFAULT_CONFIG['telegram_explanation_policy'].update({
+    'version': ADVISOR_VERSION,
+    'math_changed': False,
+    'team_name_required_for_team_it': True,
+    'plain_conclusion_at_end': True,
+    'scenario_target_line_explained': True,
+    'scenario_meaningful_continuation_only': True,
+})
+SYSTEM_VERSION = ADVISOR_VERSION
+DEFAULT_CONFIG['engine_version'] = ADVISOR_VERSION
+
+
+# =============================================================================
+# v11.4 SCORE-FLOOR / ALREADY-CROSSED-LINE BUGFIX
+# =============================================================================
+# Fixes impossible recommendations such as:
+# - a live projection below points already scored in the same scope;
+# - an OVER trigger below a team's current score (already crossed);
+# - model triggers for completed scopes or an in-play quarter without reliable time.
+# The historical/scenario formulas are unchanged. P_live/P_final change only where
+# the former live projection violated the mathematical score floor.
+
+ADVISOR_VERSION = '11.4.0-SCORE-FLOOR-CROSSED-LINE-BUGFIX'
+_V114_CALCULATE_LIVE_PROJECTION_BASE = calculate_live_projection
+
+
+def _v114_scope_state(spec_or_market: dict[str, Any], canonical: dict[str, Any]) -> dict[str, Any]:
+    """Return the score/time already consumed by the exact market scope."""
+    market = {
+        'market_type': spec_or_market.get('market_type'),
+        'team': spec_or_market.get('team'),
+        'segment': spec_or_market.get('segment') or 'MATCH',
+        'side': spec_or_market.get('side') or 'OVER',
+        'line': float(to_number(spec_or_market.get('line')) or 0.5),
+    }
+    try:
+        clock = _segment_clock(market, canonical)
+    except Exception:
+        return {
+            'valid': False,
+            'current_points': None,
+            'remaining_seconds': None,
+            'elapsed_seconds': None,
+            'reason': 'SCOPE_CLOCK_ERROR',
+        }
+    current = to_number(clock.get('current_points'))
+    remaining = to_number(clock.get('remaining_seconds'))
+    elapsed = to_number(clock.get('elapsed_seconds'))
+    segment = str(market.get('segment') or '')
+    current_quarter = to_int(canonical.get('current_quarter'))
+    target_quarter = int(segment[1:]) if segment.startswith('Q') and segment[1:].isdigit() else None
+    reliable = bool((canonical.get('data_gate') or {}).get('time_reliable', True))
+    if remaining is not None and remaining <= 0:
+        return {
+            'valid': False,
+            'current_points': current,
+            'remaining_seconds': remaining,
+            'elapsed_seconds': elapsed,
+            'reason': 'SCOPE_ALREADY_COMPLETED',
+        }
+    if target_quarter is not None:
+        if current_quarter is not None and target_quarter < current_quarter:
+            return {
+                'valid': False,
+                'current_points': current,
+                'remaining_seconds': remaining,
+                'elapsed_seconds': elapsed,
+                'reason': 'PAST_QUARTER',
+            }
+        if current_quarter == target_quarter and not reliable:
+            return {
+                'valid': False,
+                'current_points': current,
+                'remaining_seconds': remaining,
+                'elapsed_seconds': elapsed,
+                'reason': 'CURRENT_QUARTER_TIME_UNRELIABLE',
+            }
+    return {
+        'valid': current is not None and remaining is not None,
+        'current_points': current,
+        'remaining_seconds': remaining,
+        'elapsed_seconds': elapsed,
+        'reason': 'OK',
+    }
+
+
+def _v114_recalculate_live_probability(result: dict[str, Any], market: dict[str, Any], projection: float) -> None:
+    line = float(market['line'])
+    side = str(market.get('side') or '').upper()
+    sigma = float(to_number(result.get('sigma')) or 1.0)
+    edge_over = projection - line
+    edge_under = line - projection
+    edge = edge_over if side == 'OVER' else edge_under
+    z_score = edge / sigma if sigma > 0 else 0.0
+    result['projection_used'] = projection
+    result['Projection_used'] = projection
+    result['projection_model_live'] = projection
+    result['line_edge'] = edge
+    result['line_edge_over'] = edge_over
+    result['line_edge_under'] = edge_under
+    result['projection_minus_line'] = projection - line
+    result['z_score'] = z_score
+    result['p_live'] = normal_cdf(z_score) if sigma > 0 else 0.50
+
+
+def calculate_live_projection(
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+    history: dict[str, Any],
+    scenario: dict[str, Any],
+    config: dict[str, Any],
+    stat: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    result = _V114_CALCULATE_LIVE_PROJECTION_BASE(
+        market, canonical, history, scenario, config, stat
+    )
+    current = to_number(result.get('current_points'))
+    remaining = to_number(result.get('remaining_seconds'))
+    projection = to_number(result.get('projection_used'))
+    if current is None or projection is None:
+        return result
+
+    original = float(projection)
+    corrected = original
+    reason = None
+    if remaining is not None and remaining <= 0:
+        corrected = float(current)
+        reason = 'COMPLETED_SCOPE_EQUALS_FINAL_SCORE'
+    elif original < float(current):
+        # A final projection can never be lower than points already on the board.
+        # Prefer a valid score/time channel; otherwise use the strict score floor.
+        score_time = to_number(result.get('projection_score_time'))
+        simple = to_number(result.get('projection_simple'))
+        valid_live = [
+            float(value) for value in (score_time, simple)
+            if value is not None and float(value) >= float(current)
+        ]
+        corrected = min(valid_live) if valid_live else float(current)
+        reason = 'PROJECTION_BELOW_CURRENT_SCORE'
+
+    if corrected != original:
+        _v114_recalculate_live_probability(result, market, corrected)
+        result['projection_floor_applied'] = True
+        result['projection_before_score_floor'] = original
+        result['projection_score_floor'] = float(current)
+        result['projection_floor_reason'] = reason
+        result['projection_formula'] = (
+            str(result.get('projection_formula') or '')
+            + ' Final projection is clamped to points already scored in this market scope.'
+        ).strip()
+    else:
+        result['projection_floor_applied'] = False
+    return result
+
+
+def _v114_projection_from_probe(
+    probe: dict[str, Any],
+    current_points: float,
+    remaining_seconds: float,
+) -> tuple[Optional[float], dict[str, Any]]:
+    live = probe.get('live') or {}
+    raw_projection = to_number(live.get('projection_used'))
+    score_time = to_number(live.get('projection_score_time'))
+    simple = to_number(live.get('projection_simple'))
+    candidates = []
+    for source, value in (
+        ('projection_used', raw_projection),
+        ('projection_score_time', score_time),
+        ('projection_simple', simple),
+    ):
+        if value is not None and float(value) >= current_points:
+            candidates.append((source, float(value)))
+    if remaining_seconds <= 0:
+        return None, {'reason': 'SCOPE_ALREADY_COMPLETED'}
+    if not candidates:
+        return None, {
+            'reason': 'NO_PROJECTION_ABOVE_CURRENT_SCORE',
+            'raw_projection': raw_projection,
+            'score_time': score_time,
+            'simple': simple,
+            'current_points': current_points,
+        }
+    # Keep the clean core projection when valid; otherwise use the valid score/time channel.
+    source, projection = candidates[0]
+    return projection, {
+        'reason': 'OK',
+        'selected_source': source,
+        'raw_projection': raw_projection,
+        'current_points': current_points,
+    }
+
+
+def _v114_model_line_is_open(line: float, current_points: float) -> bool:
+    # Both a live OVER and live UNDER line must remain above the score already made.
+    # Otherwise the OVER has already crossed and the UNDER has already lost/closed.
+    return float(line) >= _v11_round_half(float(current_points) + 0.01)
+
+
+def _v11_evaluate_model_grid(
+    calculator: SuperBasketCalculator,
+    canonical: dict[str, Any],
+    spec: dict[str, Any],
+) -> list[dict[str, Any]]:
+    scope = _v114_scope_state(spec, canonical)
+    if not scope.get('valid'):
+        return []
+    current_points = float(scope['current_points'])
+    remaining_seconds = float(scope['remaining_seconds'])
+
+    values = _v11_history_values(canonical, spec)
+    center = _v11_model_center(canonical, spec)
+    if center is None or not values:
+        return []
+
+    probe_line = max(float(center), _v11_round_half(current_points + 0.01))
+    probe_market = _v11_synthetic_market(spec, probe_line, 'OVER', tag='PROBE_V114')
+    probe = calculator.evaluate_market(probe_market, canonical)
+    projection, projection_audit = _v114_projection_from_probe(
+        probe, current_points, remaining_seconds
+    )
+    if projection is None:
+        return []
+    projection = max(float(projection), current_points)
+
+    p10 = percentile(values, 0.10) or min(values)
+    p90 = percentile(values, 0.90) or max(values)
+    realistic_low = max(
+        0.5,
+        _v11_round_half(p10 - 2.0),
+        _v11_round_half(current_points + 0.01),
+    )
+    realistic_high = _v11_round_half(p90 + 2.0)
+    if realistic_high < realistic_low:
+        # History is already below the live score; no unopened historical-zone line exists.
+        return []
+
+    candidate_lines: set[tuple[str, float]] = set()
+    for side in ('OVER', 'UNDER'):
+        center_line = _v11_round_half(max(projection, current_points + 0.01))
+        candidate_lines.add((side, center_line))
+    for offset in ADVISOR_MODEL_OFFSETS:
+        candidate_lines.add(('OVER', _v11_round_half(projection - offset)))
+        candidate_lines.add(('UNDER', _v11_round_half(projection + offset)))
+
+    evaluations: list[dict[str, Any]] = []
+    for side, line in sorted(candidate_lines, key=lambda row: (row[0], row[1])):
+        if line < realistic_low or line > realistic_high:
+            continue
+        if not _v114_model_line_is_open(line, current_points):
+            continue
+        evaluated = _v11_light_model_evaluation(
+            spec, line, side, projection, values, canonical, probe
+        )
+        evaluated['live']['current_points'] = current_points
+        evaluated['live']['remaining_seconds'] = remaining_seconds
+        evaluated['live']['projection_floor_applied'] = bool(
+            projection_audit.get('raw_projection') is not None
+            and float(projection_audit['raw_projection']) < current_points
+        )
+        evaluated['model_scope_guard'] = {
+            'current_points': current_points,
+            'remaining_seconds': remaining_seconds,
+            'line_above_current_score': True,
+            'projection_audit': projection_audit,
+        }
+        evaluations.append(
+            _v11_enrich_evaluation(
+                evaluated, canonical, is_model=True, mine_scenarios=False
+            )
+        )
+    return evaluations
+
+
+def _v11_compact_line(item: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    if not item:
+        return None
+    adv = item.get('advisor') or {}
+    hist = item.get('history') or {}
+    live = item.get('live') or {}
+    return {
+        'market_type': item.get('market_type'),
+        'team': item.get('team'),
+        'segment': item.get('segment'),
+        'side': item.get('side'),
+        'line': item.get('line'),
+        'odds': item.get('odds'),
+        'bookmaker': item.get('bookmaker'),
+        'is_model_line': bool(adv.get('is_model_line')),
+        'action': adv.get('action'),
+        'status': adv.get('status'),
+        'history_zone_rate': adv.get('history_zone_rate'),
+        'history_zone_hits': hist.get('history_zone_hits'),
+        'history_zone_n': hist.get('history_zone_n'),
+        'p_hist': adv.get('p_hist'),
+        'p_scenario_core': adv.get('p_scenario_core'),
+        'p_scenario_miner': adv.get('p_scenario_miner'),
+        'p_live': adv.get('p_live'),
+        'p_raw': item.get('p_raw'),
+        'p_final': adv.get('p_final'),
+        'projection_used': adv.get('projection_used'),
+        'line_edge': adv.get('line_edge'),
+        'current_points': live.get('current_points'),
+        'remaining_seconds': live.get('remaining_seconds'),
+        'projection_floor_applied': live.get('projection_floor_applied'),
+        'alignment': adv.get('alignment'),
+        'fake_over': adv.get('fake_over'),
+        'fake_under': adv.get('fake_under'),
+        'stat_gate_status': adv.get('stat_gate_status'),
+        'serious_blockers': adv.get('serious_blockers'),
+        'scenario_miner': adv.get('scenario_miner'),
+    }
+
+
+def _v114_compact_trigger_is_valid(row: Optional[dict[str, Any]]) -> bool:
+    if not row:
+        return False
+    line = to_number(row.get('line'))
+    current = to_number(row.get('current_points'))
+    projection = to_number(row.get('projection_used'))
+    remaining = to_number(row.get('remaining_seconds'))
+    if line is None or projection is None:
+        return False
+    if current is not None:
+        if projection < current:
+            return False
+        if not _v114_model_line_is_open(line, current):
+            return False
+    if remaining is not None and remaining <= 0:
+        return False
+    return True
+
+
+def _v11_model_summary(model_evaluations: list[dict[str, Any]], canonical: dict[str, Any]) -> list[dict[str, Any]]:
+    groups: dict[tuple[str, Optional[str], str], list[dict[str, Any]]] = {}
+    for item in model_evaluations:
+        groups.setdefault(_v11_market_key(item), []).append(item)
+    output: list[dict[str, Any]] = []
+    for key, rows in groups.items():
+        rows = [row for row in rows if _v114_compact_trigger_is_valid(_v11_compact_line(row))]
+        if not rows:
+            continue
+        projection = next((
+            to_number((r.get('live') or {}).get('projection_used'))
+            for r in rows
+            if to_number((r.get('live') or {}).get('projection_used')) is not None
+        ), None)
+        side_rows: dict[str, list[dict[str, Any]]] = {'OVER': [], 'UNDER': []}
+        for row in rows:
+            side_rows[str(row.get('side'))].append(row)
+        recommendation: dict[str, Any] = {
+            'market_key': list(key),
+            'projection_used': projection,
+            'market_label': _v11_market_label(rows[0]),
+        }
+        for side in ('OVER', 'UNDER'):
+            candidates = sorted(
+                side_rows[side],
+                key=lambda r: (
+                    abs(_v112_edge(r, 999.0)),
+                    -float((r.get('advisor') or {}).get('p_final') or 0.0),
+                ),
+            )
+            risk_pool = [
+                r for r in candidates
+                if (r.get('advisor') or {}).get('p_final', 0) >= ADVISOR_RISK_MIN
+                and (r.get('advisor') or {}).get('history_zone_eligible')
+                and _v112_edge(r, -999.0) >= 0
+                and not (r.get('advisor') or {}).get('serious_blockers')
+                and _v114_compact_trigger_is_valid(_v11_compact_line(r))
+            ]
+            play_pool = [
+                r for r in candidates
+                if (r.get('advisor') or {}).get('p_final', 0) >= ADVISOR_PLAY_MIN
+                and (r.get('advisor') or {}).get('history_zone_eligible')
+                and _v112_edge(r, -999.0) >= 0
+                and not (r.get('advisor') or {}).get('serious_blockers')
+                and _v114_compact_trigger_is_valid(_v11_compact_line(r))
+            ]
+            risk = min(risk_pool, key=lambda r: abs(_v112_edge(r, 999.0)), default=None)
+            play = min(play_pool, key=lambda r: abs(_v112_edge(r, 999.0)), default=None)
+            best = candidates[0] if candidates else None
+            for selected_row in (best, risk, play):
+                if selected_row and (selected_row.get('advisor') or {}).get('scenario_miner', {}).get('deferred'):
+                    mined = _v11_mine_scenarios(selected_row, canonical)
+                    selected_row['advisor']['scenario_miner'] = mined
+                    selected_row['advisor']['p_scenario_miner'] = mined.get('p_scenario_miner')
+            recommendation[side.lower()] = {
+                'best_model': _v11_compact_line(best) if best else None,
+                'risk_trigger': _v11_compact_line(risk) if risk else None,
+                'play_trigger': _v11_compact_line(play) if play else None,
+            }
+        output.append(recommendation)
+
+    def summary_rank(row: dict[str, Any]) -> tuple[float, float, float]:
+        trigger, _ = _v11_best_model_trigger(row)
+        if not _v114_compact_trigger_is_valid(trigger):
+            return (0.0, -999.0, 0.0)
+        is_play = 1.0 if float(trigger.get('p_final') or 0.0) >= ADVISOR_PLAY_MIN else 0.0
+        return (
+            is_play,
+            -abs(_v112_number(trigger.get('line_edge'), 999.0)),
+            float(trigger.get('p_final') or 0.0),
+        )
+    output = [row for row in output if _v114_compact_trigger_is_valid(_v11_best_model_trigger(row)[0])]
+    output.sort(key=summary_rank, reverse=True)
+    return output
+
+
+def _v11_theoretical_for_pass(
+    calculator: SuperBasketCalculator,
+    canonical: dict[str, Any],
+    evaluation: Optional[dict[str, Any]],
+) -> Optional[dict[str, Any]]:
+    if not evaluation:
+        return None
+    spec = {k: evaluation.get(k) for k in ('market_type', 'team', 'segment')}
+    scope = _v114_scope_state(spec, canonical)
+    if not scope.get('valid'):
+        return None
+    current_points = float(scope['current_points'])
+    remaining_seconds = float(scope['remaining_seconds'])
+    projection = to_number((evaluation.get('live') or {}).get('projection_used'))
+    if projection is None or projection < current_points:
+        projection = to_number((evaluation.get('live') or {}).get('projection_score_time'))
+    if projection is None or projection < current_points:
+        return None
+    projection = float(projection)
+    side = str(evaluation.get('side') or '')
+    rows = []
+    for offset in ADVISOR_MODEL_OFFSETS:
+        line = _v11_round_half(projection - offset if side == 'OVER' else projection + offset)
+        if line <= 0 or not _v114_model_line_is_open(line, current_points):
+            continue
+        model = calculator.evaluate_market(
+            _v11_synthetic_market(spec, line, side, tag='PASS_TRIGGER_V114'),
+            canonical,
+        )
+        model_live = model.get('live') or {}
+        model_live['current_points'] = current_points
+        model_live['remaining_seconds'] = remaining_seconds
+        enriched = _v11_enrich_evaluation(model, canonical, is_model=True)
+        if _v114_compact_trigger_is_valid(_v11_compact_line(enriched)):
+            rows.append(enriched)
+    candidates = sorted(
+        rows,
+        key=lambda r: float((r.get('advisor') or {}).get('p_final') or 0.0),
+        reverse=True,
+    )
+    play = next((
+        r for r in candidates
+        if (r.get('advisor') or {}).get('history_zone_eligible')
+        and (r.get('advisor') or {}).get('p_final', 0) >= ADVISOR_PLAY_MIN
+        and _v112_edge(r, -999.0) >= 0
+        and not (r.get('advisor') or {}).get('serious_blockers')
+    ), None)
+    risk = next((
+        r for r in candidates
+        if (r.get('advisor') or {}).get('history_zone_eligible')
+        and (r.get('advisor') or {}).get('p_final', 0) >= ADVISOR_RISK_MIN
+        and _v112_edge(r, -999.0) >= 0
+        and not (r.get('advisor') or {}).get('serious_blockers')
+    ), None)
+    result = {
+        'market_label': _v11_market_label(evaluation),
+        'side': side,
+        'projection_used': projection,
+        'current_points': current_points,
+        'remaining_seconds': remaining_seconds,
+        'risk_trigger': _v11_compact_line(risk),
+        'play_trigger': _v11_compact_line(play),
+    }
+    if not _v114_compact_trigger_is_valid(result.get('play_trigger')):
+        result['play_trigger'] = None
+    if not _v114_compact_trigger_is_valid(result.get('risk_trigger')):
+        result['risk_trigger'] = None
+    return result if result.get('play_trigger') or result.get('risk_trigger') else None
+
+
+def _v11_best_model_trigger(summary: dict[str, Any]) -> tuple[Optional[dict[str, Any]], str]:
+    plays = []
+    risks = []
+    for side_key, side_label in (('over', 'OVER'), ('under', 'UNDER')):
+        group = summary.get(side_key) or {}
+        if _v114_compact_trigger_is_valid(group.get('play_trigger')):
+            plays.append((group['play_trigger'], side_label))
+        if _v114_compact_trigger_is_valid(group.get('risk_trigger')):
+            risks.append((group['risk_trigger'], side_label))
+    pool = plays if plays else risks
+    if not pool:
+        return None, ''
+    row, side_label = min(
+        pool,
+        key=lambda pair: (
+            abs(_v112_number(pair[0].get('line_edge'), 999.0)),
+            -float(pair[0].get('p_final') or 0.0),
+        ),
+    )
+    return row, side_label
+
+
+def _v113_trigger_sentence(row: dict[str, Any], *, play: bool) -> str:
+    if not _v114_compact_trigger_is_valid(row):
+        return 'Теоретичний тригер скасовано: лінія вже перетнута рахунком або проєкція некоректна.'
+    item = {
+        'market_type': row.get('market_type'),
+        'team': row.get('team'),
+        'segment': row.get('segment'),
+        'side': row.get('side'),
+        'line': row.get('line'),
+        'odds': row.get('odds'),
+        'advisor': {'is_model_line': True},
+    }
+    side = str(row.get('side') or '').upper()
+    threshold = 'або нижче' if side == 'OVER' else 'або вище'
+    kind = 'PLAY' if play else 'RISK'
+    current = to_number(row.get('current_points'))
+    current_text = (
+        f' Зараз у цьому ринку вже набрано {current:.1f} очка.'
+        if current is not None else ''
+    )
+    return (
+        f'{kind} може з’явитися, якщо букмекер дасть лінію, за якої '
+        f'{_v113_bet_sentence(item, with_odds=False)} ({threshold}).'
+        f'{current_text} Очікуваний P_final — {_v11_pct(row.get("p_final"))}, '
+        f'edge — {_v11_num(row.get("line_edge"))}.'
+    )
+
+
+_V114_BUILD_MESSAGES_BASE = _v11_build_messages
+
+def _v11_build_messages(advisor: dict[str, Any], calculation: dict[str, Any]) -> list[str]:
+    # Reuse the clear v11.3 message format, but add the exact clock and remove any
+    # stale model trigger that fails the score-floor guard.
+    advisor = deepcopy(advisor)
+    valid_summaries = []
+    for summary in advisor.get('model_summary') or []:
+        trigger, _ = _v11_best_model_trigger(summary)
+        if _v114_compact_trigger_is_valid(trigger):
+            valid_summaries.append(summary)
+    advisor['model_summary'] = valid_summaries
+    theoretical = advisor.get('nearest_theoretical_play') or {}
+    if theoretical:
+        if not _v114_compact_trigger_is_valid(theoretical.get('play_trigger')):
+            theoretical['play_trigger'] = None
+        if not _v114_compact_trigger_is_valid(theoretical.get('risk_trigger')):
+            theoretical['risk_trigger'] = None
+        if not theoretical.get('play_trigger') and not theoretical.get('risk_trigger'):
+            advisor['nearest_theoretical_play'] = None
+    messages = _V114_BUILD_MESSAGES_BASE(advisor, calculation)
+    snapshot = calculation.get('canonical_snapshot') or {}
+    clock = snapshot.get('clock')
+    if clock:
+        updated = []
+        for index, message in enumerate(messages):
+            if index == 0 and '<b>Стадія:</b>' in message and '<b>Час:' not in message:
+                message = message.replace(
+                    f'<b>Стадія:</b> {html.escape(str(snapshot.get("stage")))} |',
+                    f'<b>Стадія:</b> {html.escape(str(snapshot.get("stage")))} | <b>Час:</b> {html.escape(str(clock))} |',
+                    1,
+                )
+            updated.append(message)
+        messages = updated
+    return messages
+
+
+DEFAULT_CONFIG.setdefault('score_floor_policy', {})
+DEFAULT_CONFIG['score_floor_policy'].update({
+    'version': ADVISOR_VERSION,
+    'projection_must_not_be_below_current_score': True,
+    'model_line_must_be_above_current_score': True,
+    'completed_scope_model_triggers_disabled': True,
+    'current_quarter_requires_reliable_time': True,
+})
+SYSTEM_VERSION = ADVISOR_VERSION
+DEFAULT_CONFIG['engine_version'] = ADVISOR_VERSION
+
+
+# =============================================================================
+# v11.5 CLEAR TELEGRAM METRICS
+# =============================================================================
+# Display-only update requested by the user. It does not change P_history,
+# P_scenario, projections, P_live, P_raw, P_final or PLAY/RISK/PASS logic.
+# Every real line and model/theoretical trigger now explicitly prints:
+# - P_history;
+# - P_scenario used in the formula;
+# - live projection;
+# - the line;
+# - human-readable projection-vs-line difference;
+# - side-specific edge.
+
+ADVISOR_VERSION = '11.5.0-CLEAR-TELEGRAM-METRICS'
+
+
+def _v115_projection_difference_text(projection_value: Any, line_value: Any) -> str:
+    projection = to_number(projection_value)
+    line = to_number(line_value)
+    if projection is None or line is None:
+        return 'Різницю між проєкцією та лінією неможливо визначити.'
+    delta = float(projection) - float(line)
+    if delta > 0.0001:
+        return f'проєкція на {abs(delta):.1f} очка ВИЩЕ лінії'
+    if delta < -0.0001:
+        return f'проєкція на {abs(delta):.1f} очка НИЖЧЕ лінії'
+    return 'проєкція точно дорівнює лінії'
+
+
+def _v115_probability_lines(source: dict[str, Any]) -> list[str]:
+    scenario_miner = to_number(source.get('p_scenario_miner'))
+    lines = [
+        f'<b>P_history:</b> {_v11_pct(source.get("p_hist"))}',
+        f'<b>P_scenario:</b> {_v11_pct(source.get("p_scenario_core"))}',
+    ]
+    if scenario_miner is not None:
+        lines.append(f'<b>Scenario Miner:</b> {_v11_pct(scenario_miner)}')
+    if source.get('p_live') is not None:
+        lines.append(f'<b>P_live:</b> {_v11_pct(source.get("p_live"))}')
+    if source.get('p_final') is not None:
+        lines.append(f'<b>P_final:</b> {_v11_pct(source.get("p_final"))}')
+    return lines
+
+
+def _v115_line_projection_lines(source: dict[str, Any]) -> list[str]:
+    side = str(source.get('side') or '').upper() or 'N/A'
+    line = to_number(source.get('line'))
+    projection = to_number(source.get('projection_used'))
+    edge = to_number(source.get('line_edge'))
+    line_text = 'N/A' if line is None else f'{line:.1f}'
+    projection_text = 'N/A' if projection is None else f'{projection:.1f}'
+    return [
+        f'<b>Лінія:</b> {html.escape(side)} {line_text}',
+        f'<b>Live-проєкція:</b> {projection_text}',
+        f'<b>Різниця:</b> {html.escape(_v115_projection_difference_text(projection, line))}',
+        f'<b>Edge для {html.escape(side)}:</b> {_v11_num(edge)}',
+    ]
+
+
+def _v11_line_block(item: dict[str, Any], index: int) -> str:
+    adv = item.get('advisor') or {}
+    hist = item.get('history') or {}
+    scenario = adv.get('scenario_miner') or {}
+    line_type = 'MODEL' if adv.get('is_model_line') else 'REAL'
+    action = str(adv.get('action') or 'PASS')
+    zone = adv.get('history_zone_rate')
+    hits = hist.get('history_zone_hits')
+    n = hist.get('history_zone_n')
+    zone_fact = f'{hits}/{n}' if hits is not None and n else 'N/A'
+    recommendation = _v113_bet_sentence(item)
+    source = {
+        **adv,
+        'line': item.get('line'),
+        'side': item.get('side'),
+        'p_scenario_miner': adv.get('p_scenario_miner'),
+    }
+    lines = [
+        f'<b>#{index} {html.escape(action)}</b>',
+        f'<b>Конкретна рекомендація:</b> {html.escape(recommendation)}.',
+        f'<b>Тип лінії:</b> {line_type}' + (
+            f' | <b>Букмекер:</b> {html.escape(str(item.get("bookmaker") or "N/A"))}'
+            if not adv.get('is_model_line') else ''
+        ),
+        f'<b>Історична зона:</b> {_v11_pct(zone)} ({html.escape(zone_fact)})',
+    ]
+    lines.extend(_v115_probability_lines(source))
+    lines.extend(_v115_line_projection_lines(source))
+    lines.extend([
+        f'<b>Узгодження:</b> {html.escape(str(adv.get("alignment") or "N/A"))}',
+        f'<b>Статистика:</b> {html.escape(str(adv.get("stat_gate_status") or "OFF"))} | '
+        f'FAKE OVER: {"YES" if adv.get("fake_over") else "NO"} | '
+        f'FAKE UNDER: {"YES" if adv.get("fake_under") else "NO"}',
+    ])
+    scenario_lines = _v113_scenario_lines(scenario, item)
+    if scenario_lines:
+        lines.append('<b>ЩО ОЗНАЧАЮТЬ СЦЕНАРІЇ ДЛЯ ЦІЄЇ СТАВКИ</b>')
+        lines.extend(scenario_lines)
+    else:
+        lines.append('<b>Сценарії:</b> достатнього повторюваного сценарію для зрозумілого висновку не знайдено.')
+    policy = adv.get('audit_zone_policy') or {}
+    if policy.get('applied'):
+        lines.append('<b>Асиметричний аудит OVER/UNDER:</b>')
+        lines.append(html.escape(str(policy.get('reason_uk') or 'Правило не активне.')))
+        if policy.get('audit_evidence_uk'):
+            lines.append(html.escape(str(policy.get('audit_evidence_uk'))))
+        lines.append('Математичні P_history, P_scenario, P_live, P_raw і P_final не змінювалися; це лише фінальний advisor-filter.')
+    if adv.get('serious_blockers'):
+        lines.append('<b>Що блокує ставку:</b> ' + html.escape(', '.join(adv['serious_blockers'])))
+    lines.extend(_v113_plain_conclusion(item))
+    return '\n'.join(lines)
+
+
+def _v113_trigger_sentence(row: dict[str, Any], *, play: bool) -> str:
+    if not _v114_compact_trigger_is_valid(row):
+        return 'Теоретичний тригер скасовано: лінія вже перетнута рахунком або проєкція некоректна.'
+    item = {
+        'market_type': row.get('market_type'),
+        'team': row.get('team'),
+        'segment': row.get('segment'),
+        'side': row.get('side'),
+        'line': row.get('line'),
+        'odds': row.get('odds'),
+        'advisor': {'is_model_line': True},
+    }
+    side = str(row.get('side') or '').upper()
+    threshold = 'або нижче' if side == 'OVER' else 'або вище'
+    kind = 'PLAY' if play else 'RISK'
+    current = to_number(row.get('current_points'))
+    current_text = (
+        f' Зараз у цьому ринку вже набрано {current:.1f} очка.'
+        if current is not None else ''
+    )
+    return (
+        f'{kind} може з’явитися, якщо букмекер дасть лінію, за якої '
+        f'{_v113_bet_sentence(item, with_odds=False)} ({threshold}).'
+        f'{current_text} P_history — {_v11_pct(row.get("p_hist"))}; '
+        f'P_scenario — {_v11_pct(row.get("p_scenario_core"))}; '
+        f'live-проєкція — {_v11_num(row.get("projection_used"))}; '
+        f'лінія — {side} {_v11_num(row.get("line"))}; '
+        f'{_v115_projection_difference_text(row.get("projection_used"), row.get("line"))}; '
+        f'edge для {side} — {_v11_num(row.get("line_edge"))}; '
+        f'P_final — {_v11_pct(row.get("p_final"))}.'
+    )
+
+
+def _v11_model_trigger_text(summary: dict[str, Any], index: int) -> str:
+    row, _ = _v11_best_model_trigger(summary)
+    lines = [f'<b>MODEL #{index}: {html.escape(str(summary.get("market_label")))}</b>']
+    if not row:
+        lines.append('Підтвердженого theoretical trigger в історичній зоні 75–100% не знайдено.')
+        return '\n'.join(lines)
+    source = dict(row)
+    if source.get('projection_used') is None:
+        source['projection_used'] = summary.get('projection_used')
+    is_play = float(source.get('p_final') or 0.0) >= ADVISOR_PLAY_MIN
+    lines.append('<b>Статус:</b> ' + ('теоретичний PLAY' if is_play else 'теоретичний RISK'))
+    lines.extend(_v115_probability_lines(source))
+    lines.extend(_v115_line_projection_lines(source))
+    current = to_number(source.get('current_points'))
+    if current is not None:
+        lines.append(f'<b>Уже набрано в цьому ринку:</b> {current:.1f}')
+    lines.append(html.escape(_v113_trigger_sentence(source, play=is_play)))
+    return '\n'.join(lines)
+
+
+def _v11_audit_block(items: list[dict[str, Any]], primary: list[dict[str, Any]]) -> str:
+    primary_keys = {
+        (row.get('market_type'), row.get('team'), row.get('segment'), row.get('side'), to_number(row.get('line')))
+        for row in primary
+    }
+    remaining = [
+        row for row in items
+        if (row.get('market_type'), row.get('team'), row.get('segment'), row.get('side'), to_number(row.get('line'))) not in primary_keys
+    ]
+    if not remaining:
+        return ''
+    lines = ['<b>ДОДАТКОВІ ЛІНІЇ 75–100% / EXCEPTIONAL EDGE</b>']
+    for row in remaining:
+        adv = row.get('advisor') or {}
+        action = str(adv.get('action') or 'PASS')
+        bet = _v113_bet_sentence(row)
+        difference = _v115_projection_difference_text(adv.get('projection_used'), row.get('line'))
+        lines.extend([
+            f'• <b>{html.escape(action)}</b>: {html.escape(bet)}.',
+            f'  P_history {_v11_pct(adv.get("p_hist"))} | '
+            f'P_scenario {_v11_pct(adv.get("p_scenario_core"))} | '
+            f'P_final {_v11_pct(adv.get("p_final"))}.',
+            f'  Лінія {html.escape(str(row.get("side") or ""))} {_v11_num(row.get("line"))} | '
+            f'live-проєкція {_v11_num(adv.get("projection_used"))} | '
+            f'{html.escape(difference)} | edge {_v11_num(adv.get("line_edge"))}.',
+        ])
+    return '\n'.join(lines)
+
+
+DEFAULT_CONFIG.setdefault('telegram_metrics_policy', {})
+DEFAULT_CONFIG['telegram_metrics_policy'].update({
+    'version': ADVISOR_VERSION,
+    'math_changed': False,
+    'p_history_required': True,
+    'p_scenario_required': True,
+    'projection_required': True,
+    'line_required': True,
+    'projection_line_difference_required': True,
+    'auto_split_long_messages': True,
+})
+SYSTEM_VERSION = ADVISOR_VERSION
+DEFAULT_CONFIG['engine_version'] = ADVISOR_VERSION
+
+# =============================================================================
+# v11.6 COMPACT TELEGRAM + MARKET SCOPE AUDIT
+# =============================================================================
+# - Compact Telegram output with the final recommendation at the very top.
+# - Keeps only one full primary calculation and up to two compact alternatives.
+# - Explicitly reports whether Projection_used came from FULL_STAT/PARTIAL_STAT
+#   or score/time fallback.
+# - Corrects parser rows where a first-half team total was incorrectly placed
+#   into home_ind_total/away_ind_total with scope=Match. The correction is based
+#   on consistency with the real H1 total and match total, not on the team name.
+
+ADVISOR_VERSION = '11.6.0-COMPACT-TELEGRAM-MARKET-SCOPE-AUDIT'
+
+_V116_PARSE_MARKETS_BASE = parse_markets
+
+_V116_CALCULATE_LIVE_PROJECTION_BASE = calculate_live_projection
+
+
+def _v116_ambiguous_quarter_total_keys(source: dict[str, Any]) -> dict[tuple[str, float], dict[str, Any]]:
+    containers = (
+        source.get('lines')
+        or source.get('bookmaker_lines')
+        or source.get('bookmaker_markets')
+        or source.get('markets')
+        or {}
+    )
+    rows = containers.get('quarter_total') if isinstance(containers, dict) else None
+    if not isinstance(rows, list):
+        return {}
+    grouped: dict[str, list[float]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        line = to_number(row.get('line'))
+        if line is None:
+            continue
+        grouped.setdefault(_scope_text(row) or 'UNKNOWN', []).append(float(line))
+    ambiguous: dict[tuple[str, float], dict[str, Any]] = {}
+    for scope, values in grouped.items():
+        unique = sorted(set(values))
+        if len(unique) < 2:
+            continue
+        gaps = [(unique[i + 1] - unique[i], i) for i in range(len(unique) - 1)]
+        gap, index = max(gaps, default=(0.0, 0))
+        low = unique[: index + 1]
+        high = unique[index + 1 :]
+        if not low or not high:
+            continue
+        # A ~20-point line and a ~40-point line under the same Q scope are
+        # not alternative quarter totals. The low row is almost certainly a
+        # team IT that lost its team identity in the upstream parser.
+        if gap >= 8.0 and max(low) <= 0.72 * min(high):
+            for line in low:
+                ambiguous[('quarter_total', line)] = {
+                    'reason': 'LOW_QUARTER_TOTAL_CLUSTER_LOOKS_LIKE_TEAM_IT',
+                    'scope': scope,
+                    'low_cluster': low,
+                    'normal_total_cluster': high,
+                    'action': 'BLOCK_NO_TEAM_ID',
+                }
+    return ambiguous
+
+
+def _v116_quarter_stat_projection(
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    mode = str(result.get('data_mode') or canonical.get('data_mode') or '')
+    if mode not in {'FULL_STAT', 'PARTIAL_STAT'}:
+        return result
+    if market.get('market_type') not in {'CURRENT_QUARTER_TOTAL', 'CURRENT_QUARTER_TEAM_IT'}:
+        return result
+    remaining_seconds = to_number(result.get('remaining_seconds'))
+    current_points = to_number(result.get('current_points'))
+    if remaining_seconds is None or remaining_seconds <= 0 or current_points is None:
+        return result
+
+    rho, k_stage, minutes_played = _v10_stage_trust(canonical)
+    remaining_minutes = float(remaining_seconds) / 60.0
+    pre_home = _v10_pre_stat_team('home', market, canonical)
+    pre_away = _v10_pre_stat_team('away', market, canonical)
+    live_home = _v10_live_stat_team('home', market, canonical, pre_home, rho, remaining_minutes)
+    live_away = _v10_live_stat_team('away', market, canonical, pre_away, rho, remaining_minutes)
+    if market.get('team'):
+        selected = live_home if market.get('team') == canonical.get('home_team') else live_away
+        stat_projection = to_number(selected.get('LiveRaw_Team'))
+    else:
+        home_projection = to_number(live_home.get('LiveRaw_Team'))
+        away_projection = to_number(live_away.get('LiveRaw_Team'))
+        stat_projection = (
+            float(home_projection) + float(away_projection)
+            if home_projection is not None and away_projection is not None
+            else None
+        )
+    if stat_projection is None:
+        return result
+
+    score_time = to_number(result.get('projection_score_time'))
+    elapsed_seconds = max(0.0, float(to_number(result.get('elapsed_seconds')) or 0.0))
+    full_scope_seconds = elapsed_seconds + float(remaining_seconds)
+    if score_time is not None and elapsed_seconds > 0 and full_scope_seconds > 0:
+        score_weight = min(0.75, max(0.25, elapsed_seconds / full_scope_seconds))
+        projection = score_weight * float(score_time) + (1.0 - score_weight) * float(stat_projection)
+        formula_mode = f'{mode}_CURRENT_QUARTER_STAT_SCORE_BLEND'
+    else:
+        score_weight = 0.0
+        projection = float(stat_projection)
+        formula_mode = f'{mode}_CURRENT_QUARTER_STAT_PACE'
+    projection = max(float(current_points), projection)
+    _v114_recalculate_live_probability(result, market, projection)
+    result['projection_stat_live_only'] = float(stat_projection)
+    result['projection_stat_adjusted'] = float(stat_projection)
+    result['projection_formula_mode'] = formula_mode
+    result['projection_formula'] = (
+        'Current-quarter score plus expected remaining points from cumulative '
+        'live FGA/FTA/2PA/3PA/ORB/TO rates. Cumulative rates are applied only '
+        'to remaining quarter time; they are not treated as quarter-only counts.'
+    )
+    result['stat_projection_details'] = {
+        'quarter_stat_projection_enabled': True,
+        'rho_stage': rho,
+        'K_stage': k_stage,
+        'minutes_played_game': minutes_played,
+        'remaining_minutes_quarter': remaining_minutes,
+        'score_time_projection': score_time,
+        'score_time_weight': score_weight,
+        'stat_projection': stat_projection,
+        'live_home': live_home,
+        'live_away': live_away,
+    }
+    components = result.setdefault('components', {})
+    components['projection_stat_live_only'] = {
+        'value': float(stat_projection),
+        'included': True,
+        'role': 'live_cumulative_rates_applied_to_quarter_remaining_time',
+    }
+    if 'projection_score_time' in components:
+        components['projection_score_time']['included'] = bool(score_time is not None and score_weight > 0)
+    return result
+
+
+def calculate_live_projection(
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+    history: dict[str, Any],
+    scenario: dict[str, Any],
+    config: dict[str, Any],
+    stat: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    result = _V116_CALCULATE_LIVE_PROJECTION_BASE(market, canonical, history, scenario, config, stat)
+    return _v116_quarter_stat_projection(market, canonical, result)
+
+
+def _v116_float_lines(rows: Any, *, scope_prefix: Optional[str] = None) -> list[float]:
+    values: list[float] = []
+    if not isinstance(rows, list):
+        return values
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        scope = _scope_text(row)
+        if scope_prefix and not scope.startswith(scope_prefix):
+            continue
+        value = to_number(row.get('line'))
+        if value is not None:
+            values.append(float(value))
+    return values
+
+
+def _v116_team_it_scope_overrides(source: dict[str, Any]) -> dict[tuple[str, float], dict[str, Any]]:
+    containers = (
+        source.get('lines')
+        or source.get('bookmaker_lines')
+        or source.get('bookmaker_markets')
+        or source.get('markets')
+        or {}
+    )
+    if not isinstance(containers, dict):
+        return {}
+
+    match_totals = _v116_float_lines(containers.get('match_total'))
+    h1_totals = _v116_float_lines(containers.get('half_total'), scope_prefix='H1')
+    if not h1_totals:
+        h1_totals = [
+            float(row.get('line'))
+            for row in (containers.get('half_total') or [])
+            if isinstance(row, dict)
+            and to_number(row.get('line')) is not None
+            and _scope_text(row) in {'1H', 'FIRSTHALF'}
+        ]
+
+    buckets: dict[str, list[float]] = {}
+    for bucket in ('home_ind_total', 'away_ind_total'):
+        values: list[float] = []
+        for row in containers.get(bucket) or []:
+            if not isinstance(row, dict):
+                continue
+            if _scope_text(row) not in {'', 'MATCH', 'FULLMATCH'}:
+                continue
+            line = to_number(row.get('line'))
+            if line is not None:
+                values.append(float(line))
+        buckets[bucket] = values
+
+    overrides: dict[tuple[str, float], dict[str, Any]] = {}
+    h1_pair_error: dict[tuple[str, float], float] = {}
+    match_pair_error: dict[tuple[str, float], float] = {}
+
+    home_values = buckets.get('home_ind_total') or []
+    away_values = buckets.get('away_ind_total') or []
+    for home_line in home_values:
+        for away_line in away_values:
+            pair_sum = home_line + away_line
+            for total in h1_totals:
+                tolerance = max(3.0, 0.045 * total)
+                error = abs(pair_sum - total)
+                if error <= tolerance:
+                    for key in (('home_ind_total', home_line), ('away_ind_total', away_line)):
+                        h1_pair_error[key] = min(h1_pair_error.get(key, 9999.0), error)
+            for total in match_totals:
+                tolerance = max(5.0, 0.045 * total)
+                error = abs(pair_sum - total)
+                if error <= tolerance:
+                    for key in (('home_ind_total', home_line), ('away_ind_total', away_line)):
+                        match_pair_error[key] = min(match_pair_error.get(key, 9999.0), error)
+
+    match_center = statistics.median(match_totals) if match_totals else None
+    h1_center = statistics.median(h1_totals) if h1_totals else None
+
+    for bucket, values in buckets.items():
+        unique = sorted(set(values))
+        low_cluster: set[float] = set()
+        if len(unique) >= 2:
+            gaps = [(unique[i + 1] - unique[i], i) for i in range(len(unique) - 1)]
+            largest_gap, split_index = max(gaps, default=(0.0, 0))
+            if largest_gap >= max(8.0, 0.18 * statistics.median(unique)):
+                low_cluster = set(unique[: split_index + 1])
+
+        for line in unique:
+            key = (bucket, line)
+            h1_error = h1_pair_error.get(key)
+            match_error = match_pair_error.get(key)
+            reason = None
+            confidence = None
+
+            # Strongest evidence: home+away team totals add up to a real H1 line.
+            if h1_error is not None and (match_error is None or h1_error + 0.5 < match_error):
+                reason = 'HOME_AWAY_TEAM_IT_SUM_MATCHES_H1_TOTAL'
+                confidence = 'HIGH'
+            # Bimodal bucket: a low cluster near H1 scale and a high cluster near match scale.
+            elif line in low_cluster and h1_center is not None and match_center is not None:
+                ratio_h1 = line / h1_center if h1_center else 0.0
+                ratio_match = line / match_center if match_center else 0.0
+                high_values = [value for value in unique if value not in low_cluster]
+                high_match_ok = any(0.32 <= value / match_center <= 0.68 for value in high_values) if match_center else False
+                if 0.20 <= ratio_h1 <= 0.80 and ratio_match < 0.40 and high_match_ok:
+                    reason = 'BIMODAL_TEAM_IT_BUCKET_LOW_CLUSTER_IS_H1'
+                    confidence = 'HIGH'
+            # Conservative fallback only when the line is clearly half-scale.
+            elif h1_center is not None and match_center is not None:
+                ratio_h1 = line / h1_center if h1_center else 0.0
+                ratio_match = line / match_center if match_center else 0.0
+                if line in low_cluster and 0.20 <= ratio_h1 <= 0.80 and ratio_match < 0.36:
+                    reason = 'LOW_TEAM_IT_LINE_CONSISTENT_WITH_H1_NOT_MATCH'
+                    confidence = 'MEDIUM'
+
+            if reason:
+                overrides[key] = {
+                    'market_type': 'TEAM_IT_H1',
+                    'segment': 'H1',
+                    'reason': reason,
+                    'confidence': confidence,
+                    'h1_total_center': h1_center,
+                    'match_total_center': match_center,
+                }
+    return overrides
+
+
+def parse_markets(
+    source: dict[str, Any],
+    canonical: dict[str, Any],
+    config: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    evaluations, audit = _V116_PARSE_MARKETS_BASE(source, canonical, config)
+    overrides = _v116_team_it_scope_overrides(source)
+    ambiguous_quarter = _v116_ambiguous_quarter_total_keys(source)
+
+    for item in evaluations:
+        bucket = str(item.get('source_bucket') or '')
+        line = to_number(item.get('line'))
+        ambiguous = ambiguous_quarter.get((bucket, float(line))) if line is not None else None
+        if ambiguous and item.get('market_type') == 'CURRENT_QUARTER_TOTAL':
+            item['ambiguous_market_scope'] = deepcopy(ambiguous)
+            issues = list(item.get('parser_issues') or [])
+            if 'AMBIGUOUS_QUARTER_TOTAL_LOOKS_TEAM_IT_NO_TEAM_ID' not in issues:
+                issues.append('AMBIGUOUS_QUARTER_TOTAL_LOOKS_TEAM_IT_NO_TEAM_ID')
+            item['parser_issues'] = issues
+            item['eligible_market'] = False
+        override = overrides.get((bucket, float(line))) if line is not None else None
+        if not override:
+            continue
+        if item.get('market_type') == 'TEAM_IT_MATCH' and item.get('segment') == 'MATCH':
+            item['market_type'] = override['market_type']
+            item['segment'] = override['segment']
+            item['source_scope_original'] = item.get('source_scope')
+            item['source_scope'] = 'H1_CORRECTED'
+            item['market_scope_correction'] = deepcopy(override)
+            issues = [reason for reason in (item.get('parser_issues') or []) if reason != 'AMBIGUOUS_TEAM_IT_SCOPE']
+            item['parser_issues'] = issues
+            item['eligible_market'] = not issues
+
+    for row in audit:
+        bucket = str(row.get('bucket') or '')
+        line = to_number(row.get('line'))
+        ambiguous = ambiguous_quarter.get((bucket, float(line))) if line is not None else None
+        if ambiguous and row.get('market_type') == 'CURRENT_QUARTER_TOTAL':
+            row['ambiguous_market_scope'] = deepcopy(ambiguous)
+            issues = list(row.get('issues') or [])
+            if 'AMBIGUOUS_QUARTER_TOTAL_LOOKS_TEAM_IT_NO_TEAM_ID' not in issues:
+                issues.append('AMBIGUOUS_QUARTER_TOTAL_LOOKS_TEAM_IT_NO_TEAM_ID')
+            row['issues'] = issues
+        override = overrides.get((bucket, float(line))) if line is not None else None
+        if not override:
+            continue
+        if row.get('market_type') == 'TEAM_IT_MATCH' and row.get('segment') == 'MATCH':
+            row['market_type_original'] = row.get('market_type')
+            row['segment_original'] = row.get('segment')
+            row['market_type'] = override['market_type']
+            row['segment'] = override['segment']
+            row['scope_correction'] = deepcopy(override)
+    return evaluations, audit
+
+
+def _v116_history_fact(item: dict[str, Any]) -> str:
+    hist = item.get('history') or {}
+    market_type = str(item.get('market_type') or '')
+    if market_type in {'TEAM_IT_MATCH', 'TEAM_IT_H1', 'TEAM_IT_H2', 'CURRENT_QUARTER_TEAM_IT'}:
+        own = hist.get('own_scored') or {}
+        allowed = hist.get('opponent_allowed') or {}
+        own_n = to_int(own.get('n')) or 0
+        allowed_n = to_int(allowed.get('n')) or 0
+        own_text = f"команда {to_int(own.get('wins')) or 0}/{own_n}" if own_n else 'команда N/A'
+        allowed_text = f"суперник пропускав {to_int(allowed.get('wins')) or 0}/{allowed_n}" if allowed_n else 'суперник N/A'
+        return f'{own_text}; {allowed_text}'
+    pooled = hist.get('pooled') or {}
+    n = to_int(pooled.get('n')) or 0
+    if n:
+        return f"{to_int(pooled.get('wins')) or 0}/{n}"
+    team_a = hist.get('team_a') or {}
+    team_b = hist.get('team_b') or {}
+    parts = []
+    for label, row in (('A', team_a), ('B', team_b)):
+        rn = to_int(row.get('n')) or 0
+        if rn:
+            parts.append(f'{label} {to_int(row.get("wins")) or 0}/{rn}')
+    return '; '.join(parts) or 'N/A'
+
+
+def _v116_top_scenario_text(item: dict[str, Any]) -> str:
+    adv = item.get('advisor') or {}
+    miner = adv.get('scenario_miner') or {}
+    supports = miner.get('top_support') or []
+    conflicts = miner.get('top_conflict') or []
+    pattern = supports[0] if supports else conflicts[0] if conflicts else None
+    if not pattern:
+        return 'Сильного повторюваного сценарію не знайдено.'
+    description = str(pattern.get('description') or pattern.get('title') or 'Схожий сценарій')
+    n = to_int(pattern.get('combined_n')) or 0
+    rate = to_number(pattern.get('combined_rate'))
+    hits = None
+    own = pattern.get('own') or {}
+    allowed = pattern.get('opponent_allowed') or {}
+    if n:
+        hits = (to_int(own.get('hits')) or 0) + (to_int(allowed.get('hits')) or 0)
+    effect_map = {
+        'STRONG_SUPPORT': 'сильно підсилює',
+        'SUPPORT': 'підсилює',
+        'NEUTRAL': 'нейтральний',
+        'WEAKEN': 'послаблює',
+        'STRONG_CONFLICT': 'сильно суперечить',
+    }
+    effect = effect_map.get(str(pattern.get('effect') or ''), str(pattern.get('effect') or ''))
+    sample = f'{hits}/{n}' if hits is not None and n else f'N={n}' if n else 'N/A'
+    rate_text = _v11_pct(rate)
+    return f'{description} Для цієї лінії: {sample}, {rate_text}; сценарій {effect} ставку.'
+
+
+def _v116_projection_source_text(item: dict[str, Any]) -> str:
+    live = item.get('live') or {}
+    mode = str(item.get('data_mode') or live.get('data_mode') or 'DATA_OFF')
+    formula = str(live.get('projection_formula_mode') or '')
+    stat_value = to_number(live.get('projection_stat_live_only'))
+    score_value = to_number(live.get('projection_score_time'))
+    used = to_number(live.get('projection_used'))
+    if mode == 'FULL_STAT' and stat_value is not None and ('CURRENT_QUARTER_STAT_' in formula):
+        return 'FULL_STAT: проєкція чверті розрахована зі статистичного темпу FGA/FTA/ORB/TO на час, що залишився.'
+    if mode == 'FULL_STAT' and stat_value is not None and 'CURRENT_QUARTER_SCORE_TIME' not in formula:
+        return (
+            f'FULL_STAT: проєкція {used:.1f} розрахована зі статистики FGA/FTA/ORB/TO; score/time {score_value:.1f}.'
+            if score_value is not None and used is not None
+            else 'FULL_STAT: проєкція побудована зі статистики FGA/FTA/ORB/TO.'
+        )
+    if mode == 'PARTIAL_STAT' and stat_value is not None and 'CURRENT_QUARTER_SCORE_TIME' not in formula:
+        return 'PARTIAL_STAT: проєкція використовує доступні статистичні поля з підвищеною невизначеністю.'
+    if mode == 'FULL_STAT' and 'CURRENT_QUARTER_SCORE_TIME' in formula:
+        return 'FULL_STAT є, але для окремої чверті використано score/time: boxscore у файлі накопичувальний за матч, а не окремий за чверть.'
+    if mode == 'SCORE_TIME_HISTORY':
+        return 'NO_STAT: live-проєкція рахується за рахунком і часом; історія та сценарій входять окремо у P_final.'
+    return f'Режим проєкції: {mode or "DATA_OFF"}.'
+
+
+def _v116_compact_main_block(item: dict[str, Any]) -> str:
+    adv = item.get('advisor') or {}
+    action = str(adv.get('action') or 'PASS')
+    bet = _v113_bet_sentence(item)
+    hist_fact = _v116_history_fact(item)
+    zone = adv.get('history_zone_rate')
+    projection = adv.get('projection_used')
+    line = item.get('line')
+    side = str(item.get('side') or '').upper()
+    scenario = _v116_top_scenario_text(item)
+    source_text = _v116_projection_source_text(item)
+
+    # The recommendation is already placed in the first line of Telegram.
+    # Do not repeat PLAY/RISK/PASS here; keep only the calculation that explains it.
+    lines = [
+        f'<b>🎯 Основний розрахунок:</b> {html.escape(bet)}.',
+        f'<b>Історія:</b> зона {_v11_pct(zone)} ({html.escape(hist_fact)}); '
+        f'P_history {_v11_pct(adv.get("p_hist"))}.',
+        f'<b>Ймовірності:</b> P_scenario {_v11_pct(adv.get("p_scenario_core"))} | '
+        f'P_live {_v11_pct(adv.get("p_live"))} | P_final {_v11_pct(adv.get("p_final"))}.',
+        f'<b>Лінія / live:</b> {html.escape(side)} {_v11_num(line)} → {_v11_num(projection)}; '
+        f'{html.escape(_v115_projection_difference_text(projection, line))}; edge {_v11_num(adv.get("line_edge"))}.',
+        f'<b>Сценарій:</b> {html.escape(scenario)}',
+    ]
+
+    mode = str(item.get('data_mode') or (item.get('live') or {}).get('data_mode') or 'DATA_OFF')
+    stat_bits = [mode]
+    if adv.get('fake_over'):
+        stat_bits.append('FAKE OVER')
+    if adv.get('fake_under'):
+        stat_bits.append('FAKE UNDER')
+    gate = str(adv.get('stat_gate_status') or 'OFF')
+    if gate not in {'OFF', 'N/A', 'NA', 'N_A_NO_STATS'}:
+        stat_bits.append(f'gate {gate}')
+    lines.append(f'<b>Статистика:</b> {html.escape("; ".join(stat_bits))}. {html.escape(source_text)}')
+
+    blockers = adv.get('serious_blockers') or []
+    if action == 'PLAY':
+        lines.append('<b>Підсумок:</b> брати як PLAY, якщо лінія й коефіцієнт ще актуальні.')
+    elif action == 'RISK':
+        reason = ', '.join(blockers[:2]) if blockers else 'підтвердження неповне'
+        lines.append(f'<b>Підсумок:</b> RISK PLAY, не чистий PLAY. Ризик: {html.escape(reason)}.')
+    else:
+        reason = ', '.join(blockers[:2]) if blockers else 'чистого підтвердження немає'
+        lines.append(f'<b>Підсумок:</b> цю лінію не брати. Причина: {html.escape(reason)}.')
+
+    correction = item.get('market_scope_correction') or {}
+    if correction:
+        lines.append('<b>Уточнення ринку:</b> це IT 1-ї половини, а не IT матчу; scope виправлено за загальною H1-лінією.')
+    return '\n'.join(lines)
+
+def _v116_compact_alternative(item: dict[str, Any], index: int) -> str:
+    adv = item.get('advisor') or {}
+    action = str(adv.get('action') or 'PASS')
+    return (
+        f'<b>{index}) {html.escape(action)}</b> — {html.escape(_v113_bet_sentence(item))}.\n'
+        f'P_final {_v11_pct(adv.get("p_final"))}; зона {_v11_pct(adv.get("history_zone_rate"))}; '
+        f'проєкція {_v11_num(adv.get("projection_used"))}; edge {_v11_num(adv.get("line_edge"))}.'
+    )
+
+
+def _v116_compact_trigger(summary: dict[str, Any], index: int) -> Optional[str]:
+    row, _ = _v11_best_model_trigger(summary)
+    if not row or not _v114_compact_trigger_is_valid(row):
+        return None
+    is_play = float(row.get('p_final') or 0.0) >= ADVISOR_PLAY_MIN
+    item = {
+        'market_type': row.get('market_type'),
+        'team': row.get('team'),
+        'segment': row.get('segment'),
+        'side': row.get('side'),
+        'line': row.get('line'),
+        'odds': row.get('odds'),
+        'advisor': {'is_model_line': True},
+    }
+    return (
+        f'<b>{index}) Теоретичний {"PLAY" if is_play else "RISK"}</b> — '
+        f'{html.escape(_v113_bet_sentence(item, with_odds=False))}.\n'
+        f'P_history {_v11_pct(row.get("p_hist"))}; P_scenario {_v11_pct(row.get("p_scenario_core"))}; '
+        f'P_final {_v11_pct(row.get("p_final"))}; проєкція {_v11_num(row.get("projection_used"))}; '
+        f'edge {_v11_num(row.get("line_edge"))}.'
+    )
+
+
+def _v11_build_messages(advisor: dict[str, Any], calculation: dict[str, Any]) -> list[str]:
+    snapshot = calculation.get('canonical_snapshot') or {}
+    score = snapshot.get('score') or {}
+    quarters = snapshot.get('quarters') or []
+    qtext = ' | '.join(
+        f"Q{i + 1} {q.get('home')}:{q.get('away')}"
+        for i, q in enumerate(quarters)
+        if q.get('home') is not None and q.get('away') is not None
+        and not (float(q.get('home') or 0) == 0.0 and float(q.get('away') or 0) == 0.0 and i + 1 > _v11_completed_quarters(snapshot))
+    )
+    action = str(advisor.get('action') or 'PASS')
+    icon = '✅' if action == 'PLAY' else '⚠️' if action == 'RISK' else '❌'
+    primary = list(advisor.get('primary_lines') or [])
+    selected = next((row for row in primary if str((row.get('advisor') or {}).get('action') or '') == action), None)
+    selected = selected or (primary[0] if primary else None)
+
+    if action == 'PASS':
+        top_line = '<b>❌ PASS — ЗАРАЗ РЕАЛЬНУ СТАВКУ НЕ БРАТИ</b>'
+    elif selected:
+        top_line = f'<b>{icon} {html.escape(action)}</b> — {html.escape(_v113_bet_sentence(selected))}'
+    else:
+        top_line = f'<b>{icon} {html.escape(action)}</b> — реального сигналу немає'
+    header = '\n'.join([
+        top_line,
+        f'<b>Матч:</b> {html.escape(str(snapshot.get("name") or "N/A"))}',
+        f'<b>Стадія:</b> {html.escape(str(snapshot.get("stage") or "N/A"))} | '
+        f'{_v118_clock_context(snapshot)} | '
+        f'<b>Рахунок:</b> {_v11_num(score.get("home"))}:{_v11_num(score.get("away"))}',
+        f'<b>Чверті:</b> {html.escape(qtext or "N/A")}',
+    ])
+
+    blocks: list[str] = []
+    if selected:
+        blocks.append(_v116_compact_main_block(selected))
+        # For PASS the theoretical trigger is already the second useful calculation.
+        # Do not add another losing real-line block and overload Telegram.
+        alternatives = [] if action == 'PASS' else [
+            row for row in primary
+            if row is not selected and str((row.get('advisor') or {}).get('action') or '') == action
+        ][:1]
+        if alternatives:
+            blocks.append('<b>ЩЕ ОДИН ВАРІАНТ</b>\n' + '\n\n'.join(
+                _v116_compact_alternative(row, idx) for idx, row in enumerate(alternatives, 2)
+            ))
+    else:
+        trigger_blocks = []
+        for summary in advisor.get('model_summary') or []:
+            text = _v116_compact_trigger(summary, len(trigger_blocks) + 1)
+            if text:
+                trigger_blocks.append(text)
+            if len(trigger_blocks) >= 2:
+                break
+        if trigger_blocks:
+            blocks.append('<b>НАЙБЛИЖЧІ ТЕОРЕТИЧНІ УМОВИ</b>\n' + '\n\n'.join(trigger_blocks))
+        else:
+            blocks.append('Немає реальної лінії та немає коректного теоретичного тригера.')
+
+    if action == 'PASS':
+        theoretical = advisor.get('nearest_theoretical_play') or {}
+        trigger = theoretical.get('play_trigger') or theoretical.get('risk_trigger')
+        if trigger and _v114_compact_trigger_is_valid(trigger):
+            blocks.append('<b>ЩО МОЖЕ СТАТИ СТАВКОЮ</b>\n' + html.escape(
+                _v113_trigger_sentence(trigger, play=bool(theoretical.get('play_trigger')))
+            ))
+
+    text = header + '\n\n' + '\n\n'.join(blocks)
+    # Keep the message compact. Split only at section boundaries when needed.
+    if len(text) <= 3900:
+        return [text]
+    messages: list[str] = []
+    current = header
+    for block in blocks:
+        candidate = current + '\n\n' + block
+        if len(candidate) > 3900 and current != header:
+            messages.append(current)
+            current = '<b>Продовження</b>\n' + block
+        else:
+            current = candidate
+    if current:
+        messages.append(current)
+    return messages
+
+
+DEFAULT_CONFIG.setdefault('compact_telegram_policy', {})
+DEFAULT_CONFIG['compact_telegram_policy'].update({
+    'version': ADVISOR_VERSION,
+    'final_recommendation_first': True,
+    'one_full_primary_block': True,
+    'max_compact_alternatives': 1,
+    'full_audit_kept_in_json_not_telegram': True,
+    'market_scope_consistency_guard': True,
+    'stat_projection_source_disclosed': True,
+    'ambiguous_low_quarter_total_blocked': True,
+    'full_stat_quarter_projection_uses_cumulative_rate': True,
+})
+SYSTEM_VERSION = ADVISOR_VERSION
+DEFAULT_CONFIG['engine_version'] = ADVISOR_VERSION
+
+
+# =============================================================================
+# v11.8 CLOCK SEMANTICS FIX + LABELED PROJECTION METRICS
+# =============================================================================
+# Display-only update. Mathematical calculations, market selection, Scenario
+# Miner, projections, P_history/P_scenario/P_live/P_final and verdict logic are
+# unchanged. Every recommendation block now explicitly identifies whose/which
+# segment projection is shown and always prints history zone, line and edge.
+
+ADVISOR_VERSION = '11.8.0-CLOCK-SEMANTICS-FIX'
+
+
+def _v117_period_label(item: dict[str, Any]) -> str:
+    market_type = str(item.get('market_type') or '')
+    segment = str(item.get('segment') or '')
+    if market_type in {'MATCH_TOTAL', 'TEAM_IT_MATCH'} or segment == 'MATCH':
+        return 'за весь матч'
+    if market_type in {'H1_TOTAL', 'TEAM_IT_H1'} or segment == 'H1':
+        return 'у 1-й половині'
+    if market_type in {'H2_TOTAL', 'TEAM_IT_H2'} or segment == 'H2':
+        return 'у 2-й половині'
+    if segment.startswith('Q'):
+        return f'у {segment}'
+    return f'у сегменті {segment}' if segment else 'у цьому ринку'
+
+
+def _v117_projection_label(item: dict[str, Any]) -> str:
+    market_type = str(item.get('market_type') or '')
+    team = str(item.get('team') or '').strip()
+    segment = str(item.get('segment') or '')
+    if market_type in {'TEAM_IT_MATCH', 'TEAM_IT_H1', 'TEAM_IT_H2', 'CURRENT_QUARTER_TEAM_IT'} or team:
+        return f'Live-проєкція команди {team or "N/A"} {_v117_period_label(item)}'
+    if market_type == 'MATCH_TOTAL' or segment == 'MATCH':
+        return 'Live-проєкція загального тоталу матчу'
+    if market_type == 'H1_TOTAL' or segment == 'H1':
+        return 'Live-проєкція загального тоталу 1-ї половини'
+    if market_type == 'H2_TOTAL' or segment == 'H2':
+        return 'Live-проєкція загального тоталу 2-ї половини'
+    if market_type == 'CURRENT_QUARTER_TOTAL' or segment.startswith('Q'):
+        return f'Live-проєкція загального тоталу {segment or "поточної чверті"}'
+    return f'Live-проєкція ринку {_v11_market_label(item)}'
+
+
+def _v117_history_zone_line(source: dict[str, Any]) -> str:
+    zone = source.get('history_zone_rate')
+    return f'<b>Історична зона:</b> {_v11_pct(zone)}'
+
+
+def _v117_labeled_projection_line(source: dict[str, Any]) -> str:
+    label = _v117_projection_label(source)
+    return f'<b>{html.escape(label)}:</b> {_v11_num(source.get("projection_used"))}'
+
+
+def _v116_compact_main_block(item: dict[str, Any]) -> str:
+    adv = item.get('advisor') or {}
+    action = str(adv.get('action') or 'PASS')
+    bet = _v113_bet_sentence(item)
+    hist_fact = _v116_history_fact(item)
+    zone = adv.get('history_zone_rate')
+    projection = adv.get('projection_used')
+    line = item.get('line')
+    side = str(item.get('side') or '').upper()
+    scenario = _v116_top_scenario_text(item)
+    source_text = _v116_projection_source_text(item)
+
+    lines = [
+        f'<b>🎯 Основний розрахунок:</b> {html.escape(bet)}.',
+        f'<b>Історична зона:</b> {_v11_pct(zone)} ({html.escape(hist_fact)}); '
+        f'P_history {_v11_pct(adv.get("p_hist"))}.',
+        f'<b>Ймовірності:</b> P_scenario {_v11_pct(adv.get("p_scenario_core"))} | '
+        f'P_live {_v11_pct(adv.get("p_live"))} | P_final {_v11_pct(adv.get("p_final"))}.',
+        f'<b>Лінія:</b> {html.escape(side)} {_v11_num(line)}.',
+        _v117_labeled_projection_line({**item, **adv, 'projection_used': projection}),
+        f'<b>Різниця та edge:</b> {html.escape(_v115_projection_difference_text(projection, line))}; '
+        f'edge для {html.escape(side)} {_v11_num(adv.get("line_edge"))}.',
+        f'<b>Сценарій:</b> {html.escape(scenario)}',
+    ]
+
+    mode = str(item.get('data_mode') or (item.get('live') or {}).get('data_mode') or 'DATA_OFF')
+    stat_bits = [mode]
+    if adv.get('fake_over'):
+        stat_bits.append('FAKE OVER')
+    if adv.get('fake_under'):
+        stat_bits.append('FAKE UNDER')
+    gate = str(adv.get('stat_gate_status') or 'OFF')
+    if gate not in {'OFF', 'N/A', 'NA', 'N_A_NO_STATS'}:
+        stat_bits.append(f'gate {gate}')
+    lines.append(f'<b>Статистика:</b> {html.escape("; ".join(stat_bits))}. {html.escape(source_text)}')
+
+    blockers = adv.get('serious_blockers') or []
+    if action == 'PLAY':
+        lines.append('<b>Підсумок:</b> брати як PLAY, якщо лінія й коефіцієнт ще актуальні.')
+    elif action == 'RISK':
+        reason = ', '.join(blockers[:2]) if blockers else 'підтвердження неповне'
+        lines.append(f'<b>Підсумок:</b> RISK PLAY, не чистий PLAY. Ризик: {html.escape(reason)}.')
+    else:
+        reason = ', '.join(blockers[:2]) if blockers else 'чистого підтвердження немає'
+        lines.append(f'<b>Підсумок:</b> цю лінію не брати. Причина: {html.escape(reason)}.')
+
+    correction = item.get('market_scope_correction') or {}
+    if correction:
+        lines.append('<b>Уточнення ринку:</b> це IT 1-ї половини, а не IT матчу; scope виправлено за загальною H1-лінією.')
+    return '\n'.join(lines)
+
+
+def _v116_compact_alternative(item: dict[str, Any], index: int) -> str:
+    adv = item.get('advisor') or {}
+    action = str(adv.get('action') or 'PASS')
+    side = str(item.get('side') or '').upper()
+    source = {**item, **adv, 'projection_used': adv.get('projection_used')}
+    return '\n'.join([
+        f'<b>{index}) {html.escape(action)}</b> — {html.escape(_v113_bet_sentence(item))}.',
+        f'<b>Історична зона:</b> {_v11_pct(adv.get("history_zone_rate"))}; '
+        f'P_history {_v11_pct(adv.get("p_hist"))}; P_scenario {_v11_pct(adv.get("p_scenario_core"))}; '
+        f'P_final {_v11_pct(adv.get("p_final"))}.',
+        f'<b>Лінія:</b> {html.escape(side)} {_v11_num(item.get("line"))}.',
+        _v117_labeled_projection_line(source),
+        f'<b>Edge для {html.escape(side)}:</b> {_v11_num(adv.get("line_edge"))} '
+        f'({_v115_projection_difference_text(adv.get("projection_used"), item.get("line"))}).',
+    ])
+
+
+def _v116_compact_trigger(summary: dict[str, Any], index: int) -> Optional[str]:
+    row, _ = _v11_best_model_trigger(summary)
+    if not row or not _v114_compact_trigger_is_valid(row):
+        return None
+    is_play = float(row.get('p_final') or 0.0) >= ADVISOR_PLAY_MIN
+    item = {
+        'market_type': row.get('market_type'),
+        'team': row.get('team'),
+        'segment': row.get('segment'),
+        'side': row.get('side'),
+        'line': row.get('line'),
+        'odds': row.get('odds'),
+        'projection_used': row.get('projection_used'),
+        'advisor': {'is_model_line': True},
+    }
+    side = str(row.get('side') or '').upper()
+    return '\n'.join([
+        f'<b>{index}) Теоретичний {"PLAY" if is_play else "RISK"}</b> — '
+        f'{html.escape(_v113_bet_sentence(item, with_odds=False))}.',
+        f'<b>Історична зона:</b> {_v11_pct(row.get("history_zone_rate"))}; '
+        f'P_history {_v11_pct(row.get("p_hist"))}; P_scenario {_v11_pct(row.get("p_scenario_core"))}; '
+        f'P_final {_v11_pct(row.get("p_final"))}.',
+        f'<b>Лінія:</b> {html.escape(side)} {_v11_num(row.get("line"))}.',
+        _v117_labeled_projection_line(item),
+        f'<b>Edge для {html.escape(side)}:</b> {_v11_num(row.get("line_edge"))} '
+        f'({_v115_projection_difference_text(row.get("projection_used"), row.get("line"))}).',
+    ])
+
+
+def _v113_trigger_sentence(row: dict[str, Any], *, play: bool) -> str:
+    if not _v114_compact_trigger_is_valid(row):
+        return 'Теоретичний тригер скасовано: лінія вже перетнута рахунком або проєкція некоректна.'
+    item = {
+        'market_type': row.get('market_type'),
+        'team': row.get('team'),
+        'segment': row.get('segment'),
+        'side': row.get('side'),
+        'line': row.get('line'),
+        'odds': row.get('odds'),
+        'projection_used': row.get('projection_used'),
+        'advisor': {'is_model_line': True},
+    }
+    side = str(row.get('side') or '').upper()
+    threshold = 'або нижче' if side == 'OVER' else 'або вище'
+    kind = 'PLAY' if play else 'RISK'
+    current = to_number(row.get('current_points'))
+    current_text = f' Зараз у цьому ринку вже набрано {current:.1f} очка.' if current is not None else ''
+    return (
+        f'{kind} може з’явитися, якщо букмекер дасть лінію, за якої '
+        f'{_v113_bet_sentence(item, with_odds=False)} ({threshold}).'
+        f'{current_text} Історична зона — {_v11_pct(row.get("history_zone_rate"))}; '
+        f'P_history — {_v11_pct(row.get("p_hist"))}; P_scenario — {_v11_pct(row.get("p_scenario_core"))}; '
+        f'{_v117_projection_label(item)} — {_v11_num(row.get("projection_used"))}; '
+        f'лінія — {side} {_v11_num(row.get("line"))}; '
+        f'{_v115_projection_difference_text(row.get("projection_used"), row.get("line"))}; '
+        f'edge для {side} — {_v11_num(row.get("line_edge"))}; P_final — {_v11_pct(row.get("p_final"))}.'
+    )
+
+
+DEFAULT_CONFIG.setdefault('telegram_recommendation_metrics_policy', {})
+DEFAULT_CONFIG['telegram_recommendation_metrics_policy'].update({
+    'version': ADVISOR_VERSION,
+    'math_changed': False,
+    'every_recommendation_has_history_zone': True,
+    'every_recommendation_has_named_projection': True,
+    'every_recommendation_has_line': True,
+    'every_recommendation_has_edge': True,
+    'team_it_projection_names_team': True,
+    'quarter_projection_names_quarter': True,
+})
+SYSTEM_VERSION = ADVISOR_VERSION
+DEFAULT_CONFIG['engine_version'] = ADVISOR_VERSION
+
+# =============================================================================
+# v11.8 CLOCK DISPLAY AND SEMANTICS
+# =============================================================================
+def _v118_mmss(seconds: Any) -> str:
+    value = to_number(seconds)
+    if value is None:
+        return 'N/A'
+    total = max(0, int(round(value)))
+    return f'{total // 60:02d}:{total % 60:02d}'
+
+
+def _v118_clock_context(snapshot: dict[str, Any]) -> str:
+    """Human-readable clock: explicitly distinguish played vs remaining time."""
+    stage = str(snapshot.get('stage') or '').upper()
+    explicit = str(snapshot.get('explicit_stage') or '').upper()
+    if stage == 'PRE_MATCH':
+        return '<b>Час:</b> матч ще не почався'
+    if stage == 'HT':
+        return '<b>Час:</b> перерва після Q2'
+    if any(token in explicit for token in ('FINISHED', 'FINAL', 'ENDED', 'ЗАВЕРШ', 'КІНЕЦЬ')):
+        return '<b>Час:</b> матч завершено'
+
+    quarter = to_int(snapshot.get('current_quarter'))
+    q_seconds = to_number(snapshot.get('quarter_seconds'))
+    remaining = to_number(snapshot.get('quarter_seconds_remaining'))
+    if q_seconds is not None and remaining is not None:
+        remaining = max(0.0, min(q_seconds, remaining))
+        played = max(0.0, q_seconds - remaining)
+        q_label = f'Q{quarter}' if quarter else 'поточна чверть'
+        return (
+            f'<b>{html.escape(q_label)} зіграно:</b> {_v118_mmss(played)} | '
+            f'<b>залишилось:</b> {_v118_mmss(remaining)}'
+        )
+
+    clock = snapshot.get('clock')
+    if clock:
+        return f'<b>Залишилось у чверті:</b> {html.escape(str(clock))}'
+    return '<b>Час:</b> N/A'
+
+
+DEFAULT_CONFIG.setdefault('clock_semantics_policy', {})
+DEFAULT_CONFIG['clock_semantics_policy'].update({
+    'version': ADVISOR_VERSION,
+    'parser_clock_is_remaining': True,
+    'derive_played_from_remaining': True,
+    'telegram_shows_played_and_remaining': True,
+    'projection_math_changed_only_when_elapsed_was_missing': True,
+})
+SYSTEM_VERSION = ADVISOR_VERSION
+DEFAULT_CONFIG['engine_version'] = ADVISOR_VERSION
+
+
+# =============================================================================
+# v12.1 ALWAYS-RANKED ADVISOR / REFERENCE LINES WHEN BK HAS NO TOTALS
+# =============================================================================
+# The mathematical core is unchanged. This layer changes only the final advisor:
+# - every valid live snapshot receives the strongest 1-2 real bookmaker options;
+# - PASS is never sent to Telegram;
+# - weak-but-valid options are explicitly labelled MICRO (3-5% of bankroll);
+# - better options are WORKING (10-15%); clean strong options are STRONG (25-33%);
+# - truly invalid/stale/settled markets still produce no Telegram message.
+
+ADVISOR_VERSION = '12.1.0-REFERENCE-LINES-NO-BK'
+V12_MAX_PRIMARY = max(1, min(2, int(os.getenv('SUPER_BASKET_V12_MAX_PRIMARY', '2'))))
+V12_SECOND_MAX_SCORE_GAP = float(os.getenv('SUPER_BASKET_V12_SECOND_MAX_SCORE_GAP', '0.14'))
+V12_MICRO_SCORE_MAX = float(os.getenv('SUPER_BASKET_V12_MICRO_SCORE_MAX', '0.60'))
+V12_STRONG_SCORE_MIN = float(os.getenv('SUPER_BASKET_V12_STRONG_SCORE_MIN', '0.78'))
+V12_STRONG_P_FINAL_MIN = float(os.getenv('SUPER_BASKET_V12_STRONG_P_FINAL_MIN', '0.75'))
+
+_V12_FATAL_PARSER_ISSUES = {
+    'NO_LINE', 'NO_ODDS', 'SYNTHETIC_LINE', 'UNSUPPORTED_MARKET',
+    'ODDS_BELOW_MINIMUM', 'ODDS_ABOVE_MAXIMUM',
+    'UNKNOWN_QUARTER', 'INVALID_QUARTER', 'PAST_QUARTER', 'FUTURE_QUARTER',
+    'NO_CURRENT_QUARTER', 'NO_EXACT_CURRENT_QUARTER_TIME',
+    'NO_CURRENT_QUARTER_SCORE',
+}
+
+_V12_FATAL_BLOCKERS = {
+    'SCHEMA_ERROR',
+    'PRODUCTION_ROUTER_BLOCK',
+    'LINE_BELOW_CURRENT_SCOPE_SCORE',
+    'SOURCE_SCOPE_SEGMENT_MISMATCH',
+    'Q4_MISSING_MANDATORY_CONTEXT',
+    'TEAM_IT_REQUIRED_LIVE_UNREALISTIC',
+}
+
+_V12_MARKET_SEMANTIC_BASE = _market_semantic_issues
+
+
+def _market_semantic_issues(market: dict[str, Any], canonical: dict[str, Any]) -> list[dict[str, Any]]:
+    """Accept normal bookmaker full-match scopes such as MATCH(OT).
+
+    v11.8 treated MATCH(OT) as a mismatch even though the normalized segment is
+    correctly MATCH. Preserve every other semantic guard.
+    """
+    issues = _V12_MARKET_SEMANTIC_BASE(market, canonical)
+    source_scope = str(market.get('source_scope') or '').upper().replace(' ', '')
+    segment = str(market.get('segment') or '').upper()
+    match_scope_ok = bool(
+        segment == 'MATCH'
+        and (
+            source_scope.startswith('MATCH')
+            or source_scope in {'FT', 'FULLMATCH', 'FULLMATCH(OT)', 'REGULATION+OT'}
+        )
+    )
+    if match_scope_ok:
+        issues = [row for row in issues if row.get('rule_id') != 'SOURCE_SCOPE_SEGMENT_MISMATCH']
+    return issues
+
+
+_V12_MAJOR_PENALTY_CODES = {
+    'TEAM_IT_WEAKEST_BLOCK',
+    'TEAM_IT_WEAKEST_BELOW_70',
+    'FAKE_OVER', 'FAKE_UNDER',
+    'Q4_UNDER_NO_DRY',
+    'Q4_UNDER_MEDIUM_DRY_NO_STRONG_EDGE',
+    'Q4_OVER_CONFIRMATION_FAILED',
+    'Q4_UNDER_DANGER',
+    'Q4_MATCH_UNDER_OT_TAIL',
+    'Q4_LOW_FOUL_CONVERSION',
+    'STAT_GATE_DIRECTLY_AGAINST',
+    'STRONG_HISTORY_LIVE_CONFLICT',
+    'AUDIT_UNDER_LIVE_CONFLICT_GT8',
+    'AUDIT_UNDER_90_LIVE_CONFLICT',
+    'AUDIT_FAKE_UNDER_BLOCK',
+    'NO_SAME_FORMAT_HISTORY',
+}
+
+
+def _v12_rule_codes(rows: Any) -> list[str]:
+    output: list[str] = []
+    for row in rows or []:
+        if isinstance(row, dict):
+            code = str(row.get('rule_id') or '').strip()
+        else:
+            code = str(row or '').strip()
+        if code:
+            output.append(code)
+    return list(dict.fromkeys(output))
+
+
+def _v12_fatal_reasons(item: dict[str, Any]) -> list[str]:
+    reasons = [str(code) for code in item.get('parser_issues') or [] if str(code) in _V12_FATAL_PARSER_ISSUES]
+    router = item.get('router') or {}
+    if str(router.get('status') or '').upper() == 'BLOCK' and bool(router.get('hard_block', True)):
+        reasons.append('PRODUCTION_ROUTER_BLOCK')
+    reasons.extend(code for code in _v12_rule_codes(item.get('blockers')) if code in _V12_FATAL_BLOCKERS)
+    q4 = item.get('q4_context') or {}
+    if q4.get('applicable') and q4.get('mandatory_missing'):
+        reasons.append('Q4_MISSING_MANDATORY_CONTEXT')
+    return list(dict.fromkeys(reasons))
+
+
+def _v12_probability(item: dict[str, Any], key: str, default: float = 0.50) -> float:
+    adv = item.get('advisor') or {}
+    history = item.get('history') or {}
+    scenario = item.get('scenario') or {}
+    live = item.get('live') or {}
+    mapping = {
+        'p_final': adv.get('p_final', item.get('p_final_system', item.get('p_final'))),
+        'p_live': adv.get('p_live', live.get('p_live')),
+        'p_hist': adv.get('p_hist', history.get('p_hist')),
+        'zone': adv.get('history_zone_rate', history.get('history_zone_rate')),
+        'p_scenario': max(
+            float(adv.get('p_scenario_core') or scenario.get('p_scenario') or 0.50),
+            float(adv.get('p_scenario_miner') or 0.50),
+        ),
+    }
+    value = to_number(mapping.get(key))
+    return default if value is None else max(0.0, min(1.0, float(value)))
+
+
+def _v12_edge_quality(edge: float) -> float:
+    # 0.50 at the line, approaches 1.00 for a large positive edge and 0.00 for
+    # a large negative edge. This is a ranking feature, not a new P_final.
+    return max(0.0, min(1.0, 0.5 + 0.5 * math.tanh(edge / 7.0)))
+
+
+def _v12_recommendation_score(item: dict[str, Any]) -> dict[str, Any]:
+    p_final = _v12_probability(item, 'p_final')
+    p_live = _v12_probability(item, 'p_live')
+    p_hist = _v12_probability(item, 'p_hist')
+    zone = _v12_probability(item, 'zone', p_hist)
+    p_scenario = _v12_probability(item, 'p_scenario')
+    adv = item.get('advisor') or {}
+    live = item.get('live') or {}
+    stat = item.get('stat_comparison') or {}
+    edge = to_number(adv.get('line_edge'))
+    if edge is None:
+        edge = to_number(live.get('line_edge')) or 0.0
+    edge = float(edge)
+
+    stat_status = str(adv.get('stat_gate_status') or stat.get('stat_gate_status') or 'OFF').upper()
+    stat_support = str(stat.get('stat_support') or item.get('data_mode') or 'OFF').upper()
+    if stat_status == 'CONFIRMED':
+        stat_quality = 1.0
+    elif stat_status == 'LIMITED':
+        stat_quality = 0.62
+    elif stat_status in {'OFF', 'N/A', 'NA', 'N_A_NO_STATS'}:
+        stat_quality = 0.50
+    else:
+        stat_quality = 0.25
+
+    score = (
+        0.42 * p_final
+        + 0.22 * p_live
+        + 0.14 * zone
+        + 0.10 * p_scenario
+        + 0.07 * stat_quality
+        + 0.05 * _v12_edge_quality(edge)
+    )
+
+    blocker_codes = _v12_rule_codes(item.get('blockers'))
+    cap_codes = _v12_rule_codes(item.get('caps'))
+    all_codes = list(dict.fromkeys(blocker_codes + cap_codes + list((adv.get('serious_blockers') or []))))
+    major = [code for code in all_codes if code in _V12_MAJOR_PENALTY_CODES]
+    soft = [code for code in all_codes if code not in _V12_MAJOR_PENALTY_CODES and code not in _V12_FATAL_BLOCKERS]
+    score -= min(0.18, 0.055 * len(major))
+    score -= min(0.10, 0.018 * len(soft))
+    if edge < 0:
+        score -= min(0.12, abs(edge) / 40.0)
+    if stat_support == 'OFF':
+        score -= 0.04
+    elif stat_support == 'LIMITED':
+        score -= 0.02
+    odds = to_number(item.get('odds'))
+    if odds is not None:
+        score += min(0.012, max(0.0, (float(odds) - 1.44) * 0.01))
+    score = max(0.01, min(0.99, score))
+
+    fake_against = bool(
+        (str(item.get('side') or '').upper() == 'OVER' and stat.get('fake_over'))
+        or (str(item.get('side') or '').upper() == 'UNDER' and stat.get('fake_under'))
+    )
+    clean = bool(
+        edge >= 0
+        and not major
+        and not blocker_codes
+        and not fake_against
+        and stat_status != 'AGAINST'
+    )
+    return {
+        'score': score,
+        'p_final': p_final,
+        'p_live': p_live,
+        'p_hist': p_hist,
+        'history_zone_rate': zone,
+        'p_scenario': p_scenario,
+        'line_edge': edge,
+        'stat_status': stat_status,
+        'stat_support': stat_support,
+        'clean': clean,
+        'major_penalties': major,
+        'soft_penalties': soft,
+    }
+
+
+def _v12_tier(metrics: dict[str, Any]) -> dict[str, str]:
+    score = float(metrics['score'])
+    p_final = float(metrics['p_final'])
+    clean = bool(metrics['clean'])
+    stat_support = str(metrics.get('stat_support') or 'OFF')
+
+    if score >= V12_STRONG_SCORE_MIN and p_final >= V12_STRONG_P_FINAL_MIN and clean and stat_support != 'OFF':
+        if score >= 0.88 and p_final >= 0.85:
+            stake = '30-33% від бюджету'
+        elif score >= 0.83:
+            stake = '27-30% від бюджету'
+        else:
+            stake = '25-27% від бюджету'
+        return {'tier': 'STRONG', 'action': 'PLAY', 'status': 'STRONG — НАЙСИЛЬНІШИЙ ВХІД', 'stake': stake}
+
+    if score >= V12_MICRO_SCORE_MAX or p_final >= 0.60:
+        if score >= 0.72 or p_final >= 0.72:
+            stake = '12-15% від бюджету'
+        else:
+            stake = '10-12% від бюджету'
+        return {'tier': 'WORKING', 'action': 'RISK', 'status': 'WORKING — РОБОЧИЙ ВХІД', 'stake': stake}
+
+    return {'tier': 'MICRO', 'action': 'RISK', 'status': 'MICRO — СЛАБКИЙ, АЛЕ НАЙКРАЩИЙ ВАРІАНТ', 'stake': '3-5% від бюджету'}
+
+
+def _v12_market_group(item: dict[str, Any]) -> tuple[Any, ...]:
+    return (item.get('market_type'), item.get('team'), item.get('segment'))
+
+
+def _v12_rank_recommendations(evaluations: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    ranked: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
+    odds_min = float(DEFAULT_CONFIG.get('odds_min', 1.44))
+    for original in evaluations:
+        item = deepcopy(original)
+        fatal = _v12_fatal_reasons(item)
+        odds = to_number(item.get('odds'))
+        if odds is None or odds < odds_min:
+            fatal.append('ODDS_BELOW_MINIMUM')
+        if not _v112_market_is_currently_supported(item):
+            fatal.append('MARKET_NOT_CURRENTLY_SUPPORTED')
+        fatal = list(dict.fromkeys(fatal))
+        if fatal:
+            rejected.append({'market': _v11_compact_line(item), 'fatal_reasons': fatal})
+            continue
+        metrics = _v12_recommendation_score(item)
+        tier = _v12_tier(metrics)
+        if bool(item.get('is_reference_line')):
+            # A synthetic threshold can be WORKING/STRONG only when its evidence is
+            # clean. Any direct stat/history conflict is always MICRO 3-5%.
+            if (
+                metrics.get('major_penalties')
+                or str(metrics.get('stat_status') or '').upper() == 'AGAINST'
+                or float(metrics.get('history_zone_rate') or 0.0) < 0.45
+            ):
+                tier = {
+                    'tier': 'MICRO',
+                    'action': 'RISK',
+                    'status': 'MICRO — MODEL LINE З КОНФЛІКТОМ',
+                    'stake': '3-5% від бюджету',
+                }
+            elif tier.get('tier') == 'STRONG' and (
+                float(metrics.get('history_zone_rate') or 0.0) < 0.75
+                or str(metrics.get('stat_status') or '').upper() != 'CONFIRMED'
+            ):
+                tier = {
+                    'tier': 'WORKING',
+                    'action': 'RISK',
+                    'status': 'WORKING — MODEL LINE',
+                    'stake': '12-15% від бюджету',
+                }
+        adv = item.setdefault('advisor', {})
+        adv['original_action_before_v12'] = adv.get('action')
+        adv['original_status_before_v12'] = adv.get('status')
+        adv['action'] = tier['action']
+        adv['status'] = tier['status']
+        adv['recommendation_tier'] = tier['tier']
+        adv['recommendation_score'] = metrics['score']
+        adv['stake_budget'] = tier['stake']
+        adv['always_ranked_policy'] = True
+        adv['fatal_reasons'] = []
+        adv['ranking_metrics'] = metrics
+        item['system_action'] = tier['action']
+        item['system_status'] = tier['status']
+        item['stake'] = tier['stake']
+        item['p_final_system'] = metrics['p_final']
+        item['v12_rank_score'] = metrics['score']
+        ranked.append(item)
+
+    # First choose one best offer/side per logical market. This prevents two
+    # neighbouring lines of the same total from occupying both Telegram slots.
+    best_by_group: dict[tuple[Any, ...], dict[str, Any]] = {}
+    for item in ranked:
+        key = _v12_market_group(item)
+        current = best_by_group.get(key)
+        candidate_edge = float(((item.get('advisor') or {}).get('ranking_metrics') or {}).get('line_edge') or 0.0)
+        current_edge = float((((current or {}).get('advisor') or {}).get('ranking_metrics') or {}).get('line_edge') or 0.0)
+        candidate_key = (
+            1.0 if candidate_edge >= 0 else 0.0,
+            float(item.get('v12_rank_score') or 0.0),
+            float((item.get('advisor') or {}).get('p_final') or 0.0),
+            float(item.get('odds') or 0.0),
+        )
+        current_key = (
+            1.0 if current_edge >= 0 else 0.0,
+            float(current.get('v12_rank_score') or 0.0),
+            float((current.get('advisor') or {}).get('p_final') or 0.0),
+            float(current.get('odds') or 0.0),
+        ) if current else (-1.0, -1.0, -1.0, -1.0)
+        if current is None or candidate_key > current_key:
+            best_by_group[key] = item
+
+    groups = sorted(
+        best_by_group.values(),
+        key=lambda item: (
+            1.0 if float((((item.get('advisor') or {}).get('ranking_metrics') or {}).get('line_edge')) or 0.0) >= 0 else 0.0,
+            {'STRONG': 3, 'WORKING': 2, 'MICRO': 1}.get(str((item.get('advisor') or {}).get('recommendation_tier')), 0),
+            float(item.get('v12_rank_score') or 0.0),
+            float((item.get('advisor') or {}).get('p_final') or 0.0),
+            float(item.get('odds') or 0.0),
+        ),
+        reverse=True,
+    )
+    if not groups:
+        return [], rejected
+    selected = [groups[0]]
+    top_score = float(groups[0].get('v12_rank_score') or 0.0)
+    for candidate in groups[1:]:
+        if len(selected) >= V12_MAX_PRIMARY:
+            break
+        score = float(candidate.get('v12_rank_score') or 0.0)
+        if score < top_score - V12_SECOND_MAX_SCORE_GAP:
+            continue
+        selected.append(candidate)
+    return selected, rejected
+
+
+def _v12_budget_recommendation(action: str, status: str, stake: str) -> dict[str, Any]:
+    match = re.search(r'(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)%', stake or '')
+    pct_min = float(match.group(1)) if match else 0.0
+    pct_max = float(match.group(2)) if match else 0.0
+    bankroll = to_number(os.getenv('SUPER_BASKET_BANKROLL'))
+    fallback_limit = to_number(os.getenv('SUPER_BASKET_LIVE_LIMIT'))
+    base_amount = bankroll if bankroll is not None else fallback_limit
+    base_type = 'BANKROLL' if bankroll is not None else 'LIVE_LIMIT_FALLBACK' if fallback_limit is not None else 'PERCENT_ONLY'
+    currency = os.getenv('SUPER_BASKET_CURRENCY', 'USDT')
+    return {
+        'action': action,
+        'status': status,
+        'base_type': base_type,
+        'base_amount': base_amount,
+        'currency': currency,
+        'percent_min': pct_min,
+        'percent_max': pct_max,
+        'amount_min': round(base_amount * pct_min / 100.0, 2) if base_amount is not None else None,
+        'amount_max': round(base_amount * pct_max / 100.0, 2) if base_amount is not None else None,
+        'text': stake,
+        'educational_note': 'Розмір входу задається від окремого betting-bankroll і не гарантує результат.',
+    }
+
+
+def _v12_reason_text(item: dict[str, Any]) -> str:
+    adv = item.get('advisor') or {}
+    metrics = adv.get('ranking_metrics') or {}
+    side = str(item.get('side') or '').upper()
+    projection = to_number(adv.get('projection_used'))
+    if projection is None:
+        projection = to_number((item.get('live') or {}).get('projection_used'))
+    line = to_number(item.get('line'))
+    edge = to_number(metrics.get('line_edge')) or 0.0
+    if projection is not None and line is not None:
+        aligned = (side == 'OVER' and projection > line) or (side == 'UNDER' and projection < line)
+        relation = 'вище' if projection > line else 'нижче' if projection < line else 'на рівні'
+        direction_text = 'підтримує сторону' if aligned else 'суперечить стороні'
+        return (
+            f'Проєкція {projection:.1f} {relation} лінії {line:.1f} і {direction_text}; '
+            f'edge {edge:+.1f}, P_final {_v11_pct(metrics.get("p_final"))}, '
+            f'історична зона {_v11_pct(metrics.get("history_zone_rate"))}.'
+        )
+    return f'Найвищий комплексний рейтинг серед усіх актуальних ліній БК: {float(metrics.get("score") or 0.0):.1%}.'
+
+
+def _v12_risk_text(item: dict[str, Any]) -> str:
+    adv = item.get('advisor') or {}
+    metrics = adv.get('ranking_metrics') or {}
+    penalties = list(metrics.get('major_penalties') or []) + list(metrics.get('soft_penalties') or [])
+    labels = {
+        'FULL_STAT_CONFIRMATION_NOT_ON': 'немає повного підтвердження live-статою',
+        'Q4_OVER_CONFIRMATION_FAILED': 'Q4 Over не пройшов повний foul/volume/efficiency gate',
+        'Q4_UNDER_NO_DRY': 'для Q4 Under недостатньо dry-підтвердження',
+        'Q4_UNDER_MEDIUM_DRY_NO_STRONG_EDGE': 'dry середній, а edge недостатньо сильний',
+        'STAT_GATE_DIRECTLY_AGAINST': 'live-статистика суперечить цій стороні',
+        'STRONG_HISTORY_LIVE_CONFLICT': 'історія та live-проєкція конфліктують',
+        'LIVE_DIRECTION_OR_EDGE_FAILED': 'live-напрямок або edge слабкий',
+        'HISTORY_CONFIRMATION_BELOW_DYNAMIC_MIN': 'історичне підтвердження нижче робочого рівня',
+        'SCENARIO_CONFIRMATION_BELOW_DYNAMIC_MIN': 'схожі сценарії недостатньо підтримують сторону',
+        'TEAM_IT_WEAKEST_BLOCK': 'один із Team IT gate: own scored / opponent allowed — слабкий',
+        'FAKE_OVER': 'ризик fake over',
+        'FAKE_UNDER': 'ризик fake under і відскоку результативності',
+        'V11_MODEL_CAP': 'модельна лінія має data/sample cap',
+        'STAT_GATE_AGAINST': 'live-статистика не підтверджує модельний напрямок',
+    }
+    if penalties:
+        return '; '.join(labels.get(str(code), str(code).replace('_', ' ').lower()) for code in penalties[:3])
+    if str(metrics.get('stat_support') or '').upper() == 'OFF':
+        return 'немає повної live-статистики; оцінка більше спирається на рахунок, час, історію та сценарій'
+    return 'зміна темпу, лінії або статистичного профілю після snapshot'
+
+
+def _v12_build_messages(advisor: dict[str, Any], calculation: dict[str, Any]) -> list[str]:
+    snapshot = calculation.get('canonical_snapshot') or {}
+    score = snapshot.get('score') or {}
+    rows = list(advisor.get('primary_lines') or [])
+    if not rows:
+        return []
+    header = '\n'.join([
+        '<b>🔥 SUPER BASKET — НАЙСИЛЬНІШІ ВАРІАНТИ</b>',
+        f'<b>Матч:</b> {html.escape(str(snapshot.get("name") or "N/A"))}',
+        f'<b>Стадія:</b> {html.escape(str(snapshot.get("stage") or "N/A"))} | '
+        f'{_v118_clock_context(snapshot)} | '
+        f'<b>Рахунок:</b> {_v11_num(score.get("home"))}:{_v11_num(score.get("away"))}',
+    ])
+    blocks: list[str] = []
+    for index, item in enumerate(rows, 1):
+        adv = item.get('advisor') or {}
+        metrics = adv.get('ranking_metrics') or {}
+        budget = _v12_budget_recommendation(adv.get('action', 'RISK'), adv.get('status', ''), adv.get('stake_budget', '3-5% від бюджету'))
+        amount = ''
+        if budget.get('amount_min') is not None:
+            amount = f' ({budget["amount_min"]:.2f}–{budget["amount_max"]:.2f} {html.escape(str(budget["currency"]))})'
+        reference = bool(item.get('is_reference_line') or adv.get('is_reference_line'))
+        ref_details = item.get('reference_line_details') or adv.get('reference_line_details') or {}
+        type_line = (
+            '<b>Тип:</b> МОДЕЛЬНА REFERENCE LINE — БК не дав total/IT; це поріг входу, не котирування букмекера.'
+            if reference else '<b>Тип:</b> реальна лінія БК.'
+        )
+        odds_line = (
+            f'<b>Коефіцієнт:</b> N/A; використовувати лише фактичний odds >= {float(DEFAULT_CONFIG.get("odds_min", 1.44)):.2f}.'
+            if reference else f'<b>Коефіцієнт:</b> {_v11_num(item.get("odds"))}'
+        )
+        condition_line = (
+            f'<b>Умова входу:</b> {html.escape(str(ref_details.get("entry_condition") or "знайти фактичну лінію не гірше reference threshold"))}.'
+            if reference else '<b>Умова входу:</b> лінія, odds, рахунок і час мають залишатися актуальними.'
+        )
+        budget_label = (
+            '<b>Рекомендований бюджет при фактичній лінії не гірше порога:</b>'
+            if reference else '<b>Рекомендований бюджет:</b>'
+        )
+        block = [
+            f'<b>{index}) {html.escape(str(adv.get("recommendation_tier") or "MICRO"))}</b> — {html.escape(_v113_bet_sentence(item))}',
+            type_line,
+            odds_line,
+            f'{budget_label} {html.escape(str(adv.get("stake_budget") or "3-5% від бюджету"))}{amount}',
+            f'<b>Рейтинг радника:</b> {float(metrics.get("score") or 0.0):.1%} | '
+            f'<b>P_final:</b> {_v11_pct(metrics.get("p_final"))} | <b>P_live:</b> {_v11_pct(metrics.get("p_live"))}',
+            f'<b>Історична зона:</b> {_v11_pct(metrics.get("history_zone_rate"))} | '
+            f'<b>P_scenario:</b> {_v11_pct(metrics.get("p_scenario"))}',
+            f'<b>Проєкція:</b> {_v11_num((item.get("live") or {}).get("projection_used"))} | '
+            f'<b>Лінія:</b> {_v11_num(item.get("line"))} | <b>Edge:</b> {_v11_num(metrics.get("line_edge"))}',
+            f'<b>Чому:</b> {html.escape(_v12_reason_text(item))}',
+            f'<b>Головний ризик:</b> {html.escape(_v12_risk_text(item))}',
+            condition_line,
+        ]
+        if reference:
+            block.insert(5, (
+                f'<b>Історичний центр:</b> {_v11_num(ref_details.get("history_center"))} '
+                f'(mean {_v11_num(ref_details.get("mean"))}, median {_v11_num(ref_details.get("median"))}, N={int(ref_details.get("n") or 0)})'
+            ))
+        blocks.append('\n'.join(block))
+    return [header + '\n\n' + '\n\n'.join(blocks)]
+
+
+# =============================================================================
+# v12.1 NO-BOOKMAKER REFERENCE LINE ENGINE
+# =============================================================================
+# A reference line is NOT presented as a bookmaker quote. It is a deterministic
+# threshold anchored to the teams' same-format history and adjusted toward the
+# current live projection. Telegram tells the user to act only if an actual book
+# offers an equal-or-better line at odds >= configured odds_min.
+
+V121_REFERENCE_HISTORY_WEIGHT_FULL_STAT = float(os.getenv('SUPER_BASKET_V121_REFERENCE_HISTORY_WEIGHT_FULL_STAT', '0.60'))
+V121_REFERENCE_HISTORY_WEIGHT_NO_STAT = float(os.getenv('SUPER_BASKET_V121_REFERENCE_HISTORY_WEIGHT_NO_STAT', '0.72'))
+V121_REFERENCE_MIN_SAMPLE = max(1, int(os.getenv('SUPER_BASKET_V121_REFERENCE_MIN_SAMPLE', '3')))
+V121_REFERENCE_INTERNAL_ODDS = float(DEFAULT_CONFIG.get('odds_min', 1.44))
+
+
+def _v121_trimmed_mean(values: list[float], trim_ratio: float = 0.10) -> Optional[float]:
+    rows = sorted(float(value) for value in values if value is not None and math.isfinite(float(value)))
+    if not rows:
+        return None
+    if len(rows) < 10:
+        return statistics.fmean(rows)
+    cut = int(len(rows) * trim_ratio)
+    core = rows[cut:len(rows) - cut] if len(rows) - 2 * cut >= 3 else rows
+    return statistics.fmean(core)
+
+
+def _v121_history_reference_center(values: list[float]) -> dict[str, Any]:
+    rows = [float(value) for value in values if value is not None and math.isfinite(float(value))]
+    if not rows:
+        return {'available': False, 'n': 0}
+    mean = statistics.fmean(rows)
+    median = statistics.median(rows)
+    trimmed = _v121_trimmed_mean(rows)
+    # Mean is explicitly the main anchor requested by the user; median and
+    # trimmed mean reduce one-off overtime/blowout distortion.
+    robust = 0.50 * mean + 0.35 * median + 0.15 * float(trimmed if trimmed is not None else mean)
+    return {
+        'available': True,
+        'n': len(rows),
+        'mean': mean,
+        'median': median,
+        'trimmed_mean': trimmed,
+        'history_center': _v11_round_half(robust),
+        'p25': percentile(rows, 0.25),
+        'p75': percentile(rows, 0.75),
+        'minimum': min(rows),
+        'maximum': max(rows),
+    }
+
+
+def _v121_reference_line(
+    history_center: float,
+    live_projection: float,
+    market: dict[str, Any],
+    canonical: dict[str, Any],
+) -> dict[str, Any]:
+    stat_support = str(canonical.get('stat_support') or 'OFF').upper()
+    history_weight = (
+        V121_REFERENCE_HISTORY_WEIGHT_NO_STAT
+        if stat_support in {'OFF', 'LIMITED'}
+        else V121_REFERENCE_HISTORY_WEIGHT_FULL_STAT
+    )
+    live_weight = 1.0 - history_weight
+    blended = history_weight * float(history_center) + live_weight * float(live_projection)
+    clock = _segment_clock(market, canonical)
+    current_points = float(clock.get('current_points') or 0.0)
+    remaining_seconds = float(clock.get('remaining_seconds') or 0.0)
+    # A live threshold cannot sit below points already scored in that exact scope.
+    floor = current_points + 0.5 if remaining_seconds > 0 else current_points
+    line = max(floor, _v11_round_half(blended))
+    return {
+        'line': line,
+        'history_weight': history_weight,
+        'live_weight': live_weight,
+        'raw_blended_center': blended,
+        'current_scope_points': current_points,
+        'remaining_scope_seconds': remaining_seconds,
+        'floor_applied': line > _v11_round_half(blended),
+    }
+
+
+
+def _v121_actual_sample_info(canonical: dict[str, Any], spec: dict[str, Any]) -> dict[str, int]:
+    team = spec.get('team')
+    h2h_n = len(canonical.get('history', {}).get('h2h') or [])
+    if team:
+        own_key = 'team_a' if team == canonical.get('home_team') else 'team_b'
+        opp_key = 'team_b' if own_key == 'team_a' else 'team_a'
+        own_n = len(canonical.get('history', {}).get(own_key) or [])
+        allowed_n = len(canonical.get('history', {}).get(opp_key) or [])
+        return {
+            'own_n': own_n,
+            'opponent_allowed_n': allowed_n,
+            'h2h_n': h2h_n,
+            'pooled_n': own_n + allowed_n,
+            'total_evidence_n': own_n + allowed_n + h2h_n,
+        }
+    team_a_n = len(canonical.get('history', {}).get('team_a') or [])
+    team_b_n = len(canonical.get('history', {}).get('team_b') or [])
+    return {
+        'team_a_n': team_a_n,
+        'team_b_n': team_b_n,
+        'h2h_n': h2h_n,
+        'pooled_n': team_a_n + team_b_n,
+        'total_evidence_n': team_a_n + team_b_n + h2h_n,
+    }
+
+
+
+def _v121_h2h_reference_values(canonical: dict[str, Any], spec: dict[str, Any]) -> list[float]:
+    market = {**spec, 'side': 'OVER', 'line': 0.5}
+    team = spec.get('team')
+    values: list[float] = []
+    for game in canonical.get('history', {}).get('h2h') or []:
+        value = _segment_value(game, market, team if team else None)
+        if value is not None:
+            values.append(float(value))
+    return values
+
+
+def _v121_reference_evaluations(
+    calculator: SuperBasketCalculator,
+    canonical: dict[str, Any],
+) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    for spec in _v11_relevant_market_specs(canonical):
+        values = _v11_history_values(canonical, spec)
+        center_info = _v121_history_reference_center(values)
+        sample_info = _v121_actual_sample_info(canonical, spec)
+        actual_n = int(sample_info.get('pooled_n') or 0)
+        if not center_info.get('available') or actual_n < V121_REFERENCE_MIN_SAMPLE:
+            continue
+        center_info['weighted_observation_n'] = int(center_info.get('n') or 0)
+        center_info['n'] = actual_n
+        center_info['sample_info'] = sample_info
+        base_history_center = float(center_info['history_center'])
+        h2h_values = _v121_h2h_reference_values(canonical, spec)
+        h2h_info = _v121_history_reference_center(h2h_values)
+        if h2h_info.get('available'):
+            h2h_weight = 0.15 if spec.get('team') else 0.10
+            history_center = _v11_round_half(
+                (1.0 - h2h_weight) * base_history_center
+                + h2h_weight * float(h2h_info['history_center'])
+            )
+        else:
+            h2h_weight = 0.0
+            history_center = base_history_center
+        center_info['base_history_center'] = base_history_center
+        center_info['h2h_center'] = h2h_info.get('history_center')
+        center_info['h2h_n'] = len(h2h_values)
+        center_info['h2h_weight'] = h2h_weight
+        center_info['history_center'] = history_center
+        probe_market = _v11_synthetic_market(spec, history_center, 'OVER', tag='V121_REFERENCE_PROBE')
+        probe = calculator.evaluate_market(probe_market, canonical)
+        projection = to_number((probe.get('live') or {}).get('projection_used'))
+        if projection is None or not math.isfinite(float(projection)) or float(projection) <= 0:
+            projection = history_center
+        reference = _v121_reference_line(history_center, float(projection), probe_market, canonical)
+        line = float(reference['line'])
+        for side in ('OVER', 'UNDER'):
+            evaluated = _v11_light_model_evaluation(
+                spec,
+                line,
+                side,
+                float(projection),
+                values,
+                canonical,
+                probe,
+            )
+            evaluated = _v11_enrich_evaluation(evaluated, canonical, is_model=True, mine_scenarios=False)
+            evaluated['odds'] = V121_REFERENCE_INTERNAL_ODDS
+            evaluated['bookmaker'] = 'REFERENCE_MODEL_NO_BK'
+            evaluated['source_bucket'] = 'reference_model_no_bk'
+            evaluated['source_scope'] = spec.get('segment')
+            evaluated['is_model_line'] = True
+            evaluated['is_reference_line'] = True
+            evaluated['actual_bookmaker_line_present'] = False
+            evaluated['display_odds'] = None
+            evaluated['reference_line_details'] = {
+                **center_info,
+                **reference,
+                'method': '50% arithmetic mean + 35% median + 15% trimmed mean; H2H modifier; then history/live blend',
+                'projection_used': float(projection),
+                'entry_condition': (
+                    f'OVER: actual line <= {line:.1f} and odds >= {float(DEFAULT_CONFIG.get("odds_min", 1.44)):.2f}'
+                    if side == 'OVER'
+                    else f'UNDER: actual line >= {line:.1f} and odds >= {float(DEFAULT_CONFIG.get("odds_min", 1.44)):.2f}'
+                ),
+            }
+            adv = evaluated.setdefault('advisor', {})
+            adv['is_model_line'] = True
+            adv['is_reference_line'] = True
+            adv['reference_line_details'] = deepcopy(evaluated['reference_line_details'])
+            adv['actual_bookmaker_line_present'] = False
+            output.append(evaluated)
+    return output
+
+
+def _v121_has_supported_real_lines(evaluations: list[dict[str, Any]]) -> bool:
+    return any(
+        _v112_market_is_currently_supported(item)
+        and not bool(item.get('is_model_line'))
+        and not bool(item.get('is_reference_line'))
+        for item in evaluations
+    )
+
+
+
+_V12_PROCESS_BASE = process_vps_match_file
+
+
+def process_vps_match_file(
+    match_path: str | Path,
+    *,
+    output_path: str | Path | None = None,
+    zones_path: str | Path | None = None,
+    db_path: str | Path = 'super_basket.sqlite3',
+    mode: str = 'ACTION',
+    require_gpt: bool = False,
+    enable_gpt: bool = False,
+    enable_telegram: bool = True,
+    dry_run: bool = False,
+    strict_schema: bool = False,
+    checkpoint: Optional[int] = None,
+    gpt_reviewer: Optional[Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]] = None,
+    telegram_sender: Optional[Callable[[str], dict[str, Any]]] = None,
+) -> dict[str, Any]:
+    """v12.1: rank real lines; when none exist, build 1-2 history-anchored reference lines; never send PASS to Telegram."""
+    del require_gpt, enable_gpt, gpt_reviewer
+    mode = mode.upper()
+    if mode not in {'ACTION', 'STRICT'}:
+        raise ValueError('mode must be ACTION or STRICT')
+    source_path = Path(match_path).expanduser().resolve()
+    source = load_json(source_path)
+    if checkpoint is None:
+        checkpoint = _v11_checkpoint_from_filename(source_path)
+    if checkpoint is not None:
+        checkpoint = int(checkpoint)
+        if checkpoint not in {1, 2, 3}:
+            raise ValueError('checkpoint must be 1, 2 or 3')
+        context = source.get('analysis_context') if isinstance(source.get('analysis_context'), dict) else {}
+        source['analysis_context'] = {**context, 'trigger_checkpoint': checkpoint}
+
+    zones, zones_metadata = resolve_team_relative_zones(source, zones_path=zones_path)
+    calculator = SuperBasketCalculator(deepcopy(DEFAULT_CONFIG), zones, zones_metadata)
+    core_result = calculator.calculate(
+        source,
+        dispatch_threshold=float(DEFAULT_CONFIG.get('dispatch_threshold', 0.65)),
+        strict_schema=strict_schema,
+    )
+    calculation = core_result['super_basket_calculation']
+    canonical = adapt_match(source, deepcopy(DEFAULT_CONFIG), strict_schema)
+    canonical['data_gate']['team_relative_zones'] = deepcopy(zones_metadata)
+    canonical['coursework_forecast'] = build_coursework_remaining_forecast(canonical)
+    input_state_gate = _v112_input_state_gate(source, canonical, checkpoint)
+
+    real_evaluations = [
+        _v11_enrich_evaluation(item, canonical, is_model=False)
+        for item in calculation.get('market_evaluations') or []
+    ]
+    calculation['market_evaluations'] = real_evaluations
+    supported_real_present = _v121_has_supported_real_lines(real_evaluations)
+    reference_evaluations: list[dict[str, Any]] = []
+    recommendation_pool = real_evaluations
+    if not supported_real_present:
+        # No bookmaker totals/IT at all: build the full relevant reference-line map.
+        reference_evaluations = _v121_reference_evaluations(calculator, canonical)
+        recommendation_pool = reference_evaluations
+    elif _v123_is_pre_q1_or_q1_start(canonical):
+        # A bookmaker may publish match/H1 lines but omit Q1.  At pre-match/Q1 start
+        # still build Q1 reference totals/IT so the advisor can produce a first-quarter
+        # recommendation instead of silently falling back to an unrelated match market.
+        all_reference = _v121_reference_evaluations(calculator, canonical)
+        real_keys = {
+            _v11_market_key(item)
+            for item in real_evaluations
+            if _v112_market_is_currently_supported(item)
+        }
+        reference_evaluations = [
+            item for item in all_reference
+            if str(item.get('segment') or '').upper() == 'Q1'
+            and _v11_market_key(item) not in real_keys
+        ]
+        recommendation_pool = real_evaluations + reference_evaluations
+    calculation['reference_line_evaluations'] = reference_evaluations
+    selected, rejected = _v12_rank_recommendations(recommendation_pool)
+
+    can_dispatch = bool(input_state_gate.get('allowed') and selected)
+    messages = _v12_build_messages({'primary_lines': selected}, calculation) if can_dispatch else []
+    top = selected[0] if selected else None
+    if top:
+        top_adv = top.get('advisor') or {}
+        action = str(top_adv.get('action') or 'RISK')
+        status = str(top_adv.get('status') or 'MICRO — НАЙКРАЩИЙ ВАРІАНТ')
+        top['system_action'] = action
+        top['system_status'] = status
+        top['stake'] = str(top_adv.get('stake_budget') or '3-5% від бюджету')
+        decision = build_decision(top, top, calculation, mode)
+        decision['action'] = action
+        decision['deterministic_action'] = action
+        decision['status'] = status
+        decision['stake'] = top['stake']
+        decision['budget_recommendation'] = _v12_budget_recommendation(action, status, top['stake'])
+        decision['explanation_uk'] = _v12_reason_text(top)
+        decision['main_risk_uk'] = _v12_risk_text(top)
+        if bool(top.get('is_reference_line') or top_adv.get('is_reference_line')):
+            ref = top.get('reference_line_details') or top_adv.get('reference_line_details') or {}
+            decision['trigger_uk'] = str(ref.get('entry_condition') or 'Знайти фактичну лінію не гірше модельного порога та odds >=1.44.')
+            if isinstance(decision.get('market'), dict):
+                decision['market']['display_odds'] = None
+                decision['market']['internal_reference_odds'] = decision['market'].get('odds')
+                decision['market']['bookmaker'] = 'REFERENCE_MODEL_NO_BK'
+                decision['market']['is_reference_line'] = True
+                decision['market']['reference_line_details'] = deepcopy(ref)
+        else:
+            decision['trigger_uk'] = 'Рішення приймає користувач; лінія, коефіцієнт, рахунок і час мають залишатися актуальними.'
+        decision['reason_codes'] = list((top_adv.get('ranking_metrics') or {}).get('major_penalties') or []) + list((top_adv.get('ranking_metrics') or {}).get('soft_penalties') or [])
+    else:
+        action = 'NONE'
+        status = 'NO VALID REAL OR REFERENCE LINE — TELEGRAM SILENT'
+        decision = build_decision(None, None, calculation, mode)
+        decision.update({
+            'action': 'NONE',
+            'deterministic_action': 'NONE',
+            'status': status,
+            'stake': '0%',
+            'budget_recommendation': _v12_budget_recommendation('NONE', status, '0-0%'),
+            'explanation_uk': 'Немає валідної реальної лінії БК і недостатньо історії для побудови модельної reference line.',
+            'main_risk_uk': 'Snapshot завершений, stale, ринок уже закритий або має критичну помилку scope/time.',
+            'trigger_uk': 'Очікувати актуальний snapshot або достатню same-format історію для reference line.',
+            'reason_codes': [str(input_state_gate.get('reason'))] if not input_state_gate.get('allowed') else ['NO_VALID_REAL_OR_REFERENCE_LINE'],
+            'signal_id': None,
+            'market': None,
+        })
+    decision['gpt_status'] = 'NOT_REQUIRED_V12_DETERMINISTIC'
+    decision['advisor_dispatch'] = can_dispatch
+    top_is_reference = bool(
+        top and (
+            top.get('is_reference_line')
+            or (top.get('advisor') or {}).get('is_reference_line')
+        )
+    )
+    decision['advisor_dispatch_reason'] = (
+        (
+            'Надіслано Q1 history-anchored reference signal, бо БК не дав відповідну Q1-лінію.'
+            if top_is_reference and supported_real_present
+            else 'Ліній БК немає: надіслано 1-2 history-anchored reference signals.'
+            if top_is_reference
+            else 'Надіслано 1-2 найсильніші реальні лінії.'
+        )
+        if can_dispatch else 'Telegram мовчить: немає валідної реальної або reference line.'
+    )
+    decision['alternative_recommendations'] = [_v11_compact_line(item) for item in selected[1:]]
+    decision.pop('_evaluation', None)
+
+    advisor = {
+        'version': ADVISOR_VERSION,
+        'action': action,
+        'status': status,
+        'dispatch': can_dispatch,
+        'dispatch_reason': decision['advisor_dispatch_reason'],
+        'policy': {
+            'pass_telegram_disabled': True,
+            'always_rank_valid_real_lines': True,
+            'reference_lines_when_no_bk': True,
+            'max_primary': V12_MAX_PRIMARY,
+            'tiers': {
+                'MICRO': '3-5% від бюджету',
+                'WORKING': '10-15% від бюджету',
+                'STRONG': '25-33% від бюджету',
+            },
+            'core_probability_math_changed': False,
+        },
+        'primary_lines': selected,
+        'reference_lines_generated': reference_evaluations,
+        'real_lines_present': supported_real_present,
+        'rejected_fatal_lines': rejected,
+        'telegram_messages': messages,
+        'input_state_gate': input_state_gate,
+    }
+
+    target = Path(output_path).expanduser().resolve() if output_path else source_path.with_name(source_path.stem + '_advisor_result.json')
+    delivery = {'status': 'SKIPPED_NO_VALID_SIGNAL', 'sent': False, 'message_id': None, 'message_count': len(messages)}
+    duplicate = False
+    advisor_key = hashlib.sha256((calculation['input_snapshot_hash'] + '|' + ADVISOR_VERSION).encode('utf-8')).hexdigest()
+    connection = _v11_delivery_connect(db_path)
+    try:
+        row = connection.execute('SELECT telegram_status FROM advisor_deliveries WHERE advisor_key=?', (advisor_key,)).fetchone()
+        duplicate = row is not None and row[0] == 'SENT'
+        if not can_dispatch:
+            delivery = {'status': 'SKIPPED_NO_VALID_SIGNAL', 'sent': False, 'message_id': None, 'message_count': 0}
+        elif duplicate:
+            delivery = {'status': 'SKIPPED_DUPLICATE_ALREADY_SENT', 'sent': False, 'message_id': None, 'message_count': len(messages)}
+        elif dry_run:
+            delivery = {'status': 'DRY_RUN_NOT_SENT', 'sent': False, 'message_id': None, 'message_count': len(messages)}
+        elif not enable_telegram:
+            delivery = {'status': 'SKIPPED_TELEGRAM_DISABLED', 'sent': False, 'message_id': None, 'message_count': len(messages)}
+        else:
+            delivery = _v11_send_messages(messages, telegram_sender=telegram_sender)
+        connection.execute(
+            'INSERT OR REPLACE INTO advisor_deliveries(advisor_key,match_id,input_hash,action,status,telegram_status,created_at) VALUES(?,?,?,?,?,?,?)',
+            (advisor_key, canonical['match_id'], calculation['input_snapshot_hash'], action, status, delivery['status'], utc_now()),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    learning_duplicate = False
+    learning_store = LearningStore(db_path)
+    try:
+        decision['telegram_status'] = delivery['status']
+        if top and decision.get('signal_id') and decision.get('market'):
+            _, learning_duplicate = learning_store.record_signal(decision, calculation)
+            learning_store.update_delivery(
+                decision['signal_id'],
+                action,
+                decision.get('gpt_status', 'NOT_REQUIRED_V12_DETERMINISTIC'),
+                delivery['status'],
+                delivery.get('message_id'),
+            )
+        learning_store.mark_processed(
+            calculation['input_snapshot_hash'],
+            str(source_path),
+            str(target),
+            'OK' if input_state_gate.get('allowed') else str(input_state_gate.get('reason')),
+        )
+    finally:
+        learning_store.close()
+
+    all_evaluations_for_output = real_evaluations + reference_evaluations
+    line_recommendations = [_v11_compact_line(item) for item in all_evaluations_for_output]
+    selected_compact = [_v11_compact_line(item) for item in selected]
+    calculation['line_recommendations'] = line_recommendations
+    calculation['active_line_recommendations'] = selected_compact
+    calculation['advisor'] = advisor
+    calculation['advisor_ranked_recommendations'] = selected_compact
+    calculation['advisor_rejected_fatal_lines'] = rejected
+    calculation['reference_line_mode'] = {
+        'active': not supported_real_present,
+        'generated_count': len(reference_evaluations),
+        'method': 'history mean/median/trimmed mean + live adjustment',
+        'not_a_bookmaker_quote': True,
+    }
+
+    system = {
+        'version': ADVISOR_VERSION,
+        'processed_at': utc_now(),
+        'input_hash': calculation['input_snapshot_hash'],
+        'mode': mode,
+        'status': 'OK',
+        'data_gate': calculation.get('data_gate'),
+        'format_gate': format_gate(calculation),
+        'market_audit': calculation.get('market_audit'),
+        'line_coverage': calculation.get('line_coverage'),
+        'line_recommendations': line_recommendations,
+        'active_line_recommendations': selected_compact,
+        'decision': decision,
+        'decision_text': f'{action} | {status}',
+        'gpt_review': {'status': 'NOT_REQUIRED_V12_DETERMINISTIC', 'approved': True, 'action': action},
+        'risk_post_filter': {'enabled': False, 'policy': 'V12_ALWAYS_RANKED'},
+        'telegram_delivery': {**delivery, 'duplicate_signal': duplicate},
+        'learning_store': {'signal_recorded': bool(top and decision.get('signal_id')), 'duplicate_signal': learning_duplicate},
+        'advisor': advisor,
+        'input_state_gate': input_state_gate,
+        'files': {'source': str(source_path), 'result': str(target)},
+    }
+    core_result['super_basket_system'] = system
+    save_json(target, core_result)
+    append_verdict_log({
+        'timestamp': system['processed_at'],
+        'match_id': canonical['match_id'],
+        'match_name': canonical['name'],
+        'checkpoint': canonical['stage'],
+        'trigger_checkpoint': canonical.get('trigger_checkpoint'),
+        'verdict': action,
+        'verdict_status': status,
+        'p_final': ((top.get('advisor') or {}).get('p_final') if top else None),
+        'market': (_v11_compact_line(top) if top else None),
+        'alternatives': [_v11_compact_line(item) for item in selected[1:]],
+        'description': decision['advisor_dispatch_reason'],
+        'reason_codes': decision.get('reason_codes') or [],
+        'input_hash': calculation['input_snapshot_hash'],
+        'gpt_status': 'NOT_REQUIRED_V12_DETERMINISTIC',
+        'telegram_status': delivery['status'],
+        'advisor_policy': advisor['policy'],
+        'files': {'source': str(source_path), 'result': str(target)},
+    })
+    if ENABLE_EXCEL_AUDIT:
+        append_excel_audit(core_result)
+    return core_result
+
+
+DEFAULT_CONFIG.setdefault('v12_advisor_policy', {})
+DEFAULT_CONFIG['v12_advisor_policy'].update({
+    'version': ADVISOR_VERSION,
+    'pass_telegram_disabled': True,
+    'always_rank_valid_real_lines': True,
+    'reference_lines_when_no_bk': True,
+    'max_primary': V12_MAX_PRIMARY,
+    'budget_tiers': {
+        'MICRO': '3-5%',
+        'WORKING': '10-15%',
+        'STRONG': '25-33%',
+    },
+    'core_probability_math_changed': False,
+})
+SYSTEM_VERSION = ADVISOR_VERSION
+DEFAULT_CONFIG['engine_version'] = ADVISOR_VERSION
+
+
+# ===== v12.2 clock/score consistency guard =====
+# The advisor must never silently combine a stale score source with a newer clock source.
+# This wrapper cross-checks match.score, raw_data.main_match hs/as_, quarter sums and all
+# available clock representations.  A resolvable disagreement is repaired; an unresolved
+# disagreement blocks Telegram while keeping the full audit in the output JSON.
+_V122_ADAPT_BASE = adapt_match
+_V122_INPUT_STATE_GATE_BASE = _v112_input_state_gate
+
+
+def _v122_pair_score(mapping: Any, home_keys: tuple[str, ...], away_keys: tuple[str, ...]) -> Optional[tuple[float, float]]:
+    if not isinstance(mapping, dict):
+        return None
+    home = to_number(first(mapping, home_keys))
+    away = to_number(first(mapping, away_keys))
+    if home is None or away is None:
+        return None
+    return float(home), float(away)
+
+
+def _v122_score_equal(left: Optional[tuple[float, float]], right: Optional[tuple[float, float]], tolerance: float=0.01) -> bool:
+    return bool(
+        left is not None and right is not None
+        and abs(left[0] - right[0]) <= tolerance
+        and abs(left[1] - right[1]) <= tolerance
+    )
+
+
+def _v122_quarter_score(canonical: dict[str, Any]) -> Optional[tuple[float, float]]:
+    rows = canonical.get('quarters') or []
+    current = to_int(canonical.get('current_quarter')) or 4
+    home = away = 0.0
+    used = 0
+    for index, row in enumerate(rows[:max(1, min(4, current))]):
+        if not isinstance(row, dict):
+            continue
+        qh = to_number(row.get('home'))
+        qa = to_number(row.get('away'))
+        if qh is None or qa is None:
+            continue
+        home += float(qh)
+        away += float(qa)
+        used += 1
+    return (home, away) if used else None
+
+
+def _v122_clock_candidates(source: dict[str, Any], canonical: dict[str, Any]) -> list[dict[str, Any]]:
+    match = source.get('match') if isinstance(source.get('match'), dict) else {}
+    raw = ((source.get('raw_data') or {}).get('main_match') or {}) if isinstance(source.get('raw_data'), dict) else {}
+    quarter_minutes = int(canonical.get('quarter_minutes') or 10)
+    quarter_seconds = quarter_minutes * 60
+    full_seconds = int(canonical.get('full_game_seconds') or quarter_seconds * 4)
+    rows: list[dict[str, Any]] = []
+
+    elapsed = to_number(first(match, ['match_minute_played', 'elapsed_minutes']))
+    if elapsed is not None:
+        rows.append({'source': 'match.match_minute_played', 'elapsed_seconds': int(round(float(elapsed) * 60)), 'priority': 2})
+
+    period = to_int(first(match, ['period', 'quarter', 'current_quarter']))
+    played = to_number(first(match, ['period_minute_played', 'quarter_minute_played']))
+    left = to_number(first(match, ['period_minute_left', 'quarter_minute_left']))
+    if period is not None and played is not None:
+        safe_played = max(0.0, min(float(quarter_minutes), float(played)))
+        rows.append({
+            'source': 'match.period_minute_played',
+            'elapsed_seconds': int(round(((period - 1) * quarter_minutes + safe_played) * 60)),
+            'period': period,
+            'period_played_seconds': int(round(safe_played * 60)),
+            'priority': 4,
+        })
+    if period is not None and left is not None:
+        safe_left = max(0.0, min(float(quarter_minutes), float(left)))
+        played_from_left = float(quarter_minutes) - safe_left
+        rows.append({
+            'source': 'match.period_minute_left',
+            'elapsed_seconds': int(round(((period - 1) * quarter_minutes + played_from_left) * 60)),
+            'period': period,
+            'period_played_seconds': int(round(played_from_left * 60)),
+            'priority': 5,
+        })
+
+    raw_status = str(first(raw, ['st', 'status']) or '')
+    parsed = _parse_status_clock(raw_status, quarter_seconds, full_seconds)
+    if parsed is not None:
+        raw_elapsed, raw_period, raw_played = parsed
+        rows.append({
+            'source': 'raw_data.main_match.st',
+            'elapsed_seconds': int(raw_elapsed),
+            'period': raw_period,
+            'period_played_seconds': raw_played,
+            'priority': 3,
+            'raw_status': raw_status,
+        })
+
+    # Clamp all candidates to regulation time.
+    for row in rows:
+        row['elapsed_seconds'] = max(0, min(full_seconds, int(row['elapsed_seconds'])))
+    return rows
+
+
+def _v122_choose_clock(candidates: list[dict[str, Any]], canonical: dict[str, Any]) -> tuple[Optional[dict[str, Any]], bool, list[dict[str, Any]]]:
+    if not candidates:
+        return None, False, []
+    tolerance = 75  # provider status strings are usually minute-granular
+    clusters: list[list[dict[str, Any]]] = []
+    for row in sorted(candidates, key=lambda item: int(item['elapsed_seconds'])):
+        placed = False
+        for cluster in clusters:
+            center = statistics.median(int(item['elapsed_seconds']) for item in cluster)
+            if abs(int(row['elapsed_seconds']) - center) <= tolerance:
+                cluster.append(row)
+                placed = True
+                break
+        if not placed:
+            clusters.append([row])
+    clusters.sort(
+        key=lambda cluster: (
+            len(cluster),
+            max(int(item.get('priority') or 0) for item in cluster),
+        ),
+        reverse=True,
+    )
+    winning = clusters[0]
+    best = max(winning, key=lambda item: int(item.get('priority') or 0))
+    unresolved = len(clusters) > 1 and len(winning) == len(clusters[1]) == 1
+    return best, unresolved, clusters
+
+
+def adapt_match(source: dict[str, Any], config: dict[str, Any], strict: bool=False) -> dict[str, Any]:
+    canonical = _V122_ADAPT_BASE(source, config, strict)
+    gate = canonical.setdefault('data_gate', {})
+    match = source.get('match') if isinstance(source.get('match'), dict) else {}
+    raw = ((source.get('raw_data') or {}).get('main_match') or {}) if isinstance(source.get('raw_data'), dict) else {}
+
+    match_score = _v122_pair_score(match.get('score') or {}, ('home', 'home_score'), ('away', 'away_score'))
+    raw_score = _v122_pair_score(raw, ('hs', 'home_score', 'homeScore'), ('as_', 'away_score', 'awayScore'))
+    quarter_score = _v122_quarter_score(canonical)
+    selected_before = (
+        float((canonical.get('score') or {}).get('home') or 0.0),
+        float((canonical.get('score') or {}).get('away') or 0.0),
+    )
+    available = {name: value for name, value in {
+        'match.score': match_score,
+        'raw_data.main_match': raw_score,
+        'quarter_sum': quarter_score,
+    }.items() if value is not None}
+    score_conflicts = []
+    names = list(available)
+    for index, name in enumerate(names):
+        for other in names[index + 1:]:
+            if not _v122_score_equal(available[name], available[other]):
+                score_conflicts.append({'left_source': name, 'left': list(available[name]), 'right_source': other, 'right': list(available[other])})
+
+    resolved_score = selected_before
+    resolved_source = 'base_priority'
+    unresolved_score = False
+    if quarter_score is not None:
+        matches = [name for name, value in available.items() if name != 'quarter_sum' and _v122_score_equal(value, quarter_score)]
+        if matches:
+            resolved_score = quarter_score
+            resolved_source = 'quarter_sum_confirmed_by_' + matches[0]
+        elif len(available) >= 2 and score_conflicts:
+            unresolved_score = True
+    elif match_score is not None and raw_score is not None and not _v122_score_equal(match_score, raw_score):
+        unresolved_score = True
+
+    if resolved_score != selected_before:
+        canonical['score'] = {
+            'home': float(resolved_score[0]),
+            'away': float(resolved_score[1]),
+            'total': float(resolved_score[0] + resolved_score[1]),
+            'margin_home': float(resolved_score[0] - resolved_score[1]),
+        }
+
+    clock_candidates = _v122_clock_candidates(source, canonical)
+    chosen_clock, unresolved_time, clock_clusters = _v122_choose_clock(clock_candidates, canonical)
+    if chosen_clock is not None and not unresolved_time:
+        full_seconds = int(canonical.get('full_game_seconds') or 2400)
+        quarter_seconds = int(canonical.get('quarter_seconds') or 600)
+        elapsed_seconds = int(chosen_clock['elapsed_seconds'])
+        period = to_int(chosen_clock.get('period'))
+        if period is None and elapsed_seconds < full_seconds:
+            period = min(4, elapsed_seconds // quarter_seconds + 1)
+        if period is not None:
+            played_seconds = elapsed_seconds - (period - 1) * quarter_seconds
+            played_seconds = max(0, min(quarter_seconds, played_seconds))
+            left_seconds = max(0, quarter_seconds - played_seconds)
+        else:
+            left_seconds = 0
+        explicit_stage = str(canonical.get('explicit_stage') or '')
+        canonical['elapsed_game_seconds'] = elapsed_seconds
+        canonical['remaining_game_seconds'] = max(0, full_seconds - elapsed_seconds)
+        canonical['current_quarter'] = period
+        canonical['quarter_seconds_remaining'] = left_seconds
+        canonical['clock'] = f'{left_seconds // 60:02d}:{left_seconds % 60:02d}' if period is not None else None
+        canonical['stage'] = _stage(elapsed_seconds, full_seconds, quarter_seconds, explicit_stage)
+
+    gate['score_consistency'] = {
+        'sources': {name: list(value) for name, value in available.items()},
+        'selected_before_guard': list(selected_before),
+        'selected_after_guard': [canonical['score']['home'], canonical['score']['away']],
+        'selected_source': resolved_source,
+        'conflicts': score_conflicts,
+        'unresolved': unresolved_score,
+    }
+    gate['clock_consistency'] = {
+        'candidates': clock_candidates,
+        'selected': deepcopy(chosen_clock),
+        'clusters': [[deepcopy(item) for item in cluster] for cluster in clock_clusters],
+        'unresolved': unresolved_time,
+        'final_elapsed_seconds': canonical.get('elapsed_game_seconds'),
+        'final_clock': canonical.get('clock'),
+        'final_quarter': canonical.get('current_quarter'),
+    }
+    gate['score_conflict'] = unresolved_score
+    gate['time_conflict'] = unresolved_time
+    if unresolved_score and 'INPUT_SCORE_CONFLICT' not in gate.setdefault('schema_errors', []):
+        gate['schema_errors'].append('INPUT_SCORE_CONFLICT')
+    if unresolved_time and 'INPUT_TIME_CONFLICT' not in gate.setdefault('schema_errors', []):
+        gate['schema_errors'].append('INPUT_TIME_CONFLICT')
+    return canonical
+
+
+def _v112_input_state_gate(source: dict[str, Any], canonical: dict[str, Any], checkpoint: Optional[int]) -> dict[str, Any]:
+    result = _V122_INPUT_STATE_GATE_BASE(source, canonical, checkpoint)
+    gate = canonical.get('data_gate') or {}
+    score_conflict = bool(gate.get('score_conflict'))
+    time_conflict = bool(gate.get('time_conflict'))
+    if score_conflict or time_conflict:
+        result['allowed'] = False
+        if score_conflict and time_conflict:
+            result['reason'] = 'INPUT_SCORE_AND_TIME_CONFLICT'
+        elif score_conflict:
+            result['reason'] = 'INPUT_SCORE_CONFLICT'
+        else:
+            result['reason'] = 'INPUT_TIME_CONFLICT'
+    result['score_consistency'] = deepcopy(gate.get('score_consistency'))
+    result['clock_consistency'] = deepcopy(gate.get('clock_consistency'))
+    return result
+
+
+ADVISOR_VERSION = '12.2.0-CLOCK-SCORE-CONSISTENCY-GUARD'
+SYSTEM_VERSION = ADVISOR_VERSION
+DEFAULT_CONFIG['engine_version'] = ADVISOR_VERSION
+DEFAULT_CONFIG.setdefault('v12_advisor_policy', {})['clock_score_consistency_guard'] = True
+
+
+# =============================================================================
+# v12.3 PRE-MATCH + Q1-START ADVISOR
+# =============================================================================
+# Adds two production states without changing the historical/scenario/projection
+# formulas:
+# 1) PRE_MATCH: real bookmaker totals/IT or history-anchored reference lines can be
+#    ranked even when the score is 0:0 and there are no live statistics.
+# 2) Q1_START: Q1 total and both Q1 team-IT markets are evaluated from 0:0 or the
+#    first live possessions, with exact score/clock semantics preserved.
+
+V123_Q1_FORCE_WINDOW_SECONDS = max(
+    0,
+    int(os.getenv('SUPER_BASKET_V123_Q1_FORCE_WINDOW_SECONDS', '120')),
+)
+V123_PREMATCH_REFERENCE_Q1_ENABLED = env_bool(
+    'SUPER_BASKET_V123_PREMATCH_REFERENCE_Q1_ENABLED', True
+)
+
+
+def _v123_is_pre_q1_or_q1_start(canonical: dict[str, Any]) -> bool:
+    stage = str(canonical.get('stage') or '').upper()
+    current = to_int(canonical.get('current_quarter'))
+    elapsed = int(canonical.get('elapsed_game_seconds') or 0)
+    qsec = int(canonical.get('quarter_seconds') or 600)
+    return bool(
+        stage == 'PRE_MATCH'
+        or (current == 1 and 0 <= elapsed < min(qsec, V123_Q1_FORCE_WINDOW_SECONDS + 1))
+    )
+
+
+_V123_ADAPT_BASE = adapt_match
+
+
+def adapt_match(source: dict[str, Any], config: dict[str, Any], strict: bool=False) -> dict[str, Any]:
+    canonical = _V123_ADAPT_BASE(source, config, strict)
+    current = to_int(canonical.get('current_quarter'))
+    elapsed = int(canonical.get('elapsed_game_seconds') or 0)
+    qsec = int(canonical.get('quarter_seconds') or 600)
+    score = canonical.get('score') or {}
+    rows = canonical.setdefault('quarters', [])
+    while len(rows) < 4:
+        rows.append({'home': None, 'away': None, 'total': None})
+    backfilled = False
+    # At pre-match or during Q1, the cumulative game score equals the Q1 score.
+    # Some parser snapshots leave q1h/q1a empty until the first provider refresh;
+    # backfill only this exact state so Q1 projections never use a false 0 total.
+    if current == 1 and elapsed < qsec:
+        q1 = rows[0]
+        home = to_number(score.get('home'))
+        away = to_number(score.get('away'))
+        if home is not None and away is not None and (
+            q1.get('home') is None or q1.get('away') is None
+        ):
+            q1['home'] = float(home)
+            q1['away'] = float(away)
+            q1['total'] = float(home + away)
+            backfilled = True
+    canonical.setdefault('data_gate', {})['q1_score_backfilled_from_match_score'] = backfilled
+    explicit_upper = str(canonical.get('explicit_stage') or '').upper()
+    explicit_q1_live = current == 1 and any(token in explicit_upper for token in ('LIVE', 'Q1', 'ЧВЕРТ', 'QUARTER'))
+    canonical['data_gate']['advisor_phase'] = (
+        'Q1_START'
+        if explicit_q1_live and elapsed <= V123_Q1_FORCE_WINDOW_SECONDS
+        else 'PRE_MATCH'
+        if str(canonical.get('stage') or '').upper() == 'PRE_MATCH' and elapsed == 0
+        else 'Q1_START'
+        if current == 1 and elapsed <= V123_Q1_FORCE_WINDOW_SECONDS
+        else str(canonical.get('stage') or 'UNKNOWN')
+    )
+    return canonical
+
+
+_V123_CURRENT_QUARTER_ISSUE_BASE = _current_quarter_issue
+
+
+def _current_quarter_issue(
+    market_type: str,
+    segment: str,
+    canonical: dict[str, Any],
+) -> Optional[str]:
+    target = int(segment[1:]) if segment.startswith('Q') and segment[1:].isdigit() else None
+    if (
+        market_type in {'CURRENT_QUARTER_TOTAL', 'CURRENT_QUARTER_TEAM_IT'}
+        and target == 1
+    ):
+        stage = str(canonical.get('stage') or '').upper()
+        current = to_int(canonical.get('current_quarter'))
+        elapsed = int(canonical.get('elapsed_game_seconds') or 0)
+        qsec = int(canonical.get('quarter_seconds') or 600)
+        # Before tip-off, a Q1 line is a valid pre-match market and does not need
+        # a live clock or a populated Q1 boxscore row.
+        if stage == 'PRE_MATCH' and elapsed == 0:
+            return None
+        # During Q1, retain the normal exact-time requirement.  The v12.3 adapter
+        # backfills Q1 score from the cumulative score when the provider omits q1h/q1a.
+        if current == 1 and elapsed < qsec and canonical.get('clock') is not None:
+            return None
+    return _V123_CURRENT_QUARTER_ISSUE_BASE(market_type, segment, canonical)
+
+
+_V123_RELEVANT_MARKET_SPECS_BASE = _v11_relevant_market_specs
+
+
+def _v11_relevant_market_specs(canonical: dict[str, Any]) -> list[dict[str, Any]]:
+    specs = list(_V123_RELEVANT_MARKET_SPECS_BASE(canonical))
+    if V123_PREMATCH_REFERENCE_Q1_ENABLED and _v123_is_pre_q1_or_q1_start(canonical):
+        q1_specs = [
+            {'market_type': 'CURRENT_QUARTER_TOTAL', 'segment': 'Q1', 'team': None},
+            {'market_type': 'CURRENT_QUARTER_TEAM_IT', 'segment': 'Q1', 'team': canonical.get('home_team')},
+            {'market_type': 'CURRENT_QUARTER_TEAM_IT', 'segment': 'Q1', 'team': canonical.get('away_team')},
+        ]
+        specs = q1_specs + specs
+    output: list[dict[str, Any]] = []
+    seen: set[tuple[Any, ...]] = set()
+    for spec in specs:
+        key = (spec.get('market_type'), spec.get('team'), spec.get('segment'))
+        if key not in seen:
+            seen.add(key)
+            output.append(spec)
+    return output
+
+
+_V123_RANK_RECOMMENDATIONS_BASE = _v12_rank_recommendations
+
+
+def _v123_eval_elapsed(item: dict[str, Any]) -> Optional[int]:
+    value = to_number((item.get('live') or {}).get('elapsed_game_seconds'))
+    return None if value is None else int(round(float(value)))
+
+
+def _v12_rank_recommendations(
+    evaluations: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    selected, rejected = _V123_RANK_RECOMMENDATIONS_BASE(evaluations)
+    q1_pool = [
+        item for item in evaluations
+        if str(item.get('segment') or '').upper() == 'Q1'
+        and (_v123_eval_elapsed(item) is None or _v123_eval_elapsed(item) <= V123_Q1_FORCE_WINDOW_SECONDS)
+    ]
+    if not q1_pool:
+        return selected, rejected
+    q1_selected, q1_rejected = _V123_RANK_RECOMMENDATIONS_BASE(q1_pool)
+    if not q1_selected:
+        return selected, rejected + q1_rejected
+
+    primary = q1_selected[0]
+    combined = [primary]
+    used_groups = {_v12_market_group(primary)}
+    # Preserve a second genuinely different strongest option (Q1 or another scope),
+    # but never replace the requested first-quarter primary at pre-match/Q1 start.
+    candidates = q1_selected[1:] + selected
+    for item in candidates:
+        group = _v12_market_group(item)
+        if group in used_groups:
+            continue
+        combined.append(item)
+        used_groups.add(group)
+        if len(combined) >= V12_MAX_PRIMARY:
+            break
+    return combined[:V12_MAX_PRIMARY], rejected + q1_rejected
+
+
+_V123_CHECKPOINT_FILENAME_BASE = _v11_checkpoint_from_filename
+
+
+def _v11_checkpoint_from_filename(path: Path) -> Optional[int]:
+    """Do not misread Q1-start/live files as the after-Q1 checkpoint.
+
+    Explicit result/end/after names remain checkpoints.  PRE_MATCH/Q1_START/Q1_LIVE
+    files are analysed with checkpoint=None so Q1 totals and Q1 team-IT stay active.
+    """
+    stem = path.stem.lower()
+    if re.search(r'(?:^|_)(?:pre_?match|not_?started|q1_?start|start_?q1|q1_?live|live_?q1)(?:_|$)', stem):
+        return None
+    explicit = re.search(r'(?:^|_)(?:after|end|finished)_?q([123])(?:_|$)', stem)
+    if explicit:
+        return int(explicit.group(1))
+    result = re.search(r'(?:^|_)q([123])_?(?:result|checkpoint|done)(?:_|$)', stem)
+    if result:
+        return int(result.group(1))
+    # A bare q1 token is ambiguous and is commonly used for a live/start snapshot.
+    # Only explicit q1_result/after_q1/end_q1 names may mean checkpoint 1.
+    if re.search(r'(?:^|_)q1(?:_|$)', stem):
+        return None
+    return _V123_CHECKPOINT_FILENAME_BASE(path)
+
+
+ADVISOR_VERSION = '12.3.0-PREMATCH-Q1-START-ADVISOR'
+SYSTEM_VERSION = ADVISOR_VERSION
+DEFAULT_CONFIG['engine_version'] = ADVISOR_VERSION
+DEFAULT_CONFIG.setdefault('v12_advisor_policy', {}).update({
+    'pre_match_recommendations': True,
+    'q1_start_recommendations': True,
+    'q1_reference_line_when_missing': True,
+    'q1_force_window_seconds': V123_Q1_FORCE_WINDOW_SECONDS,
+    'pre_match_live_points_required': False,
+    'pre_match_max_tier_without_live_confirmation': 'WORKING',
+})
 
 
 if __name__ == '__main__':

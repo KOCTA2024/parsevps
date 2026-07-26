@@ -159,6 +159,7 @@ async function processJob(job) {
     '--db', SUPER_BASKET_DB,
     '--no-gpt',
     '--no-require-gpt',
+    '--telegram',
   ];
   if (triggerCheckpoint >= 1 && triggerCheckpoint <= 3) {
     superBasketArgs.push('--checkpoint', String(triggerCheckpoint));
