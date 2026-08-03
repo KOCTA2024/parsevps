@@ -2826,15 +2826,9 @@ def parse_minutes_played(st: str, tour: str) -> float:
     """
     q = quarter_duration_minutes(tour)
     if not st:
-        return 0.0
+        return float(2 * q)  # default: halftime
 
-    st_up = st.upper().strip()
-
-    # Parser emits "Not Started" for a scheduled match. It is not an
-    # unknown clock and must never fall through to the legacy halftime
-    # fallback (20/24 minutes played).
-    if st_up in ("NOT STARTED", "SCHEDULED", "PRE-MATCH", "PREMATCH", "PRE MATCH", "UPCOMING"):
-        return 0.0
+    st_up = st.upper()
 
     if "FINISHED" in st_up:
         return float(4 * q)
@@ -3755,10 +3749,8 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
     def _parse_minutes_played_ot(st: str, q: int) -> float:
         """Like parse_minutes_played but supports OT quarters (num > 4)."""
         if not st:
-            return 0.0
-        st_up = st.upper().strip()
-        if st_up in ("NOT STARTED", "SCHEDULED", "PRE-MATCH", "PREMATCH", "PRE MATCH", "UPCOMING"):
-            return 0.0
+            return float(2 * q)
+        st_up = st.upper()
         if "FINISHED" in st_up:
             return float(4 * q)
         if "HALFTIME" in st_up or st_up.strip() in ("HT", "HALF TIME", "HALF-TIME"):
@@ -3792,10 +3784,8 @@ def process_match(parsed: dict, lines_data: dict = None) -> dict:
         For inter-quarter breaks ('Перерва після Q2') returns the completed quarter
         number so _n_completed = quarter_num (all those quarters are fully done)."""
         if not st:
-            return 1
-        st_up = st.upper().strip()
-        if st_up in ("NOT STARTED", "SCHEDULED", "PRE-MATCH", "PREMATCH", "PRE MATCH", "UPCOMING"):
-            return 1
+            return 2
+        st_up = st.upper()
         if "FINISHED" in st_up:
             return 4
         if "HALFTIME" in st_up or st_up.strip() in ("HT", "HALF TIME", "HALF-TIME"):

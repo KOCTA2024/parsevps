@@ -9,9 +9,6 @@
  *   3. python3 src/super_basket_vps_system.py run — розрахунок P_final,
  *      gates (stat/conflict/router/Team-IT/Q4), відправка детермінованого
  *      PLAY/RISK в Telegram, запис у SQLite. GPT явно вимкнений.
- *
- * Checkpoint #6 після завершення матчу виконує лише кроки 1–2 і зберігає
- * *_result_checkpoint6.json. Крок 3, Telegram і SQLite для нього вимкнені.
  */
 import path from 'path';
 import fs from 'fs';
@@ -33,9 +30,6 @@ const QUEUE_NAME  = 'match-analysis';
 const APP_ROOT    = path.resolve(__dirname, '..');
 const NODE_BIN    = process.execPath;
 const PYTHON_BIN  = process.env.PYTHON_BIN || 'python3';
-const ENABLE_FIVE_CHECKPOINTS = /^(1|true|yes|on)$/i.test(
-  String(process.env.WORKER_ENABLE_FIVE_CHECKPOINTS || 'false')
-);
 
 // super_basket_vps_system.py: путь к SQLite для сигналов/калибровки.
 // Лежит в state-volume, чтобы переживать пересоздание контейнера.
@@ -78,44 +72,6 @@ function log(jobId, level, ...args) {
   level === 'error' ? console.error(prefix, ...args) : console.log(prefix, ...args);
 }
 
-/**
- * Compatibility router while the calculator accepts only its historical
- * three checkpoints: 1=Q2 snapshot, 2=HT, 3=Q4 snapshot.
- *
- * New stage-monitor numbering is 1=pre-match, 2=Q1, 3=Q2, 4=HT, 5=Q4.
- * With WORKER_ENABLE_FIVE_CHECKPOINTS=false, #1/#2 are acknowledged as
- * skipped and #3/#4/#5 are translated to the calculator's old #1/#2/#3.
- * Old jobs without stageCheckpoint remain backward-compatible.
- */
-function resolveWorkerCheckpoint(jobData, fiveCheckpointMode = ENABLE_FIVE_CHECKPOINTS) {
-  const hasNewStageMarker = jobData.stageCheckpoint !== undefined &&
-    jobData.stageCheckpoint !== null;
-  const stageCheckpoint = Number(hasNewStageMarker ? jobData.stageCheckpoint : jobData.checkpoint) || 0;
-
-  if (fiveCheckpointMode) {
-    return {
-      accepted: stageCheckpoint >= 1 && stageCheckpoint <= 5,
-      stageCheckpoint,
-      calculatorCheckpoint: stageCheckpoint,
-    };
-  }
-
-  if (!hasNewStageMarker) {
-    return {
-      accepted: stageCheckpoint >= 1 && stageCheckpoint <= 3,
-      stageCheckpoint,
-      calculatorCheckpoint: stageCheckpoint,
-    };
-  }
-
-  const calculatorCheckpoint = ({ 3: 1, 4: 2, 5: 3 })[stageCheckpoint] || 0;
-  return {
-    accepted: calculatorCheckpoint > 0,
-    stageCheckpoint,
-    calculatorCheckpoint,
-  };
-}
-
 // ─── Job Processor ───────────────────────────────────────────────────────────
 
 async function processJob(job) {
@@ -126,45 +82,19 @@ async function processJob(job) {
   } = job.data;
   const jid = job.id ?? matchId;
 
-  const parserMathOnly = job.data.parserMathOnly === true &&
-    Number(stageCheckpoint ?? checkpoint) === 6;
-  const checkpointRoute = parserMathOnly
-    ? { accepted: true, stageCheckpoint: 6, calculatorCheckpoint: 6 }
-    : resolveWorkerCheckpoint({ stageCheckpoint, checkpoint });
-  const publicStageCheckpoint = checkpointRoute.stageCheckpoint;
-  const triggerCheckpoint = checkpointRoute.calculatorCheckpoint;
-
-  if (!checkpointRoute.accepted) {
-    log(jid, 'info', `↷ Stage checkpoint #${publicStageCheckpoint || 'unknown'} ` +
-        `(${checkpointLabel || 'unlabelled'}) skipped: worker is in legacy Q2/HT/Q4 mode. ` +
-        `Set WORKER_ENABLE_FIVE_CHECKPOINTS=true after calculator support is ready.`);
-    await job.updateProgress(100);
-    return {
-      matchId,
-      skipped: true,
-      reason: 'WORKER_LEGACY_Q2_HT_Q4_ONLY',
-      stageCheckpoint: publicStageCheckpoint || null,
-      checkpoint: null,
-      decision: null,
-      completedAt: new Date().toISOString(),
-    };
-  }
-
-  log(jid, 'info', `Starting ${parserMathOnly ? 'final parser + math snapshot' : 'analysis'} — ${home} vs ${away} [${league}] ` +
-      `(scheduled fire: ${fireAt}; stage checkpoint: ${publicStageCheckpoint || 'unknown'}` +
-      `${checkpointLabel ? `/${checkpointLabel}` : ''}; calculator checkpoint: ${triggerCheckpoint})`);
+  const triggerCheckpoint = Number(stageCheckpoint ?? checkpoint) || 0;
+  log(jid, 'info', `Starting analysis — ${home} vs ${away} [${league}] ` +
+      `(scheduled fire: ${fireAt}; stage checkpoint: ${triggerCheckpoint || 'unknown'}` +
+      `${checkpointLabel ? `/${checkpointLabel}` : ''})`);
 
   // ── Step 1: Node parser ───────────────────────────────────────────────────
   const parserScript = path.join(APP_ROOT, 'src', 'match_h2h_export.js');
-  log(jid, 'info', `Step 1 → node ${parserScript} --matchId ${matchId} --home ${homeSlug} --away ${awaySlug}` +
-      (parserMathOnly ? ' --skip-lines' : ''));
+  log(jid, 'info', `Step 1 → node ${parserScript} --matchId ${matchId} --home ${homeSlug} --away ${awaySlug}`);
   await job.updateProgress(10);
 
-  const parserArgs = [
+  const parserResult = await run(NODE_BIN, [
     parserScript, '--matchId', matchId, '--home', homeSlug, '--away', awaySlug,
-  ];
-  if (parserMathOnly) parserArgs.push('--skip-lines');
-  const parserResult = await run(NODE_BIN, parserArgs, { jobId: jid });
+  ], { jobId: jid });
 
   log(jid, 'info', `Step 1 exited ${parserResult.code}${parserResult.stderr ? '\n' + parserResult.stderr : ''}`);
   if (parserResult.code !== 0) {
@@ -190,22 +120,15 @@ async function processJob(job) {
   // the current parser JSON and lines itself, so duplicating both source files
   // for every checkpoint is unnecessary.
   fs.mkdirSync(MATCH_FILES_DIR, { recursive: true });
-  const checkpointKey = ENABLE_FIVE_CHECKPOINTS
+  const checkpointKey = triggerCheckpoint >= 1 && triggerCheckpoint <= 5
     ? `checkpoint_${triggerCheckpoint}`
-    : (triggerCheckpoint >= 1 && triggerCheckpoint <= 3
-      ? `q${triggerCheckpoint}`
-      : `checkpoint_${Date.now()}`);
+    : `checkpoint_${Date.now()}`;
   const matchBaseName = path.basename(dataFilePath, path.extname(dataFilePath));
   await job.updateProgress(40);
 
   // ── Step 2: Python calculator ─────────────────────────────────────────────
   const calcScript = path.join(APP_ROOT, 'src', 'math_script.py');
-  const calculatedFilePath = path.join(
-    MATCH_FILES_DIR,
-    parserMathOnly
-      ? `${matchBaseName}_result_checkpoint6.json`
-      : `${matchBaseName}_${checkpointKey}_result.json`
-  );
+  const calculatedFilePath = path.join(MATCH_FILES_DIR, `${matchBaseName}_${checkpointKey}_result.json`);
 
   log(jid, 'info', `Step 2 → ${PYTHON_BIN} ${calcScript} ${dataFilePath} ${lineFilePath} --output ${calculatedFilePath}`);
 
@@ -216,26 +139,6 @@ async function processJob(job) {
   }
 
   await job.updateProgress(70);
-
-  if (parserMathOnly) {
-    await job.updateProgress(100);
-    log(jid, 'info', `✓ Checkpoint #6 parser + math snapshot saved: ${calculatedFilePath}`);
-    return {
-      matchId,
-      parserExitCode: parserResult.code,
-      calcExitCode: calcResult.code,
-      superBasketExitCode: null,
-      decision: null,
-      aiVerdict: null,
-      checkpoint: 6,
-      stageCheckpoint: 6,
-      parserMathOnly: true,
-      calculatedFilePath,
-      superBasketOutputPath: null,
-      outputStatus: 'PARSER_MATH_ONLY',
-      completedAt: new Date().toISOString(),
-    };
-  }
 
   // ── Step 3: super_basket_vps_system.py ────────────────────────────────────
   // calculatedFilePath содержит отдельный snapshot этого checkpoint (h2h + lines +
@@ -299,7 +202,6 @@ async function processJob(job) {
     decision:       summary.decision ?? null,
     aiVerdict:      summary.decision?.action ?? summary.decision?.status ?? null,
     checkpoint:     triggerCheckpoint || null,
-    stageCheckpoint: publicStageCheckpoint || null,
     calculatedFilePath,
     superBasketOutputPath,
     outputStatus:   summary.output_status,
@@ -344,6 +246,5 @@ process.on('SIGINT',  () => shutdown('SIGINT'));
 
 console.log(
   `[worker] Started. Queue "${QUEUE_NAME}" | Redis ${REDIS_CONFIG.host}:${REDIS_CONFIG.port}` +
-  ` | Concurrency: ${worker.opts.concurrency}` +
-  ` | Checkpoint mode: ${ENABLE_FIVE_CHECKPOINTS ? 'FULL_1_TO_5' : 'LEGACY_Q2_HT_Q4_ONLY'}`
+  ` | Concurrency: ${worker.opts.concurrency}`
 );

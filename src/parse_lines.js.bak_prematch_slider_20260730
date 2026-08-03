@@ -21,7 +21,7 @@
  *   await fetchAndSaveLines(
  *     matchId, DATA_DIR, participants, lineFilename,
  *     homeName, awayName,
- *     mainContext, liveStatus, isPrematch
+ *     mainContext, liveStatus
  *   );
  */
 
@@ -322,7 +322,7 @@ function parseBetLabel(label, specialValue) {
 
 /**
  * Collects all market data from Shadow DOM roots on the page.
- * Returns array of { title, sliderValue, bets: [{label, specialValue, odd}] }
+ * Returns array of { title, bets: [{label, specialValue, odd}] }
  * This function is serialised and sent to the browser — NO closures over outer scope.
  */
 function collectMarketsFromShadowDOM() {
@@ -356,13 +356,6 @@ function collectMarketsFromShadowDOM() {
       if (!titleEl) continue;
       const title = titleEl.textContent.trim();
 
-      // In prematch Betking renders the currently selected full-match total in
-      // the slider thumb, while the Over/Under buttons may not carry that line.
-      // Keep it with its own market box; the Node-side transformer decides when
-      // it is appropriate to use it.
-      const sliderEl = box.querySelector('[class*="EventDetailsSliderThumbLabel-sc-"]');
-      const sliderValue = sliderEl?.textContent.trim() ?? '';
-
       const bets = [];
       const buttons = Array.from(box.querySelectorAll('button[class*="OddBoxButton-sc-"]'))
         // Some Betking builds nest similarly-named market containers. Without
@@ -386,7 +379,7 @@ function collectMarketsFromShadowDOM() {
         }
       }
 
-      if (bets.length > 0) markets.push({ title, sliderValue, bets });
+      if (bets.length > 0) markets.push({ title, bets });
     }
   }
 
@@ -421,7 +414,7 @@ function collectAllLobbyCards() {
 
 // ─── Main scraper ─────────────────────────────────────────────────────────────
 
-async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPrematch = false) {
+async function scrapeBetking(context, homeName, awayName, liveStatus = '') {
   const wantCategories = marketsForStatus(liveStatus);
   const scrapeAll      = wantCategories.size === 0;
 
@@ -869,13 +862,7 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
 
     function mergeMarkets(fresh, priority = 0) {
       for (const market of fresh) {
-        const titleKey = market.title.toLowerCase().replace(/\s+/g, ' ').trim();
-        // Every prematch slider point is a separate line of the same market.
-        // Outside prematch keep the historical title-only deduplication.
-        const sliderKey = isPrematch && classifyMarket(market.title) === 'match_total' && market.sliderValue
-          ? `|slider:${String(market.sliderValue).replace(',', '.').trim()}`
-          : '';
-        const key = `${titleKey}${sliderKey}`;
+        const key = market.title.toLowerCase().replace(/\s+/g, ' ').trim();
         const validOdds = market.bets.filter(bet => bet.odd !== null).length;
         const existing = marketIndex.get(key);
         if (!existing) {
@@ -908,141 +895,16 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
     console.log(`  [betking] Specific tabs: ${specificTabs.map(t => t.text).join(', ') || '(none)'}`);
     console.log(`  [betking] Generic  tabs: ${genericTabs.map(t => t.text).join(', ')  || '(none)'}`);
 
-    // Find slider controls in the active tab. The index is recalculated before
-    // every drag because React can replace the DOM nodes after a value change.
-    async function getSliderControls() {
-      return detailPage.evaluate(() => {
-        function roots(root, out = [root]) {
-          for (const el of root.querySelectorAll('*')) {
-            if (el.shadowRoot) roots(el.shadowRoot, out);
-          }
-          return out;
-        }
-        const controls = [];
-        const seen = new Set();
-        for (const root of roots(document)) {
-          for (const box of root.querySelectorAll('[class*="EventDetailsMarketBoxContainer-sc-"]')) {
-            if (seen.has(box)) continue;
-            seen.add(box);
-            const input = box.querySelector('input[type="range"]');
-            const track = box.querySelector('[class*="EventDetailsSliderTrack-sc-"]');
-            if (!input || !track) continue;
-            const title = box.querySelector('[class*="EventDetailsMarketName-sc-"]')?.textContent.trim() ?? '';
-            controls.push({
-              index: controls.length,
-              title,
-              min: Number(input.min),
-              max: Number(input.max),
-              value: Number(input.value),
-            });
-          }
-        }
-        return controls;
-      });
-    }
-
-    async function dragSliderTo(index, targetValue) {
-      const geometry = await detailPage.evaluate(([wantedIndex, wantedValue]) => {
-        function roots(root, out = [root]) {
-          for (const el of root.querySelectorAll('*')) {
-            if (el.shadowRoot) roots(el.shadowRoot, out);
-          }
-          return out;
-        }
-        const controls = [];
-        const seen = new Set();
-        for (const root of roots(document)) {
-          for (const box of root.querySelectorAll('[class*="EventDetailsMarketBoxContainer-sc-"]')) {
-            if (seen.has(box)) continue;
-            seen.add(box);
-            const input = box.querySelector('input[type="range"]');
-            const track = box.querySelector('[class*="EventDetailsSliderTrack-sc-"]');
-            // This is the visible draggable point from the supplied markup;
-            // pointer events bubble from the circle to React Aria's container.
-            const thumb = box.querySelector('[class*="EventDetailsSliderThumbCircle-sc-"]');
-            if (input && track) controls.push({ input, track, thumb });
-          }
-        }
-        const control = controls[wantedIndex];
-        if (!control) return null;
-        control.track.scrollIntoView({ block: 'center', inline: 'nearest' });
-        const rect = control.track.getBoundingClientRect();
-        const thumbRect = control.thumb?.getBoundingClientRect();
-        const min = Number(control.input.min);
-        const max = Number(control.input.max);
-        const ratio = max > min ? (wantedValue - min) / (max - min) : 0;
-        return {
-          fromX: thumbRect ? thumbRect.left + thumbRect.width / 2 : rect.left,
-          fromY: thumbRect ? thumbRect.top + thumbRect.height / 2 : rect.top + rect.height / 2,
-          toX: rect.left + rect.width * Math.max(0, Math.min(1, ratio)),
-          toY: rect.top + rect.height / 2,
-        };
-      }, [index, targetValue]);
-
-      if (!geometry) return false;
-      await detailPage.waitForTimeout(100);
-      await detailPage.mouse.move(geometry.fromX, geometry.fromY);
-      await detailPage.mouse.down();
-      await detailPage.mouse.move(geometry.toX, geometry.toY, { steps: 8 });
-      await detailPage.mouse.up();
-
-      // Wait until React commits the discrete point, then allow odds to refresh.
-      const reached = await detailPage.waitForFunction(([wantedIndex, wantedValue]) => {
-        function roots(root, out = [root]) {
-          for (const el of root.querySelectorAll('*')) {
-            if (el.shadowRoot) roots(el.shadowRoot, out);
-          }
-          return out;
-        }
-        const controls = [];
-        const seen = new Set();
-        for (const root of roots(document)) {
-          for (const box of root.querySelectorAll('[class*="EventDetailsMarketBoxContainer-sc-"]')) {
-            if (seen.has(box)) continue;
-            seen.add(box);
-            const input = box.querySelector('input[type="range"]');
-            const track = box.querySelector('[class*="EventDetailsSliderTrack-sc-"]');
-            if (input && track) controls.push(input);
-          }
-        }
-        return Number(controls[wantedIndex]?.value) === wantedValue;
-      }, [index, targetValue], { timeout: 3000 }).then(() => true).catch(() => false);
-      await detailPage.waitForTimeout(650);
-      return reached;
-    }
-
-    async function collectActiveTab(priority) {
-      mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM), priority);
-      if (!isPrematch) return;
-
-      const controls = await getSliderControls();
-      for (const control of controls) {
-        // The alternate prematch extraction applies only to the full-match total.
-        if (classifyMarket(control.title) !== 'match_total') continue;
-        if (!Number.isFinite(control.min) || !Number.isFinite(control.max) || control.max < control.min) continue;
-        console.log(`  [betking] Sweeping prematch slider "${control.title}": ${control.min}…${control.max}`);
-        for (let point = control.min; point <= control.max; point++) {
-          if (point === control.value) continue; // initial position already collected
-          const reached = await dragSliderTo(control.index, point);
-          if (!reached) {
-            console.warn(`  [betking] ⚠ Slider point ${point} was not reached for "${control.title}"`);
-            continue;
-          }
-          mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM), priority);
-        }
-      }
-    }
-
     // 1. Specific tabs first (freshest data)
     for (const tab of specificTabs) {
       await clickTab(tab.idx);
-      await collectActiveTab(2);
+      mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM), 2);
     }
 
     // 2. Generic tabs — fill in anything not yet seen
     for (const tab of genericTabs) {
       await clickTab(tab.idx);
-      await collectActiveTab(1);
+      mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM), 1);
     }
 
     // 3. Fallback: if no tabs at all (or nothing collected), scrape whatever is
@@ -1050,7 +912,7 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
     //    the tab bar never appears.
     if (rawMarkets.length === 0) {
       console.log('  [betking] No tabs found or empty result — scraping active view directly');
-      await collectActiveTab(0);
+      mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM), 0);
     }
 
     // Skip locked/suspended buttons: filter bets with null odds out of each market
@@ -1080,7 +942,7 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
       away_ind_total : [],
     };
 
-    for (const { title, sliderValue, bets } of rawMarkets) {
+    for (const { title, bets } of rawMarkets) {
       const cat = classifyMarket(title);
       // Log every тотал-related market so misclassifications are always visible in logs
       if (title.toLowerCase().includes('тотал'))
@@ -1210,20 +1072,10 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
 
       // ── match_total ──
       } else if (cat === 'match_total') {
-        const prematchSliderLine = isPrematch
-          ? parseFloat(String(sliderValue ?? '').replace(',', '.'))
-          : NaN;
-        if (isPrematch && Number.isFinite(prematchSliderLine)) {
-          console.log(`  [betking] Prematch match_total slider line: ${prematchSliderLine} ("${title}")`);
-        }
         for (const bet of bets) {
-          // Live: specialValue holds the line number. Prematch: the selected
-          // full-match line is displayed in EventDetailsSliderThumbLabel.
-          const lineSource = Number.isFinite(prematchSliderLine)
-            ? String(prematchSliderLine)
-            : bet.specialValue;
-          const lineVal = parseFloat(lineSource) || null;
-          const p = parseBetLabel(bet.label, lineSource);
+          // specialValue holds the line number, label holds більше/менше
+          const lineVal = parseFloat(bet.specialValue) || null;
+          const p = parseBetLabel(bet.label, bet.specialValue);
           if (!p || p.line == null) continue;
           const line = p.line ?? lineVal;
           if (!line) continue;
@@ -1439,7 +1291,6 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
  * @param {string}  awayName       — away team display name (plain string)
  * @param {import('playwright').BrowserContext} context
  * @param {string}  [liveStatus='']
- * @param {boolean} [isPrematch=false] — authoritative dc_ status is Not Started
  */
 export async function fetchAndSaveLines(
   matchId,
@@ -1449,8 +1300,7 @@ export async function fetchAndSaveLines(
   homeName,
   awayName,
   context,
-  liveStatus    = '',
-  isPrematch    = false
+  liveStatus    = ''
 ) {
   lineFilename = lineFilename ?? `line_result_${matchId}.json`;
 
@@ -1472,7 +1322,6 @@ export async function fetchAndSaveLines(
   console.log(`\n--- Завантаження ліній (betking.com.ua)… ---`);
   console.log(`  Match: "${homeName}" vs "${awayName}"`);
   console.log(`  liveStatus: "${liveStatus}"`);
-  console.log(`  isPrematch: ${isPrematch}`);
 
   let parsed = null;
   let attemptsUsed = 0;
@@ -1490,7 +1339,7 @@ export async function fetchAndSaveLines(
   for (let attempt = 1; attempt <= MAX_SCRAPE_ATTEMPTS; attempt++) {
     attemptsUsed = attempt;
     try {
-      const candidate = await scrapeBetking(context, homeName, awayName, liveStatus, isPrematch);
+      const candidate = await scrapeBetking(context, homeName, awayName, liveStatus);
       // null means the match card itself was not found. Retrying the same lobby
       // immediately is expensive and does not address the HT repricing race.
       if (!candidate) {
@@ -1531,7 +1380,6 @@ export async function fetchAndSaveLines(
     source: 'betking',
     fetchedAt: new Date().toISOString(),
     matchId,
-    isPrematch,
     attemptsUsed,
     coreMarketCount: coreMarketCount(parsed),
     retryExhaustedWithNoCoreMarkets: coreMarketCount(parsed) === 0,

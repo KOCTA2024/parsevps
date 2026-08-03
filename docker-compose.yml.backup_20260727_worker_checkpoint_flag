@@ -14,20 +14,12 @@ services:
     working_dir: /app
     command: node src/worker.js
     restart: unless-stopped
-    # Safety net: temporary Playwright profiles must never consume the host
-    # root filesystem even if a future job exits before its cleanup runs.
-    tmpfs:
-      - /tmp:size=512m,mode=1777
     env_file:
       - .env
     environment:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       WORKER_CONCURRENCY: 2
-      # false: выполнять только stage #3/#4/#5 (Q2/HT/Q4), переводя их в
-      # старые calculator checkpoint 1/2/3. Поменять на "true" только после
-      # добавления в калькулятор полноценной поддержки checkpoint 1..5.
-      WORKER_ENABLE_FIVE_CHECKPOINTS: "true"
       SUPER_BASKET_DB: /app/state/super_basket.sqlite3
       TELEGRAM_CHATS_FILE: /app/state/telegram_chats.json
       VERDICT_LOG_FILE: /app/state/verdicts.log

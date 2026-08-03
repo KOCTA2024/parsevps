@@ -9,9 +9,6 @@
  *   3. python3 src/super_basket_vps_system.py run — розрахунок P_final,
  *      gates (stat/conflict/router/Team-IT/Q4), відправка детермінованого
  *      PLAY/RISK в Telegram, запис у SQLite. GPT явно вимкнений.
- *
- * Checkpoint #6 після завершення матчу виконує лише кроки 1–2 і зберігає
- * *_result_checkpoint6.json. Крок 3, Telegram і SQLite для нього вимкнені.
  */
 import path from 'path';
 import fs from 'fs';
@@ -126,11 +123,7 @@ async function processJob(job) {
   } = job.data;
   const jid = job.id ?? matchId;
 
-  const parserMathOnly = job.data.parserMathOnly === true &&
-    Number(stageCheckpoint ?? checkpoint) === 6;
-  const checkpointRoute = parserMathOnly
-    ? { accepted: true, stageCheckpoint: 6, calculatorCheckpoint: 6 }
-    : resolveWorkerCheckpoint({ stageCheckpoint, checkpoint });
+  const checkpointRoute = resolveWorkerCheckpoint({ stageCheckpoint, checkpoint });
   const publicStageCheckpoint = checkpointRoute.stageCheckpoint;
   const triggerCheckpoint = checkpointRoute.calculatorCheckpoint;
 
@@ -150,21 +143,18 @@ async function processJob(job) {
     };
   }
 
-  log(jid, 'info', `Starting ${parserMathOnly ? 'final parser + math snapshot' : 'analysis'} — ${home} vs ${away} [${league}] ` +
+  log(jid, 'info', `Starting analysis — ${home} vs ${away} [${league}] ` +
       `(scheduled fire: ${fireAt}; stage checkpoint: ${publicStageCheckpoint || 'unknown'}` +
       `${checkpointLabel ? `/${checkpointLabel}` : ''}; calculator checkpoint: ${triggerCheckpoint})`);
 
   // ── Step 1: Node parser ───────────────────────────────────────────────────
   const parserScript = path.join(APP_ROOT, 'src', 'match_h2h_export.js');
-  log(jid, 'info', `Step 1 → node ${parserScript} --matchId ${matchId} --home ${homeSlug} --away ${awaySlug}` +
-      (parserMathOnly ? ' --skip-lines' : ''));
+  log(jid, 'info', `Step 1 → node ${parserScript} --matchId ${matchId} --home ${homeSlug} --away ${awaySlug}`);
   await job.updateProgress(10);
 
-  const parserArgs = [
+  const parserResult = await run(NODE_BIN, [
     parserScript, '--matchId', matchId, '--home', homeSlug, '--away', awaySlug,
-  ];
-  if (parserMathOnly) parserArgs.push('--skip-lines');
-  const parserResult = await run(NODE_BIN, parserArgs, { jobId: jid });
+  ], { jobId: jid });
 
   log(jid, 'info', `Step 1 exited ${parserResult.code}${parserResult.stderr ? '\n' + parserResult.stderr : ''}`);
   if (parserResult.code !== 0) {
@@ -200,12 +190,7 @@ async function processJob(job) {
 
   // ── Step 2: Python calculator ─────────────────────────────────────────────
   const calcScript = path.join(APP_ROOT, 'src', 'math_script.py');
-  const calculatedFilePath = path.join(
-    MATCH_FILES_DIR,
-    parserMathOnly
-      ? `${matchBaseName}_result_checkpoint6.json`
-      : `${matchBaseName}_${checkpointKey}_result.json`
-  );
+  const calculatedFilePath = path.join(MATCH_FILES_DIR, `${matchBaseName}_${checkpointKey}_result.json`);
 
   log(jid, 'info', `Step 2 → ${PYTHON_BIN} ${calcScript} ${dataFilePath} ${lineFilePath} --output ${calculatedFilePath}`);
 
@@ -216,26 +201,6 @@ async function processJob(job) {
   }
 
   await job.updateProgress(70);
-
-  if (parserMathOnly) {
-    await job.updateProgress(100);
-    log(jid, 'info', `✓ Checkpoint #6 parser + math snapshot saved: ${calculatedFilePath}`);
-    return {
-      matchId,
-      parserExitCode: parserResult.code,
-      calcExitCode: calcResult.code,
-      superBasketExitCode: null,
-      decision: null,
-      aiVerdict: null,
-      checkpoint: 6,
-      stageCheckpoint: 6,
-      parserMathOnly: true,
-      calculatedFilePath,
-      superBasketOutputPath: null,
-      outputStatus: 'PARSER_MATH_ONLY',
-      completedAt: new Date().toISOString(),
-    };
-  }
 
   // ── Step 3: super_basket_vps_system.py ────────────────────────────────────
   // calculatedFilePath содержит отдельный snapshot этого checkpoint (h2h + lines +

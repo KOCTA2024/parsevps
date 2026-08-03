@@ -8,14 +8,12 @@
  * пора запускати ланцюжок аналізу (парсер → math_script.py → OpenAI →
  * Telegram, все виконує сам worker.js — цей модуль лише кладе job у чергу).
  *
- * Шість контрольних точок на матч:
+ * П'ять контрольних точок на матч:
  *   Checkpoint #1 — за 5 хвилин до kickoff за розкладом (без live-зсуву)
  *   Checkpoint #2 — 2-га хвилина фактичної Q1
  *   Checkpoint #3 — 2-га хвилина фактичної Q2 (колишній Checkpoint #1)
  *   Checkpoint #4 — half-time (колишній Checkpoint #2)
  *   Checkpoint #5 — 4-та хвилина фактичної Q4 (колишній Checkpoint #3)
- *   Checkpoint #6 — після завершення матчу; лише парсер + math_script.py,
- *                   без super_basket/Telegram/SQLite
  *
  * Ігрові точки визначаються за реальною стадією матчу, а не лише за kickoff:
  * якщо старт затримано, watcher лишається живим у status=not_started і
@@ -126,7 +124,6 @@ const Q4_TRIGGER_MINUTE  = Number(process.env.Q4_TRIGGER_MINUTE) || 4;
 const CHECK_WINDOW_MS    = Number(process.env.STAGE_CHECK_WINDOW_MS)  || 35 * 60_000; // soft window; продовжується, поки реальна гра ще не дійшла до target boundary
 const HARD_CHECK_WINDOW_MS = Number(process.env.STAGE_HARD_WINDOW_MS) || 3 * 60 * 60_000; // аварійний максимум після фактичного старту live-спостереження
 const RESCAN_INTERVAL_MS = Number(process.env.MATCHES_RESCAN_MS)      || 5 * 60_000;   // раз стільки перечитуємо matches.json
-const FINAL_CATCHUP_STAGGER_MS = Number(process.env.FINAL_CATCHUP_STAGGER_MS) || 10 * 60_000;
 
 // Скільки максимум чекати ЗАВЕРШЕННЯ Checkpoint #1 (у будь-якому вигляді —
 // job поставлено, матч фінішував, чи вікно просто сплило), перш ніж
@@ -325,16 +322,6 @@ function displayedCheckpointNumber(legacyCheckpointIndex) {
   return legacyCheckpointIndex + 3;
 }
 
-function stableStaggerMs(value, maxMs) {
-  if (!Number.isFinite(maxMs) || maxMs <= 0) return 0;
-  let hash = 2166136261;
-  for (const ch of String(value)) {
-    hash ^= ch.charCodeAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0) % Math.floor(maxMs);
-}
-
 // ─── State ───────────────────────────────────────────────────────────────────
 
 // matchId(String) -> Set(індексів чекпоінтів 0..2), які вже заплановані —
@@ -460,9 +447,6 @@ async function enqueueAnalysis(match, checkpointIndex, metadata = {}) {
     checkpoint:   sequenceCheckpoint,
     stageCheckpoint: sequenceCheckpoint,
     checkpointLabel,
-    // Checkpoint #6 is an archival final snapshot. worker.js must stop after
-    // parser + math_script.py and must not run super_basket or notifications.
-    parserMathOnly: metadata.parserMathOnly === true,
   };
 
   // Унікальний jobId на кожну з трьох перерв одного матчу — інакше BullMQ
@@ -586,63 +570,6 @@ function watchQ1MinuteCheckpoint(match, sportId) {
       return;
     }
 
-    timer = setTimeout(poll, POLL_INTERVAL_MS);
-  };
-
-  void poll();
-}
-
-// ─── Checkpoint #6: фінальний snapshot після завершення матчу ───────────────
-
-function queueFinalCheckpoint(match) {
-  const { id } = match;
-  log(id, `✓ Checkpoint #6 trigger: match finished — queueing parser + math snapshot only.`);
-  return enqueueAnalysis(match, null, {
-    sequenceCheckpoint: 6,
-    checkpointLabel: 'final result after match finish',
-    triggerLabel: 'Checkpoint #6 match finished',
-    jobId: `${id}_checkpoint6_final`,
-    parserMathOnly: true,
-  });
-}
-
-/**
- * Poll the lightweight stage feed until DA=3 (finished), then enqueue one
- * parser+math-only job. Its stable jobId makes the trigger idempotent while
- * BullMQ retains the job, and worker.js writes *_result_checkpoint6.json.
- */
-function watchFinalCheckpoint(match, sportId) {
-  const { id } = match;
-  let stopped = false;
-  let timer = null;
-
-  const finish = () => {
-    stopped = true;
-    if (timer) clearTimeout(timer);
-  };
-
-  log(id, `▶ Checkpoint #6 window opened — waiting for match finish; ` +
-          `polling every ${POLL_INTERVAL_MS / 1000}s.`);
-
-  const poll = async () => {
-    if (stopped) return;
-
-    let stage;
-    try {
-      stage = await matchStageChecker.checkStage(id, sportId);
-    } catch (e) {
-      log(id, `⚠ Checkpoint #6 stage check failed (will retry): ${e.message}`);
-      timer = setTimeout(poll, POLL_INTERVAL_MS);
-      return;
-    }
-
-    if (stage.status === 'finished') {
-      finish();
-      await queueFinalCheckpoint(match);
-      return;
-    }
-
-    log(id, `Checkpoint #6 — stage: ${stage.status}; waiting for finished.`);
     timer = setTimeout(poll, POLL_INTERVAL_MS);
   };
 
@@ -1207,33 +1134,6 @@ function scheduleMatch(match) {
             `(+${minutes} min${quarterMin === QUARTER_MIN_NBA ? ', NBA' : ''}) ` +
             `→ opens in ${(delay / 60_000).toFixed(1)} min`);
   });
-
-  // Start the final watcher near the expected end instead of polling for the
-  // whole match. A delayed match remains tracked until it really finishes; a
-  // restart after the expected end opens the watcher immediately.
-  if (!doneSet.has('final')) {
-    doneSet.add('final');
-    const expectedFinishMs = kickoffMs +
-      (offsets[2] + SHORT_BREAK_MIN + quarterMin) * 60_000;
-    const baseDelay = Math.max(0, expectedFinishMs - now);
-    const staleScheduledStagger = baseDelay === 0 && match.status === 'scheduled'
-      ? stableStaggerMs(id, FINAL_CATCHUP_STAGGER_MS)
-      : 0;
-    const delay = baseDelay + staleScheduledStagger;
-
-    if (match.status === 'finished') {
-      setTimeout(() => {
-        queueFinalCheckpoint(match).catch((e) => {
-          console.error(`[stage-monitor] Failed to queue final checkpoint for ${id}:`, e.message);
-        });
-      }, 0);
-    } else {
-      setTimeout(() => watchFinalCheckpoint(match, sportId), delay);
-    }
-    log(id, `Scheduled checkpoint #6 (final parser + math snapshot) ` +
-            `→ ${match.status === 'finished' ? 'queueing now from matches.json finished status' :
-              `watcher opens in ${(delay / 60_000).toFixed(1)} min`}`);
-  }
 }
 
 // ─── Завантаження matches.json ────────────────────────────────────────────────
@@ -1287,7 +1187,7 @@ async function main() {
     `[stage-monitor] Started. Watching "${MATCHES_FILE}" | ` +
     `poll every ${POLL_INTERVAL_MS / 1000}s | check window ${CHECK_WINDOW_MS / 60_000} min | ` +
     `checkpoints: #1 schedule-${PREMATCH_LEAD_MIN}m, #2 Q1-${Q1_TRIGGER_MINUTE}m, ` +
-    `#3 Q2-${Q2_TRIGGER_MINUTE}m, #4 HT, #5 Q4-${Q4_TRIGGER_MINUTE}m, #6 final parser+math | ` +
+    `#3 Q2-${Q2_TRIGGER_MINUTE}m, #4 HT, #5 Q4-${Q4_TRIGGER_MINUTE}m | ` +
     `stall-confirm fallback ${STALL_CONFIRM_MS / 60_000} min | ` +
     `soft window ${CHECK_WINDOW_MS / 60_000} min (progress-aware) | hard max ${HARD_CHECK_WINDOW_MS / 60_000} min | ` +
     `rescanning matches.json every ${RESCAN_INTERVAL_MS / 60_000} min | ` +

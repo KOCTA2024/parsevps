@@ -156,15 +156,12 @@ async function processJob(job) {
 
   // ── Step 1: Node parser ───────────────────────────────────────────────────
   const parserScript = path.join(APP_ROOT, 'src', 'match_h2h_export.js');
-  log(jid, 'info', `Step 1 → node ${parserScript} --matchId ${matchId} --home ${homeSlug} --away ${awaySlug}` +
-      (parserMathOnly ? ' --skip-lines' : ''));
+  log(jid, 'info', `Step 1 → node ${parserScript} --matchId ${matchId} --home ${homeSlug} --away ${awaySlug}`);
   await job.updateProgress(10);
 
-  const parserArgs = [
+  const parserResult = await run(NODE_BIN, [
     parserScript, '--matchId', matchId, '--home', homeSlug, '--away', awaySlug,
-  ];
-  if (parserMathOnly) parserArgs.push('--skip-lines');
-  const parserResult = await run(NODE_BIN, parserArgs, { jobId: jid });
+  ], { jobId: jid });
 
   log(jid, 'info', `Step 1 exited ${parserResult.code}${parserResult.stderr ? '\n' + parserResult.stderr : ''}`);
   if (parserResult.code !== 0) {

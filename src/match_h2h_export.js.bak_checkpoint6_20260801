@@ -35,7 +35,6 @@ function parseArgs() {
     h2hLimit : DEFAULT_H2H_LIMIT,
     fileType : 'json',
     fileName : null,
-    skipLines: false,
   };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -48,7 +47,6 @@ function parseArgs() {
     if (arg === '--limit'     && args[i + 1]) { options.limit    = Number(args[++i]) || DEFAULT_LIMIT; continue; }
     if (arg === '--h2hLimit'  && args[i + 1]) { options.h2hLimit = Number(args[++i]) || DEFAULT_H2H_LIMIT; continue; }
     if (arg === '--matchUrl'  && args[i + 1]) { options.matchUrl = args[++i]; continue; }
-    if (arg === '--skip-lines' || arg === '--skipLines') { options.skipLines = true; continue; }
     // Legacy key=value style still supported
     if (arg.startsWith('matchUrl='))  options.matchUrl  = arg.slice('matchUrl='.length);
     if (arg.startsWith('limit='))     options.limit     = Number(arg.slice('limit='.length))    || DEFAULT_LIMIT;
@@ -1125,29 +1123,11 @@ async function main() {
     const lineDcStatus = enrichMap.get(matchId)?.dcStatus?.statusStr ?? '';
     const isPrematch = lineDcStatus === 'Not Started';
 
-    const lineFilePath = path.join(DATA_DIR, lineFilename);
-    if (options.skipLines) {
-      // Final checkpoint: bookmakers normally remove the event immediately
-      // after the finish. Reuse the last live line snapshot when available;
-      // otherwise write the same kind of explicit error payload understood by
-      // math_script.py instead of spending minutes scanning an empty lobby.
-      if (fs.existsSync(lineFilePath)) {
-        console.log(`--- Лінії: --skip-lines, використовується існуючий ${lineFilename} ---`);
-      } else {
-        fs.writeFileSync(lineFilePath, JSON.stringify({
-          error: 'lines_skipped_after_finish',
-          matchId,
-          source: 'checkpoint6',
-        }, null, 2), 'utf-8');
-        console.log(`--- Лінії: --skip-lines, створено placeholder ${lineFilename} ---`);
-      }
-    } else {
-      // fetchAndSaveLines now writes directly to DATA_DIR with the isolated filename.
-      await fetchAndSaveLines(
-        matchId, DATA_DIR, participants, lineFilename,
-        homeName, awayName, mainContext, liveStatus, isPrematch
-      );
-    }
+    // fetchAndSaveLines now writes directly to DATA_DIR with the isolated filename.
+    await fetchAndSaveLines(
+      matchId, DATA_DIR, participants, lineFilename,
+      homeName, awayName, mainContext, liveStatus, isPrematch
+    );
  
     if (!homeName || !awayName) {
       if (mainMatch.homeName) homeName = mainMatch.homeName;

@@ -869,13 +869,7 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
 
     function mergeMarkets(fresh, priority = 0) {
       for (const market of fresh) {
-        const titleKey = market.title.toLowerCase().replace(/\s+/g, ' ').trim();
-        // Every prematch slider point is a separate line of the same market.
-        // Outside prematch keep the historical title-only deduplication.
-        const sliderKey = isPrematch && classifyMarket(market.title) === 'match_total' && market.sliderValue
-          ? `|slider:${String(market.sliderValue).replace(',', '.').trim()}`
-          : '';
-        const key = `${titleKey}${sliderKey}`;
+        const key = market.title.toLowerCase().replace(/\s+/g, ' ').trim();
         const validOdds = market.bets.filter(bet => bet.odd !== null).length;
         const existing = marketIndex.get(key);
         if (!existing) {
@@ -908,141 +902,16 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
     console.log(`  [betking] Specific tabs: ${specificTabs.map(t => t.text).join(', ') || '(none)'}`);
     console.log(`  [betking] Generic  tabs: ${genericTabs.map(t => t.text).join(', ')  || '(none)'}`);
 
-    // Find slider controls in the active tab. The index is recalculated before
-    // every drag because React can replace the DOM nodes after a value change.
-    async function getSliderControls() {
-      return detailPage.evaluate(() => {
-        function roots(root, out = [root]) {
-          for (const el of root.querySelectorAll('*')) {
-            if (el.shadowRoot) roots(el.shadowRoot, out);
-          }
-          return out;
-        }
-        const controls = [];
-        const seen = new Set();
-        for (const root of roots(document)) {
-          for (const box of root.querySelectorAll('[class*="EventDetailsMarketBoxContainer-sc-"]')) {
-            if (seen.has(box)) continue;
-            seen.add(box);
-            const input = box.querySelector('input[type="range"]');
-            const track = box.querySelector('[class*="EventDetailsSliderTrack-sc-"]');
-            if (!input || !track) continue;
-            const title = box.querySelector('[class*="EventDetailsMarketName-sc-"]')?.textContent.trim() ?? '';
-            controls.push({
-              index: controls.length,
-              title,
-              min: Number(input.min),
-              max: Number(input.max),
-              value: Number(input.value),
-            });
-          }
-        }
-        return controls;
-      });
-    }
-
-    async function dragSliderTo(index, targetValue) {
-      const geometry = await detailPage.evaluate(([wantedIndex, wantedValue]) => {
-        function roots(root, out = [root]) {
-          for (const el of root.querySelectorAll('*')) {
-            if (el.shadowRoot) roots(el.shadowRoot, out);
-          }
-          return out;
-        }
-        const controls = [];
-        const seen = new Set();
-        for (const root of roots(document)) {
-          for (const box of root.querySelectorAll('[class*="EventDetailsMarketBoxContainer-sc-"]')) {
-            if (seen.has(box)) continue;
-            seen.add(box);
-            const input = box.querySelector('input[type="range"]');
-            const track = box.querySelector('[class*="EventDetailsSliderTrack-sc-"]');
-            // This is the visible draggable point from the supplied markup;
-            // pointer events bubble from the circle to React Aria's container.
-            const thumb = box.querySelector('[class*="EventDetailsSliderThumbCircle-sc-"]');
-            if (input && track) controls.push({ input, track, thumb });
-          }
-        }
-        const control = controls[wantedIndex];
-        if (!control) return null;
-        control.track.scrollIntoView({ block: 'center', inline: 'nearest' });
-        const rect = control.track.getBoundingClientRect();
-        const thumbRect = control.thumb?.getBoundingClientRect();
-        const min = Number(control.input.min);
-        const max = Number(control.input.max);
-        const ratio = max > min ? (wantedValue - min) / (max - min) : 0;
-        return {
-          fromX: thumbRect ? thumbRect.left + thumbRect.width / 2 : rect.left,
-          fromY: thumbRect ? thumbRect.top + thumbRect.height / 2 : rect.top + rect.height / 2,
-          toX: rect.left + rect.width * Math.max(0, Math.min(1, ratio)),
-          toY: rect.top + rect.height / 2,
-        };
-      }, [index, targetValue]);
-
-      if (!geometry) return false;
-      await detailPage.waitForTimeout(100);
-      await detailPage.mouse.move(geometry.fromX, geometry.fromY);
-      await detailPage.mouse.down();
-      await detailPage.mouse.move(geometry.toX, geometry.toY, { steps: 8 });
-      await detailPage.mouse.up();
-
-      // Wait until React commits the discrete point, then allow odds to refresh.
-      const reached = await detailPage.waitForFunction(([wantedIndex, wantedValue]) => {
-        function roots(root, out = [root]) {
-          for (const el of root.querySelectorAll('*')) {
-            if (el.shadowRoot) roots(el.shadowRoot, out);
-          }
-          return out;
-        }
-        const controls = [];
-        const seen = new Set();
-        for (const root of roots(document)) {
-          for (const box of root.querySelectorAll('[class*="EventDetailsMarketBoxContainer-sc-"]')) {
-            if (seen.has(box)) continue;
-            seen.add(box);
-            const input = box.querySelector('input[type="range"]');
-            const track = box.querySelector('[class*="EventDetailsSliderTrack-sc-"]');
-            if (input && track) controls.push(input);
-          }
-        }
-        return Number(controls[wantedIndex]?.value) === wantedValue;
-      }, [index, targetValue], { timeout: 3000 }).then(() => true).catch(() => false);
-      await detailPage.waitForTimeout(650);
-      return reached;
-    }
-
-    async function collectActiveTab(priority) {
-      mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM), priority);
-      if (!isPrematch) return;
-
-      const controls = await getSliderControls();
-      for (const control of controls) {
-        // The alternate prematch extraction applies only to the full-match total.
-        if (classifyMarket(control.title) !== 'match_total') continue;
-        if (!Number.isFinite(control.min) || !Number.isFinite(control.max) || control.max < control.min) continue;
-        console.log(`  [betking] Sweeping prematch slider "${control.title}": ${control.min}…${control.max}`);
-        for (let point = control.min; point <= control.max; point++) {
-          if (point === control.value) continue; // initial position already collected
-          const reached = await dragSliderTo(control.index, point);
-          if (!reached) {
-            console.warn(`  [betking] ⚠ Slider point ${point} was not reached for "${control.title}"`);
-            continue;
-          }
-          mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM), priority);
-        }
-      }
-    }
-
     // 1. Specific tabs first (freshest data)
     for (const tab of specificTabs) {
       await clickTab(tab.idx);
-      await collectActiveTab(2);
+      mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM), 2);
     }
 
     // 2. Generic tabs — fill in anything not yet seen
     for (const tab of genericTabs) {
       await clickTab(tab.idx);
-      await collectActiveTab(1);
+      mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM), 1);
     }
 
     // 3. Fallback: if no tabs at all (or nothing collected), scrape whatever is
@@ -1050,7 +919,7 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
     //    the tab bar never appears.
     if (rawMarkets.length === 0) {
       console.log('  [betking] No tabs found or empty result — scraping active view directly');
-      await collectActiveTab(0);
+      mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM), 0);
     }
 
     // Skip locked/suspended buttons: filter bets with null odds out of each market
