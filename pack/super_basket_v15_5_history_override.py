@@ -1194,62 +1194,23 @@ def telegram_message(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _telegram_chat_ids(chats_file: Optional[str | Path] = None) -> tuple[list[str], str]:
-    """Load recipients from the shared state volume, then fall back to env."""
-    configured = chats_file or os.getenv("TELEGRAM_CHATS_FILE") or "/app/state/telegram_chats.json"
-    path = Path(configured).expanduser()
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        raw_ids = payload.get("chatIds") if isinstance(payload, dict) else None
-        if isinstance(raw_ids, list):
-            chat_ids = list(dict.fromkeys(
-                str(value).strip() for value in raw_ids
-                if str(value).strip()
-            ))
-            if chat_ids:
-                return chat_ids, "file"
-    except (OSError, ValueError, TypeError):
-        pass
-
-    raw_fallback = os.getenv("TELEGRAM_CHAT_IDS") or ""
-    fallback_ids = [value.strip() for value in raw_fallback.split(",") if value.strip()]
-    legacy_chat_id = os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID")
-    if legacy_chat_id and str(legacy_chat_id).strip():
-        fallback_ids.append(str(legacy_chat_id).strip())
-    return list(dict.fromkeys(fallback_ids)), "env"
-
-
 def send_telegram(text: str) -> dict[str, Any]:
     token = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN")
-    chat_ids, recipients_source = _telegram_chat_ids()
-    if not token:
-        return {"status": "SKIPPED_MISSING_TELEGRAM_TOKEN"}
-    if not chat_ids:
-        return {"status": "SKIPPED_MISSING_TELEGRAM_CHATS", "recipients_source": recipients_source}
-
-    message_ids: list[int] = []
-    for chat_id in chat_ids:
-        data = urllib.parse.urlencode({
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML",
-            "disable_web_page_preview": "true",
-        }).encode()
-        request = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
-        with urllib.request.urlopen(request, timeout=20) as response:
-            payload = json.loads(response.read())
-        if not payload.get("ok"):
-            raise RuntimeError(f"Telegram rejected message: {payload}")
-        message_id = (payload.get("result") or {}).get("message_id")
-        if message_id is not None:
-            message_ids.append(message_id)
-
-    return {
-        "status": "SENT",
-        "recipients_source": recipients_source,
-        "chats_sent": len(chat_ids),
-        "message_ids": message_ids,
-    }
+    chat_id = os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID")
+    if not token or not chat_id:
+        return {"status": "SKIPPED_MISSING_TELEGRAM_ENV"}
+    data = urllib.parse.urlencode({
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": "true",
+    }).encode()
+    request = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
+    with urllib.request.urlopen(request, timeout=20) as response:
+        payload = json.loads(response.read())
+    if not payload.get("ok"):
+        raise RuntimeError(f"Telegram rejected message: {payload}")
+    return {"status": "SENT", "message_id": (payload.get("result") or {}).get("message_id")}
 
 
 def analyse_file(
@@ -1381,12 +1342,7 @@ def analyse_file(
         },
     }
     message = telegram_message(result)
-    if not send:
-        delivery = {"status": "DISABLED"}
-    elif selected.get("action") == "PASS":
-        delivery = {"status": "SKIPPED_PASS_SIGNAL"}
-    else:
-        delivery = send_telegram(message)
+    delivery = send_telegram(message) if send else {"status": "DISABLED"}
     result["telegram"] = {"message": message, "delivery": delivery}
 
     destination = Path(output_path).expanduser().resolve() if output_path else match_path.with_name(match_path.stem + "_v15_5_result.json")

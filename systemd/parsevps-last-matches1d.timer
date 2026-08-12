@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh ParseVPS last_matches1d daily at 10:00 and 23:00 Kyiv time
+
+[Timer]
+OnCalendar=*-*-* 10,23:00:00 Europe/Kyiv
+Persistent=true
+Unit=parsevps-last-matches1d.service
+
+[Install]
+WantedBy=timers.target
