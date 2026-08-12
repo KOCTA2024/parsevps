@@ -6,7 +6,7 @@
  * Ланцюжок:
  *   1. node src/match_h2h_export.js         — парсер h2h
  *   2. python3 src/math_script.py           — математичний розрахунок
- *   3. python3 src/super_basket_v15_5_history_override.py run — головний v15.5 радник.
+ *   3. python3 src/super_basket_v15_3_hybrid_pro.py run — головний v15.3 радник.
  *      Він динамічно завантажує basketball_score_predictor_v4.py, v14-router
  *      та production calibration, формує одну рекомендацію, пише JSON/SQLite
  *      і за прапором --telegram відправляє повідомлення.
@@ -41,15 +41,15 @@ const ENABLE_FIVE_CHECKPOINTS = /^(1|true|yes|on)$/i.test(
 // super_basket_vps_system.py: путь к SQLite для сигналов/калибровки.
 // Лежит в state-volume, чтобы переживать пересоздание контейнера.
 const SUPER_BASKET_DB = process.env.SUPER_BASKET_DB
-  || path.join(APP_ROOT, 'state', 'super_basket_v15_5.sqlite3');
+  || path.join(APP_ROOT, 'state', 'super_basket_v15_3.sqlite3');
 const MATCH_FILES_DIR = process.env.MATCH_FILES_DIR
   || path.join(APP_ROOT, 'state', 'match_files');
 
-// v15.5 is the only executable entry point for the advisory step.
+// v15.3 is the only executable entry point for the advisory step.
 // The three dependency paths are passed explicitly so deployment does not rely
 // on cwd-based sibling discovery. Filenames with spaces are safe with execFile.
 const SUPER_BASKET_V15_SCRIPT = process.env.SUPER_BASKET_V15_SCRIPT
-  || path.join(APP_ROOT, 'src', 'super_basket_v15_5_history_override.py');
+  || path.join(APP_ROOT, 'src', 'super_basket_v15_3_hybrid_pro.py');
 const SCORE_MODEL_SCRIPT = process.env.SUPER_BASKET_SCORE_MODEL
   || path.join(APP_ROOT, 'src', 'basketball_score_predictor_v4.py');
 const LEGACY_ADVISOR_SCRIPT = process.env.SUPER_BASKET_LEGACY_ADVISOR
@@ -251,10 +251,10 @@ async function processJob(job) {
     };
   }
 
-  // ── Step 3: SUPER BASKET v15.5 ────────────────────────────────────────────
+  // ── Step 3: SUPER BASKET v15.3 ────────────────────────────────────────────
   // calculatedFilePath is the checkpoint snapshot. If it already contains
-  // super_basket_calculation.market_evaluations, v15.5 reuses that audited
-  // legacy calculation. Regardless, v15.5 loads the score model itself and
+  // super_basket_calculation.market_evaluations, v15.3 reuses that audited
+  // legacy calculation. Regardless, v15.3 loads the score model itself and
   // derives the stage from the JSON, so there is no --checkpoint argument.
   const requiredV15Files = [
     SUPER_BASKET_V15_SCRIPT,
@@ -264,12 +264,12 @@ async function processJob(job) {
   ];
   const missingV15Files = requiredV15Files.filter(p => !fs.existsSync(p));
   if (missingV15Files.length) {
-    throw new Error(`Missing SUPER BASKET v15.5 file(s): ${missingV15Files.join(', ')}`);
+    throw new Error(`Missing SUPER BASKET v15.3 file(s): ${missingV15Files.join(', ')}`);
   }
 
   const superBasketOutputPath = path.join(
     MATCH_FILES_DIR,
-    `${matchBaseName}_${checkpointKey}_v15_5_result.json`
+    `${matchBaseName}_${checkpointKey}_v15_3_result.json`
   );
 
   const superBasketArgs = [
@@ -284,7 +284,7 @@ async function processJob(job) {
     '--telegram',
   ];
 
-  // Optional: v15.5 also reads SUPER_BASKET_BANKROLL / _USDT from the inherited
+  // Optional: v15.3 also reads SUPER_BASKET_BANKROLL / _USDT from the inherited
   // environment. Passing --bankroll-usdt is therefore unnecessary here.
   log(jid, 'info', `Step 3 → ${PYTHON_BIN} ${SUPER_BASKET_V15_SCRIPT} run ` +
       `--match ${calculatedFilePath} --output ${superBasketOutputPath} ` +

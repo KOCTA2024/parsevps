@@ -1,0 +1,77 @@
+ТЗ ПРОГРАМІСТУ ПАРСЕРА — MARKET IDENTITY FIX
+Версія: 2026-08-03
+
+ПРОБЛЕМА
+Парсер іноді записує індивідуальні тотали команди за чверть у масив quarter_total і призначає їм неправильний scope Q1/Q2/Q3. Через це калькулятор порівнює командну лінію 22.5–27.5 із сумою очок двох команд.
+
+ПІДТВЕРДЖЕНІ ПРИКЛАДИ
+1) TNT Tropang Giga vs San Miguel Beermen, matchId=d8M6Un9a
+   quarter_total: 25.5, 26.5, 27.5 і 52.5.
+   Лінії 25.5–27.5 є командними тоталами чверті; 52.5 — загальний тотал чверті.
+
+2) Freseros vs Mineros, matchId=G4L39Xko
+   quarter_total: 21.5, 22.5 і 43.5.
+   21.5 + 22.5 ≈ 43.5, тому перші дві лінії є home/away team IT, а 43.5 — combined quarter total.
+
+3) Nha Trang Dolphins vs Ho Chi Minh City Wings, matchId=2qdmqvqg
+   line=118.5 записана як match_total, але JSON не зберігає raw_market_name/raw_selection_name/team identity. Таку лінію неможливо перевірити або правильно перевизначити downstream.
+
+ПРАВИЛЬНА JSON-СХЕМА
+Кожний market outcome повинен зберігати:
+- market_type: MATCH_TOTAL | QUARTER_TOTAL | TEAM_IT_MATCH | TEAM_IT_QUARTER | TEAM_IT_H1 | TEAM_IT_H2
+- scope: Match | H1 | H2 | Q1 | Q2 | Q3 | Q4
+- team_side: home | away | null
+- team_name: точна назва команди або null
+- line
+- overOdd / underOdd
+- raw_market_name: оригінальна назва групи ринку з букмекера
+- raw_selection_name: оригінальна назва outcome/selection
+- source_market_id
+- source_outcome_id
+- source: BETKING
+- fetchedAt
+
+ПРИКЛАД TEAM IT ЗА ЧВЕРТЬ
+{
+  "market_type": "TEAM_IT_QUARTER",
+  "scope": "Q1",
+  "team_side": "home",
+  "team_name": "Фресерос",
+  "line": 21.5,
+  "overOdd": 1.76,
+  "underOdd": 1.90,
+  "raw_market_name": "1st Quarter - Freseros Total",
+  "raw_selection_name": "Over/Under 21.5",
+  "source_market_id": "...",
+  "source_outcome_id": "..."
+}
+
+ПРИКЛАД ЗАГАЛЬНОГО ТОТАЛУ ЧВЕРТІ
+{
+  "market_type": "QUARTER_TOTAL",
+  "scope": "Q1",
+  "team_side": null,
+  "team_name": null,
+  "line": 43.5,
+  "overOdd": 1.76,
+  "underOdd": 1.90,
+  "raw_market_name": "1st Quarter Total",
+  "raw_selection_name": "Over/Under 43.5"
+}
+
+ОБОВ'ЯЗКОВІ VALIDATION RULES
+1. quarter_total/QUARTER_TOTAL не може містити team_side або team_name.
+2. TEAM_IT_QUARTER обов'язково має team_side та team_name.
+3. Не визначати Q1/Q2/Q3/Q4 за порядком елементів або цифрами в назві команди. Scope брати лише з назви market group / source market metadata.
+4. Якщо дві низькі лінії L_home і L_away дають L_home + L_away ≈ combined quarter total (допуск ±2.5), це home/away TEAM_IT_QUARTER, а не два загальні тотали різних чвертей.
+5. Якщо quarter total <30 і поруч є combined total 35–60, без team identity рядок позначити:
+   market_type="AMBIGUOUS_TEAM_IT_QUARTER", eligible_market=false.
+6. Якщо match_total <120, обов'язково зберігати raw_market_name. Без raw_market_name/team identity — eligible_market=false до ручної/логічної верифікації.
+7. Не генерувати _description/_type замість сирих полів. Згенерований опис не є доказом, що upstream market був розпізнаний правильно.
+
+UNIT TESTS
+- G4L39Xko: 21.5 і 22.5 не повинні потрапити в QUARTER_TOTAL; 43.5 повинен.
+- d8M6Un9a: 26.5 не повинен бути Q3 combined total.
+- 8j08HeXp: 45.5 повинен бути TEAM_IT_MATCH, home, Пуерто-Рико Ж.
+- d8M6Un9a checkpoint_4: 59.5 повинен бути TEAM_IT_MATCH, away, Сан-Мігель Бірмен.
+- 2qdmqvqg: 118.5 без raw_market_name не можна віддавати як грошовий MATCH_TOTAL.

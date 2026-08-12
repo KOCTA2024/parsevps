@@ -1,0 +1,26 @@
+SUPER BASKET v15.5 TEST LOG
+===========================
+
+Compile: PASS
+CLI --help: PASS
+Logic tests: 13/13 LOGIC TESTS PASS
+
+Covered cases:
+- delta 3.9 => PASS
+- delta >=4 + history/scenario >=60 => RISK path
+- history <60 => PASS
+- scenario <60 => PASS
+- FAKE OVER + history 90%+ + scenario 60%+ => RISK override
+- FAKE OVER + history 75%+ + scenario 60%+ => RISK override
+- FAKE OVER without >=75% history => PASS
+- U17 => PASS/no betting signal
+- quarter delta 4-6.9 => max RISK
+- quarter delta >=7 can retain PLAY path
+- HOT CONTINUATION => hard PASS for UNDER
+- U17 detection => PASS
+- U18 detection => allowed
+
+Unchanged dependency SHA256:
+1f5c49b53c57e5f8489dc295e3a8f03223e31a6a7298e6bba8de76726ae9b279  basketball_score_predictor_v4.py
+9e43a3c52d610294030568fadd801e26612c6114b7d2ff7bbc6a2a05ff48c2cb  super_basket_vps_system_FINAL_v14_2_ALWAYS_TELEGRAM_STAGE_ROUTER 2.py
+70a80baea1c1fb89c03e3c425ca1aec56bbdd35b251649af6c48c6f0e85c5efa  v15_2_calibration_production_485.json

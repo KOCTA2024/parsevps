@@ -122,162 +122,128 @@ function marketsForStatus(_liveStatus = '') {
 
 // ─── Market name → category ───────────────────────────────────────────────────
 
-function classifyMarket(name) {
-  const n = name.toLowerCase().trim();
+function inferScopeFromText(...parts) {
+  const s = parts.filter(Boolean).join(' ').toLowerCase().replace(/[’`]/g, "'").trim();
+  if (!s) return null;
 
-  // ── Helpers: quarter / half keyword detection ──────────────────────────────
-  // Centralised so every market type uses the same detection logic.
-  // Covers all known betking label formats:
-  //   "1-а чверть", "1 чверть", "перша чверть", "1-ї чверті", "1'ї чверті",
-  //   "чверть 1", "q1" (Latin fallback), and numeric-prefix variants ("1 чверть:").
+  const quarter = n => (
+    new RegExp(`\\bq${n}\\b`, 'i').test(s) ||
+    new RegExp(`(?:^|\\D)${n}\\s*(?:-|–|—)?\\s*(?:а|я|га|та|тя|ша|ї|ої|го)?\\s*(?:чверт|quarter)`, 'i').test(s) ||
+    new RegExp(`(?:чверт|quarter)\\w*\\s*${n}(?:\\D|$)`, 'i').test(s)
+  );
+  if ((s.includes('перш') && s.includes('чверт')) || /\b(?:first|1st)\s+quarter\b/i.test(s) || quarter(1)) return 'Q1';
+  if ((s.includes('друг') && s.includes('чверт')) || /\b(?:second|2nd)\s+quarter\b/i.test(s) || quarter(2)) return 'Q2';
+  if ((s.includes('трет') && s.includes('чверт')) || /\b(?:third|3rd)\s+quarter\b/i.test(s) || quarter(3)) return 'Q3';
+  if ((s.includes('четверт') && s.includes('чверт')) || /\b(?:fourth|4th)\s+quarter\b/i.test(s) || quarter(4)) return 'Q4';
 
-  function isQ1(s) {
-    return s.includes('перш') && s.includes('чверт') ||
-           s.includes('1-а чверт') || s.includes('1-ї чверт') ||
-           s.includes("1'ї чверт") || s.includes('1 чверт') ||
-           s.includes('чверт') && /\b1\b/.test(s) ||
-           /\bq1\b/.test(s);
-  }
-  function isQ2(s) {
-    return s.includes('друг') && s.includes('чверт') ||
-           s.includes('2-а чверт') || s.includes('2-ї чверт') ||
-           s.includes("2'ї чверт") || s.includes('2 чверт') ||
-           s.includes('чверт') && /\b2\b/.test(s) ||
-           /\bq2\b/.test(s);
-  }
-  function isQ3(s) {
-    return s.includes('трет') && s.includes('чверт') ||
-           s.includes('3-я чверт') || s.includes('3-ї чверт') ||
-           s.includes("3'ї чверт") || s.includes('3 чверт') ||
-           s.includes('чверт') && /\b3\b/.test(s) ||
-           /\bq3\b/.test(s);
-  }
-  function isQ4(s) {
-    return s.includes('четверт') && s.includes('чверт') ||
-           s.includes('4-а чверт') || s.includes('4-та чверт') ||
-           s.includes('4-ї чверт') || s.includes("4'ї чверт") ||
-           s.includes('4 чверт') ||
-           s.includes('чверт') && /\b4\b/.test(s) ||
-           /\bq4\b/.test(s);
-  }
+  const half = n => new RegExp(`(?:^|\\D)${n}\\s*(?:-|–|—)?\\s*(?:а|я|га|та|ї|ої|го)?\\s*(?:полов|half)`, 'i').test(s);
+  if ((s.includes('перш') && s.includes('полов')) || /\bfirst\s+half\b/i.test(s) || half(1) || /\b1h\b/i.test(s)) return 'H1';
+  if ((s.includes('друг') && s.includes('полов')) || /\bsecond\s+half\b/i.test(s) || half(2) || /\b2h\b/i.test(s)) return 'H2';
+  return null;
+}
 
-  // Half detection — covers "1-а половина", "1 половина", "перша половина",
-  // "тотал 1-ї половини", "1'ї половини", etc.
-  function isH1(s) {
-    return s.includes('перш') && s.includes('полов') ||
-           s.includes('1-а полов') || s.includes('1-ї полов') ||
-           s.includes("1'ї полов") || s.includes('1 полов') ||
-           s.includes('полов') && /\b1\b/.test(s);
-  }
-  function isH2(s) {
-    return s.includes('друг') && s.includes('полов') ||
-           s.includes('2-а полов') || s.includes('2-ї полов') ||
-           s.includes("2'ї полов") || s.includes('2 полов') ||
-           s.includes('полов') && /\b2\b/.test(s);
-  }
+function resolveTeamIdentity(text, homeName, awayName) {
+  const normalized = normalizeTeamName(text);
+  const homeNorm = normalizeTeamName(homeName);
+  const awayNorm = normalizeTeamName(awayName);
+  const homeVariants = teamVariants(homeName);
+  const awayVariants = teamVariants(awayName);
 
-  const hasTotal   = n.includes('тотал');
-  const hasQuarter = n.includes('чверт') || /\bq[1-4]\b/.test(n);
-  const hasHalf    = n.includes('полов');
+  const score = (teamNorm, variants, opponentNorm) => {
+    if (!normalized || !teamNorm) return 0;
+    let value = 0;
+    if (normalized.includes(teamNorm)) value = Math.max(value, 100 + teamNorm.length);
+    for (const variant of variants) {
+      if (variant.length >= 3 && normalized.includes(variant)) {
+        value = Math.max(value, 60 + variant.length);
+      }
+    }
+    const opponentWords = new Set(opponentNorm.split(' ').filter(w => w.length >= 4));
+    for (const word of teamNorm.split(' ').filter(w => w.length >= 4)) {
+      if (!normalized.includes(word)) continue;
+      value += opponentWords.has(word) ? 1 : Math.min(20, word.length * 2);
+    }
+    return value;
+  };
 
-  // ── Win / 1x2 ──────────────────────────────────────────────────────────────
+  const homeScore = score(homeNorm, homeVariants, awayNorm);
+  const awayScore = score(awayNorm, awayVariants, homeNorm);
+  if (homeScore <= 0 && awayScore <= 0) {
+    return { team_side: null, team_name: null, ambiguous: false, homeScore, awayScore };
+  }
+  if (homeScore > awayScore + 2) {
+    return { team_side: 'home', team_name: homeName, ambiguous: false, homeScore, awayScore };
+  }
+  if (awayScore > homeScore + 2) {
+    return { team_side: 'away', team_name: awayName, ambiguous: false, homeScore, awayScore };
+  }
+  return { team_side: null, team_name: null, ambiguous: true, homeScore, awayScore };
+}
+
+function classifyMarket(name, context = {}) {
+  const title = String(name ?? '').trim();
+  const tabText = String(context.tabText ?? context.sourceTab ?? '').trim();
+  const selectionText = String(context.selectionText ?? '').trim();
+  const n = title.toLowerCase();
+  const combined = `${title} ${tabText}`.toLowerCase().trim();
+  // Scope is intentionally derived only from the market-group title or the
+  // bookmaker tab metadata. Selection labels must never invent Q1/Q2/Q3/Q4.
+  const scope = inferScopeFromText(title) || inferScopeFromText(tabText);
+  // Team identity may legitimately be present in the market title OR in an
+  // outcome label, so both are evidence for home/away ownership.
+  const teamEvidence = `${title} ${selectionText}`.trim();
+  const teamIdentity = context.homeName && context.awayName
+    ? resolveTeamIdentity(teamEvidence, context.homeName, context.awayName)
+    : { team_side: null, team_name: null, ambiguous: false };
+
+  const hasTotal = n.includes('тотал') || /\btotal\b/i.test(n);
+  const hasQuarter = scope?.startsWith('Q') || combined.includes('чверт') || /\bq[1-4]\b/i.test(combined);
+  const hasHalf = scope?.startsWith('H') || combined.includes('полов') || /\b[12]h\b/i.test(combined);
+  const qSuffix = scope?.startsWith('Q') ? scope.toLowerCase() : null;
+  const hSuffix = scope?.startsWith('H') ? scope.toLowerCase() : null;
+
   if (n.includes('переможець') || n === 'п1п2' || n === 'п1 п2' || n === 'перемога') return 'match_1x2';
 
-  // ── Quarter 1x2 — must be before generic quarter checks ───────────────────
-  if (n.includes('1x2') && hasQuarter) {
-    if (isQ1(n)) return 'quarter_1x2_q1';
-    if (isQ2(n)) return 'quarter_1x2_q2';
-    if (isQ3(n)) return 'quarter_1x2_q3';
-    if (isQ4(n)) return 'quarter_1x2_q4';
-  }
+  if (n.includes('1x2') && hasQuarter && qSuffix) return `quarter_1x2_${qSuffix}`;
+  if (n.includes('нічия без ставки') && hasQuarter && qSuffix) return `quarter_dnb_${qSuffix}`;
 
-  // ── Quarter draw-no-bet ────────────────────────────────────────────────────
-  if (n.includes('нічия без ставки') && hasQuarter) {
-    if (isQ1(n)) return 'quarter_dnb_q1';
-    if (isQ2(n)) return 'quarter_dnb_q2';
-    if (isQ3(n)) return 'quarter_dnb_q3';
-    if (isQ4(n)) return 'quarter_dnb_q4';
-  }
-
-  // ── Quarter "both teams score N" ───────────────────────────────────────────
   if (n.includes('обидві команди наберуть')) {
-    if (isQ1(n) || n.startsWith('1')) return 'quarter_btts_q1';
-    if (isQ2(n) || n.startsWith('2')) return 'quarter_btts_q2';
-    if (isQ3(n) || n.startsWith('3')) return 'quarter_btts_q3';
-    if (isQ4(n) || n.startsWith('4')) return 'quarter_btts_q4';
-    return 'quarter_btts';
+    return qSuffix ? `quarter_btts_${qSuffix}` : 'quarter_btts';
   }
-
-  // ── Quarter race-to ────────────────────────────────────────────────────────
-  if (n.includes('гонка до')) {
-    if (isQ1(n)) return 'quarter_race_q1';
-    if (isQ2(n)) return 'quarter_race_q2';
-    if (isQ3(n)) return 'quarter_race_q3';
-    if (isQ4(n)) return 'quarter_race_q4';
-    return 'match_race';
-  }
-
-  // ── Win margin ─────────────────────────────────────────────────────────────
+  if (n.includes('гонка до')) return qSuffix ? `quarter_race_${qSuffix}` : 'match_race';
   if (n.includes('перемога з різницею')) return 'win_margin';
 
-  // ── Last digit / digit sum — must be BEFORE half/total catches ─────────────
-  // (e.g. "2-а половина - Остання цифра Ферро" must NOT fall into half_total)
   if (n.includes('остання цифра') || n.includes('сума останніх цифр')) {
-    if (isH1(n)) return 'half_last_digit_h1';
-    if (isH2(n)) return 'half_last_digit_h2';
+    if (hSuffix) return `half_last_digit_${hSuffix}`;
     return 'last_digit';
   }
 
-  // ── Individual totals — before generic тотал catch ────────────────────────
-  // Covers:
-  //   "Індивідуальний тотал Ферро"     → classic form
-  //   "Ірак Тотал очків (вкл. овертайм)" → team-name prefix + "тотал очків"
-  //   "Тотал очків Ірак"               → "тотал очків" + team-name suffix
-  // NOTE: plain "Тотал очків (вкл. овертайм)" without a team name prefix
-  //       is also captured here; ind_total handler will fail to resolve the team
-  //       and will log a warning — acceptable, since we never want it in match_total.
-  if (n.includes('індивідуальний тотал') || n.includes('тотал очків')) return 'ind_total';
-
-  // ── Handicap ───────────────────────────────────────────────────────────────
-  // Quarter/half handicap MUST be checked before the match_handicap catch-all.
-  // betking labels: "Фора 1-ї чверті", "1 чверть - Фора", "Фора. 1 половина", etc.
-  if (n.includes('фора') && hasQuarter) {
-    if (isQ1(n)) return 'quarter_handicap_q1';
-    if (isQ2(n)) return 'quarter_handicap_q2';
-    if (isQ3(n)) return 'quarter_handicap_q3';
-    if (isQ4(n)) return 'quarter_handicap_q4';
-    return null; // фора + чверть, але номер не розпізнано
-  }
-  if (n.includes('фора') && hasHalf) {
-    if (isH1(n)) return 'half_handicap_h1';
-    if (isH2(n)) return 'half_handicap_h2';
-    return null; // фора + половина, але номер не розпізнано
-  }
+  if (n.includes('фора') && hasQuarter) return qSuffix ? `quarter_handicap_${qSuffix}` : null;
+  if (n.includes('фора') && hasHalf) return hSuffix ? `half_handicap_${hSuffix}` : null;
   if (n.includes('фора')) return 'match_handicap';
 
-  // ── Quarter totals — ANY word order, ALL known label formats ──────────────
-  // Covers: "Тотал 1-ї чверті", "1 чверть - Тотал", "Тотал. 3 чверть", etc.
-  if (hasTotal && hasQuarter) {
-    if (isQ1(n)) return 'quarter_total_q1';
-    if (isQ2(n)) return 'quarter_total_q2';
-    if (isQ3(n)) return 'quarter_total_q3';
-    if (isQ4(n)) return 'quarter_total_q4';
-    // тотал + чверть, але номер не розпізнано — краще не класифікувати
-    // як match_total, а повернути null щоб потрапило в лог
-    return null;
-  }
+  if (hasTotal) {
+    const explicitTeamTotal =
+      n.includes('індивідуальний тотал') ||
+      n.includes('тотал очків') ||
+      /\bteam\s+total\b/i.test(n) ||
+      teamIdentity.team_side !== null;
 
-  // ── Half totals — ANY word order, ALL known label formats ─────────────────
-  // Covers: "Тотал 1-ї половини", "1-а половина - Тотал", "1 половина Тотал", etc.
-  // Must come BEFORE the match_total catch-all.
-  if (hasTotal && hasHalf) {
-    if (isH1(n)) return 'half_total_h1';
-    if (isH2(n)) return 'half_total_h2';
-    return null;  // тотал + половина, але номер не розпізнано
-  }
+    if (explicitTeamTotal) {
+      if (!teamIdentity.team_side) {
+        if (qSuffix) return `ambiguous_team_it_quarter_${qSuffix}`;
+        if (hSuffix) return `ambiguous_team_it_half_${hSuffix}`;
+        return 'ambiguous_team_it_match';
+      }
+      if (qSuffix) return `team_it_quarter_${qSuffix}`;
+      if (hSuffix) return `team_it_half_${hSuffix}`;
+      return 'team_it_match';
+    }
 
-  // ── Match total — catch-all (only plain тотал without quarter/half markers) ─
-  if (hasTotal) return 'match_total';
+    if (hasQuarter) return qSuffix ? `quarter_total_${qSuffix}` : null;
+    if (hasHalf) return hSuffix ? `half_total_${hSuffix}` : null;
+    return 'match_total';
+  }
 
   return null;
 }
@@ -355,6 +321,16 @@ function collectMarketsFromShadowDOM() {
       const titleEl = box.querySelector('[class*="EventDetailsMarketName-sc-"]');
       if (!titleEl) continue;
       const title = titleEl.textContent.trim();
+      const firstAttr = (element, names) => {
+        for (const name of names) {
+          const value = element?.getAttribute?.(name);
+          if (value) return value;
+        }
+        return null;
+      };
+      const sourceMarketId = firstAttr(box, [
+        'data-market-id', 'data-marketid', 'data-id', 'market-id', 'id',
+      ]);
 
       // In prematch Betking renders the currently selected full-match total in
       // the slider thumb, while the Over/Under buttons may not carry that line.
@@ -380,13 +356,23 @@ function collectMarketsFromShadowDOM() {
         const specialValue = specialEl?.textContent.trim() ?? '';
         const oddText      = oddEl?.textContent.trim().replace(',', '.') ?? '';
         const odd          = parseFloat(oddText) || null;
+        const sourceOutcomeId = firstAttr(btn, [
+          'data-outcome-id', 'data-selection-id', 'data-bet-id', 'data-id',
+          'outcome-id', 'selection-id', 'id',
+        ]);
+        const rawSelectionName = [label, specialValue].filter(Boolean).join(' ').trim();
 
         if (label || specialValue) {
-          bets.push({ label, specialValue, odd });
+          bets.push({ label, specialValue, odd, rawSelectionName, sourceOutcomeId });
         }
       }
 
-      if (bets.length > 0) markets.push({ title, sliderValue, bets });
+      if (bets.length > 0) markets.push({
+        title,
+        sliderValue,
+        sourceMarketId,
+        bets,
+      });
     }
   }
 
@@ -867,15 +853,29 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
     const marketIndex = new Map();
     const rawMarkets = [];
 
-    function mergeMarkets(fresh, priority = 0) {
-      for (const market of fresh) {
+    function mergeMarkets(fresh, priority = 0, tabText = '') {
+      for (const original of fresh) {
+        const market = { ...original, sourceTab: tabText || original.sourceTab || null };
         const titleKey = market.title.toLowerCase().replace(/\s+/g, ' ').trim();
+        const selectionText = (market.bets || [])
+          .map(bet => bet.rawSelectionName || [bet.label, bet.specialValue].filter(Boolean).join(' '))
+          .filter(Boolean)
+          .join(' | ');
+        const category = classifyMarket(market.title, {
+          tabText: market.sourceTab,
+          selectionText,
+          homeName,
+          awayName,
+        });
+        const scopeKey = inferScopeFromText(market.title) || inferScopeFromText(market.sourceTab) || 'Match';
+        const teamKey = resolveTeamIdentity(`${market.title} ${selectionText}`, homeName, awayName).team_side || '-';
         // Every prematch slider point is a separate line of the same market.
-        // Outside prematch keep the historical title-only deduplication.
-        const sliderKey = isPrematch && classifyMarket(market.title) === 'match_total' && market.sliderValue
+        const sliderKey = isPrematch && category === 'match_total' && market.sliderValue
           ? `|slider:${String(market.sliderValue).replace(',', '.').trim()}`
           : '';
-        const key = `${titleKey}${sliderKey}`;
+        // Scope and team identity are part of the key. This prevents identical
+        // labels such as "Тотал" from Q1/Q2/Q3 tabs from overwriting each other.
+        const key = `${scopeKey}|${teamKey}|${titleKey}|${market.sourceMarketId ?? ''}${sliderKey}`;
         const validOdds = market.bets.filter(bet => bet.odd !== null).length;
         const existing = marketIndex.get(key);
         if (!existing) {
@@ -883,8 +883,6 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
           rawMarkets.push(market);
           continue;
         }
-        // Prefer specific-period tabs. Within the same priority prefer the
-        // version with more populated odds (fresh over suspended/stale DOM).
         if (priority > existing.priority ||
             (priority === existing.priority && validOdds > existing.validOdds)) {
           rawMarkets[existing.index] = market;
@@ -1011,14 +1009,14 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
       return reached;
     }
 
-    async function collectActiveTab(priority) {
-      mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM), priority);
+    async function collectActiveTab(priority, tabText = '') {
+      mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM), priority, tabText);
       if (!isPrematch) return;
 
       const controls = await getSliderControls();
       for (const control of controls) {
         // The alternate prematch extraction applies only to the full-match total.
-        if (classifyMarket(control.title) !== 'match_total') continue;
+        if (classifyMarket(control.title, { tabText, homeName, awayName }) !== 'match_total') continue;
         if (!Number.isFinite(control.min) || !Number.isFinite(control.max) || control.max < control.min) continue;
         console.log(`  [betking] Sweeping prematch slider "${control.title}": ${control.min}…${control.max}`);
         for (let point = control.min; point <= control.max; point++) {
@@ -1028,7 +1026,7 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
             console.warn(`  [betking] ⚠ Slider point ${point} was not reached for "${control.title}"`);
             continue;
           }
-          mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM), priority);
+          mergeMarkets(await detailPage.evaluate(collectMarketsFromShadowDOM), priority, tabText);
         }
       }
     }
@@ -1036,13 +1034,13 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
     // 1. Specific tabs first (freshest data)
     for (const tab of specificTabs) {
       await clickTab(tab.idx);
-      await collectActiveTab(2);
+      await collectActiveTab(2, tab.text);
     }
 
     // 2. Generic tabs — fill in anything not yet seen
     for (const tab of genericTabs) {
       await clickTab(tab.idx);
-      await collectActiveTab(1);
+      await collectActiveTab(1, tab.text);
     }
 
     // 3. Fallback: if no tabs at all (or nothing collected), scrape whatever is
@@ -1050,7 +1048,7 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
     //    the tab bar never appears.
     if (rawMarkets.length === 0) {
       console.log('  [betking] No tabs found or empty result — scraping active view directly');
-      await collectActiveTab(0);
+      await collectActiveTab(0, '');
     }
 
     // Skip locked/suspended buttons: filter bets with null odds out of each market
@@ -1078,10 +1076,74 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
       last_digit     : [],
       home_ind_total : [],
       away_ind_total : [],
+      market_outcomes: [],
+      ambiguous_markets: [],
     };
 
-    for (const { title, sliderValue, bets } of rawMarkets) {
-      const cat = classifyMarket(title);
+    const marketFetchedAt = new Date().toISOString();
+
+    function totalMarketRow({
+      marketType, scope, teamSide = null, teamName = null, line,
+      title, sourceTab = null, sourceMarketId = null,
+      description = null, eligible = true, validationErrors = [],
+    }) {
+      return {
+        ...(description ? { _description: description } : {}),
+        market_type: marketType,
+        scope,
+        team_side: teamSide,
+        team_name: teamName,
+        line,
+        overOdd: null,
+        underOdd: null,
+        raw_market_name: title || null,
+        raw_selection_name: null,
+        source_market_id: sourceMarketId || null,
+        source_outcome_id: null,
+        source: 'BETKING',
+        fetchedAt: marketFetchedAt,
+        eligible_market: Boolean(eligible),
+        validation_errors: [...validationErrors],
+        source_tab: sourceTab || null,
+        raw_selections: [],
+      };
+    }
+
+    function attachTotalSelection(row, bet, side) {
+      if (side === 'over') row.overOdd = bet.odd;
+      if (side === 'under') row.underOdd = bet.odd;
+      const rawName = bet.rawSelectionName || [bet.label, bet.specialValue].filter(Boolean).join(' ').trim();
+      const item = {
+        side,
+        raw_selection_name: rawName || null,
+        source_outcome_id: bet.sourceOutcomeId || null,
+        odd: bet.odd ?? null,
+      };
+      if (!row.raw_selections.some(x => x.side === item.side && x.raw_selection_name === item.raw_selection_name)) {
+        row.raw_selections.push(item);
+      }
+      const names = [...new Set(row.raw_selections.map(x => x.raw_selection_name).filter(Boolean))];
+      const ids = [...new Set(row.raw_selections.map(x => x.source_outcome_id).filter(Boolean))];
+      row.raw_selection_name = names.length ? names.join(' | ') : null;
+      row.source_outcome_id = ids.length ? ids.join('|') : null;
+    }
+
+    function registerCanonicalMarket(row) {
+      if (!result.market_outcomes.includes(row)) result.market_outcomes.push(row);
+      return row;
+    }
+
+    for (const { title, sliderValue, bets, sourceTab, sourceMarketId } of rawMarkets) {
+      const selectionText = (bets || [])
+        .map(bet => bet.rawSelectionName || [bet.label, bet.specialValue].filter(Boolean).join(' '))
+        .filter(Boolean)
+        .join(' | ');
+      const cat = classifyMarket(title, {
+        tabText: sourceTab,
+        selectionText,
+        homeName,
+        awayName,
+      });
       // Log every тотал-related market so misclassifications are always visible in logs
       if (title.toLowerCase().includes('тотал'))
         console.log(`  [betking] тотал market: "${title}" → cat="${cat ?? 'null'}"`);
@@ -1208,7 +1270,7 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
           });
         }
 
-      // ── match_total ──
+      // ── match / half / quarter totals ──
       } else if (cat === 'match_total') {
         const prematchSliderLine = isPrematch
           ? parseFloat(String(sliderValue ?? '').replace(',', '.'))
@@ -1217,54 +1279,91 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
           console.log(`  [betking] Prematch match_total slider line: ${prematchSliderLine} ("${title}")`);
         }
         for (const bet of bets) {
-          // Live: specialValue holds the line number. Prematch: the selected
-          // full-match line is displayed in EventDetailsSliderThumbLabel.
           const lineSource = Number.isFinite(prematchSliderLine)
             ? String(prematchSliderLine)
             : bet.specialValue;
-          const lineVal = parseFloat(lineSource) || null;
           const p = parseBetLabel(bet.label, lineSource);
           if (!p || p.line == null) continue;
-          const line = p.line ?? lineVal;
+          const line = p.line;
           if (!line) continue;
-          // Keep genuinely low match totals (youth/women/short-format games).
-          // The old hard floor of 110 silently discarded valid markets. Values
-          // below 40 are still implausible for a full basketball match and most
-          // likely indicate a provider-side grouping/classification problem.
           if (line < 40) {
             console.warn(`  [betking] ⚠ match_total sanity guard: rejected implausible line=${line} from "${title}"`);
             continue;
           }
-          let e = result.match_total.find(x => x.line === line);
-          if (!e) { e = { _description: `Тотал ВСЬОГО МАТЧУ (сума очок обох команд за 4 чверті). line — межа тоталу (наприклад 133.5). overOdd — ставка "більше ${line}", underOdd — ставка "менше ${line}". НЕ плутати з quarter_total — це весь матч.`, scope: 'Match', line, overOdd: null, underOdd: null }; result.match_total.push(e); }
-          if (p.side === 'over')  e.overOdd  = bet.odd;
-          if (p.side === 'under') e.underOdd = bet.odd;
+          let e = result.match_total.find(x => x.scope === 'Match' && x.line === line);
+          if (!e) {
+            const rawTitle = String(title ?? '').trim();
+            const genericRawName = /^(?:тотал|total)$/i.test(rawTitle);
+            const missingRawName = !rawTitle;
+            const unverifiableLowMatchTotal = line < 120 && (missingRawName || genericRawName);
+            e = totalMarketRow({
+              marketType: 'MATCH_TOTAL',
+              scope: 'Match',
+              line,
+              title,
+              sourceTab,
+              sourceMarketId,
+              description: `Тотал ВСЬОГО МАТЧУ. line=${line}.`,
+              eligible: !unverifiableLowMatchTotal,
+              validationErrors: unverifiableLowMatchTotal
+                ? [missingRawName
+                    ? 'MATCH_TOTAL_BELOW_120_WITHOUT_RAW_MARKET_NAME'
+                    : 'MATCH_TOTAL_BELOW_120_WITH_GENERIC_RAW_MARKET_NAME']
+                : [],
+            });
+            result.match_total.push(e);
+            registerCanonicalMarket(e);
+          }
+          attachTotalSelection(e, bet, p.side);
         }
 
-      // ── half totals ──
       } else if (cat === 'half_total_h1' || cat === 'half_total_h2') {
         const scope = cat === 'half_total_h1' ? 'H1' : 'H2';
+        const marketType = scope === 'H1' ? 'H1_TOTAL' : 'H2_TOTAL';
         for (const bet of bets) {
           const p = parseBetLabel(bet.label, bet.specialValue);
           if (!p || p.line == null) continue;
           let e = result.half_total.find(x => x.scope === scope && x.line === p.line);
-          if (!e) { e = { _description: `Тотал за ПОЛОВИНУ матчу (2 чверті разом). scope="${scope}" — ${scope === 'H1' ? 'перша половина (Q1+Q2)' : 'друга половина (Q3+Q4)'}. line — межа, overOdd/underOdd — коефіцієнти більше/менше.`, scope, line: p.line, overOdd: null, underOdd: null }; result.half_total.push(e); }
-          if (p.side === 'over')  e.overOdd  = bet.odd;
-          if (p.side === 'under') e.underOdd = bet.odd;
+          if (!e) {
+            e = totalMarketRow({
+              marketType,
+              scope,
+              line: p.line,
+              title,
+              sourceTab,
+              sourceMarketId,
+              description: `Тотал за ${scope}. line=${p.line}.`,
+            });
+            result.half_total.push(e);
+            registerCanonicalMarket(e);
+          }
+          attachTotalSelection(e, bet, p.side);
         }
 
-      // ── quarter totals ──
       } else if (cat.startsWith('quarter_total_')) {
-        const scopeMap = { quarter_total_q1:'Q1', quarter_total_q2:'Q2', quarter_total_q3:'Q3', quarter_total_q4:'Q4' };
+        const scopeMap = {
+          quarter_total_q1: 'Q1', quarter_total_q2: 'Q2',
+          quarter_total_q3: 'Q3', quarter_total_q4: 'Q4',
+        };
         const scope = scopeMap[cat];
         for (const bet of bets) {
           const p = parseBetLabel(bet.label, bet.specialValue);
           if (!p || p.line == null) continue;
           let e = result.quarter_total.find(x => x.scope === scope && x.line === p.line);
-          const quarterLabel = { Q1: 'перша чверть', Q2: 'друга чверть', Q3: 'третя чверть', Q4: 'четверта чверть' };
-          if (!e) { e = { _description: `Тотал ТІЛЬКИ ЗА ${scope} (${quarterLabel[scope]}). Це НЕ тотал матчу — лише очки набрані в одній чверті обома командами. line — межа, overOdd/underOdd — коефіцієнти більше/менше.`, scope, line: p.line, overOdd: null, underOdd: null }; result.quarter_total.push(e); }
-          if (p.side === 'over')  e.overOdd  = bet.odd;
-          if (p.side === 'under') e.underOdd = bet.odd;
+          if (!e) {
+            e = totalMarketRow({
+              marketType: 'QUARTER_TOTAL',
+              scope,
+              line: p.line,
+              title,
+              sourceTab,
+              sourceMarketId,
+              description: `Загальний тотал ${scope} обох команд. line=${p.line}.`,
+            });
+            result.quarter_total.push(e);
+            registerCanonicalMarket(e);
+          }
+          attachTotalSelection(e, bet, p.side);
         }
 
       // ── quarter draw-no-bet ──
@@ -1284,29 +1383,62 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
           }
         }
 
-      // ── individual totals ──
-      } else if (cat === 'ind_total') {
-        const titleLower = normalizeTeamName(title);
-        // Try Cyrillic match first, then Latin/alias variants
-        const isHome = titleLower.includes(homeNorm) ||
-                       homeVariants.some(v => titleLower.includes(v)) ||
-                       (homeNorm.split(' ').some(w => w.length > 3 && titleLower.includes(w)));
-        const isAway = titleLower.includes(awayNorm) ||
-                       awayVariants.some(v => titleLower.includes(v)) ||
-                       (awayNorm.split(' ').some(w => w.length > 3 && titleLower.includes(w)));
-        const target = isHome ? result.home_ind_total : isAway ? result.away_ind_total : null;
-        if (!target) {
-          console.log(`  [betking] ind_total: cannot match "${title}" to home="${homeName}" or away="${awayName}"`);
-          continue;
-        }
+      // ── team individual totals (Match / H1 / H2 / Q1-Q4) ──
+      } else if (
+        cat === 'team_it_match' ||
+        cat.startsWith('team_it_quarter_') ||
+        cat.startsWith('team_it_half_') ||
+        cat.startsWith('ambiguous_team_it_')
+      ) {
+        const identity = resolveTeamIdentity(`${title} ${selectionText}`, homeName, awayName);
+        const scope = inferScopeFromText(title) || inferScopeFromText(sourceTab) || 'Match';
+        const isAmbiguous = cat.startsWith('ambiguous_team_it_') || !identity.team_side;
+        const marketType = isAmbiguous
+          ? (scope.startsWith('Q') ? 'AMBIGUOUS_TEAM_IT_QUARTER' : 'AMBIGUOUS_TEAM_IT')
+          : scope === 'Match'
+            ? 'TEAM_IT_MATCH'
+            : scope === 'H1'
+              ? 'TEAM_IT_H1'
+              : scope === 'H2'
+                ? 'TEAM_IT_H2'
+                : 'TEAM_IT_QUARTER';
+        const target = identity.team_side === 'home'
+          ? result.home_ind_total
+          : identity.team_side === 'away'
+            ? result.away_ind_total
+            : result.ambiguous_markets;
+
         for (const bet of bets) {
           const p = parseBetLabel(bet.label, bet.specialValue);
           if (!p || p.line == null) continue;
-          let e = target.find(x => x.line === p.line);
-          const teamLabel = isHome ? `хазяїв (${homeName})` : `гостей (${awayName})`;
-          if (!e) { e = { _description: `Індивідуальний тотал ТІЛЬКИ ${teamLabel} за матч. line — межа очок цієї команди. overOdd — команда набере більше ${p.line}, underOdd — менше ${p.line}. Не плутати з match_total (там обидві команди разом).`, scope: 'Match', line: p.line, overOdd: null, underOdd: null }; target.push(e); }
-          if (p.side === 'over')  e.overOdd  = bet.odd;
-          if (p.side === 'under') e.underOdd = bet.odd;
+          let e = target.find(x =>
+            x.market_type === marketType &&
+            x.scope === scope &&
+            x.team_side === identity.team_side &&
+            x.line === p.line
+          );
+          if (!e) {
+            e = totalMarketRow({
+              marketType,
+              scope,
+              teamSide: identity.team_side,
+              teamName: identity.team_name,
+              line: p.line,
+              title,
+              sourceTab,
+              sourceMarketId,
+              description: isAmbiguous
+                ? `Нерозпізнаний командний тотал ${scope}; грошове використання заборонено.`
+                : `Індивідуальний тотал ${identity.team_name} за ${scope}. line=${p.line}.`,
+              eligible: !isAmbiguous,
+              validationErrors: isAmbiguous
+                ? ['TEAM_IT_WITHOUT_UNAMBIGUOUS_TEAM_IDENTITY']
+                : [],
+            });
+            target.push(e);
+            registerCanonicalMarket(e);
+          }
+          attachTotalSelection(e, bet, p.side);
         }
 
       // ── quarter 1x2 (quarter winner) ──
@@ -1377,17 +1509,73 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
       }
     }
 
+    // ─── MARKET IDENTITY validation required by PARSER_MARKET_SCHEMA_FIX_UA ───
+    for (const scope of ['Q1', 'Q2', 'Q3', 'Q4']) {
+      const rows = result.quarter_total.filter(row => row.scope === scope);
+      const lowRows = rows.filter(row => Number(row.line) < 30);
+      const combinedRows = rows.filter(row => Number(row.line) >= 35 && Number(row.line) <= 60);
+      if (lowRows.length && combinedRows.length) {
+        for (const row of lowRows) {
+          const pairEvidence = lowRows.some(other =>
+            other !== row && combinedRows.some(combined =>
+              Math.abs(Number(row.line) + Number(other.line) - Number(combined.line)) <= 2.5
+            )
+          );
+          row.market_type = 'AMBIGUOUS_TEAM_IT_QUARTER';
+          row.eligible_market = false;
+          row.validation_errors = [...new Set([
+            ...(row.validation_errors || []),
+            pairEvidence
+              ? 'LOW_QUARTER_LINES_SUM_TO_COMBINED_TOTAL_BUT_TEAM_IDENTITY_MISSING'
+              : 'LOW_QUARTER_TOTAL_NEAR_COMBINED_TOTAL_LOOKS_LIKE_TEAM_IT',
+          ])];
+          if (!result.ambiguous_markets.includes(row)) result.ambiguous_markets.push(row);
+        }
+        const blocked = new Set(lowRows);
+        result.quarter_total = result.quarter_total.filter(row => !blocked.has(row));
+      }
+    }
+
+    for (const row of result.market_outcomes) {
+      row.validation_errors = Array.isArray(row.validation_errors) ? row.validation_errors : [];
+      if (row.market_type === 'QUARTER_TOTAL' && (row.team_side || row.team_name)) {
+        row.eligible_market = false;
+        row.validation_errors.push('QUARTER_TOTAL_MUST_NOT_HAVE_TEAM_IDENTITY');
+      }
+      if (String(row.market_type).startsWith('TEAM_IT_') && (!row.team_side || !row.team_name)) {
+        row.eligible_market = false;
+        row.validation_errors.push('TEAM_IT_REQUIRES_TEAM_SIDE_AND_TEAM_NAME');
+      }
+      if (row.market_type === 'MATCH_TOTAL' && Number(row.line) < 120 && !row.raw_market_name) {
+        row.eligible_market = false;
+        row.validation_errors.push('MATCH_TOTAL_BELOW_120_WITHOUT_RAW_MARKET_NAME');
+      }
+      row.validation_errors = [...new Set(row.validation_errors)];
+      if (row.eligible_market === false && !result.ambiguous_markets.includes(row)) {
+        result.ambiguous_markets.push(row);
+      }
+    }
+
+    // The legacy v14 parser does not consume row.eligible_market from the raw
+    // buckets. Therefore every blocked row must be physically removed from the
+    // compatibility arrays and retained only in the canonical audit block.
+    for (const key of ['match_total', 'half_total', 'quarter_total', 'home_ind_total', 'away_ind_total']) {
+      result[key] = result[key].filter(row => row.eligible_market !== false);
+    }
+
     // Sort totals by line value
-    for (const key of ['match_total', 'half_total', 'quarter_total', 'quarter_dnb', 'home_ind_total', 'away_ind_total'])
-      result[key].sort((a, b) => (a.line ?? 0) - (b.line ?? 0));
+    for (const key of ['match_total', 'half_total', 'quarter_total', 'quarter_dnb', 'home_ind_total', 'away_ind_total', 'ambiguous_markets'])
+      result[key].sort((a, b) => String(a.scope ?? '').localeCompare(String(b.scope ?? '')) || (a.line ?? 0) - (b.line ?? 0));
+    result.market_outcomes.sort((a, b) => String(a.scope ?? '').localeCompare(String(b.scope ?? '')) || (a.line ?? 0) - (b.line ?? 0));
 
     // Sort handicaps by handicap value
     for (const key of ['match_handicap', 'half_handicap', 'quarter_handicap'])
       result[key].sort((a, b) => (a.handicap ?? 0) - (b.handicap ?? 0));
 
     // Drop entries where ALL odds are null (both sides missing = no market)
-    for (const key of ['match_total', 'half_total', 'quarter_total', 'home_ind_total', 'away_ind_total'])
+    for (const key of ['match_total', 'half_total', 'quarter_total', 'home_ind_total', 'away_ind_total', 'ambiguous_markets'])
       result[key] = result[key].filter(x => x.overOdd !== null || x.underOdd !== null);
+    result.market_outcomes = result.market_outcomes.filter(x => x.overOdd !== null || x.underOdd !== null);
 
     for (const key of ['match_handicap', 'half_handicap', 'quarter_handicap'])
       result[key] = result[key].filter(x => x.homeHcpOdd !== null || x.awayHcpOdd !== null);
@@ -1395,29 +1583,59 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
     for (const key of ['match_1x2', 'quarter_1x2', 'quarter_dnb'])
       result[key] = result[key].filter(x => x.homeOdd !== null || x.awayOdd !== null);
 
-    // Remove empty arrays
+    // Keep the complete ТЗ representation inside an object, not as another
+    // top-level list bucket. Legacy v14 iterates top-level list buckets and would
+    // otherwise emit UNSUPPORTED_MARKET audit noise for the canonical rows.
+    const canonicalOutcomes = result.market_outcomes;
+    const ambiguousOutcomes = result.ambiguous_markets;
+    delete result.market_outcomes;
+    delete result.ambiguous_markets;
+    result.market_identity = {
+      schema_version: '2026-08-03-market-identity-v1',
+      outcomes: canonicalOutcomes,
+      ambiguous_outcomes: ambiguousOutcomes,
+    };
+
+    // Remove empty legacy arrays. market_identity is an object and remains.
     for (const key of Object.keys(result))
       if (Array.isArray(result[key]) && result[key].length === 0) delete result[key];
 
     // ─── Schema description for downstream model ─────────────────────────────
     // Explains every key so the model can never confuse scope or market type.
     result._schema = {
-      _readme: 'Кожен масив описує окремий тип ставки. scope вказує на який ігровий відрізок поширюється ставка: "Match"=весь матч, "H1"=перша половина(Q1+Q2), "H2"=друга половина(Q3+Q4), "Q1"/"Q2"/"Q3"/"Q4"=конкретна чверть. НІКОЛИ не використовуй дані з quarter_* для аналізу матчу в цілому і навпаки. Всі поля *Odd (homeOdd, awayOdd, overOdd, underOdd, homeHcpOdd, awayHcpOdd, yesOdd, noOdd) — це десяткові коефіцієнти букмекера: число на яке множиться сума ставки у разі виграшу (наприклад 1.83 означає прибуток 83% від суми ставки).',
-      match_1x2:       'Переможець ВСЬОГО матчу. scope завжди "Match". homeOdd/awayOdd.',
-      match_handicap:  'Азіатський гандикап на ВЕСЬ матч. scope="Match". handicap<0 = фора хазяїв (вони фаворити). homeHcpOdd/awayHcpOdd.',
-      half_handicap:   'Азіатський гандикап за ПОЛОВИНУ матчу. scope="H1" або "H2". НЕ ПЛУТАТИ з match_handicap — фора лише за 2 чверті. homeHcpOdd/awayHcpOdd.',
-      quarter_handicap:'Азіатський гандикап ТІЛЬКИ за одну чверть. scope="Q1"/"Q2"/"Q3"/"Q4". НЕ ПЛУТАТИ з match_handicap — фора лише за 10 хв гри. homeHcpOdd/awayHcpOdd.',
-      match_total:     'Тотал ВСЬОГО матчу (сума очок обох команд за всі чверті). scope="Match". line=межа, overOdd/underOdd.',
-      half_total:     'Тотал за ПОЛОВИНУ матчу (2 чверті). scope="H1" або "H2". line=межа, overOdd/underOdd.',
-      quarter_total:  'Тотал ТІЛЬКИ за одну чверть. scope="Q1"/"Q2"/"Q3"/"Q4". НЕ ПЛУТАТИ з match_total — це набагато менше очок (30-40, не 130+). line=межа, overOdd/underOdd.',
-      quarter_dnb:    '"Нічия без ставки" за одну чверть. scope=Q1-Q4. При нічиї в чверті — ставка повертається. homeOdd/awayOdd.',
-      quarter_1x2:    'Переможець ОДНІЄЇ чверті. scope=Q1-Q4. homeOdd/drawOdd/awayOdd. drawOdd може бути null.',
-      quarter_btts:   'Чи наберуть ОБИДВІ команди мінімум threshold очок у чверті. scope=Q1-Q4. yesOdd/noOdd.',
-      quarter_race:   '"Гонка до N очок" — хто ПЕРШИМ набере target очок у конкретному ігровому відрізку. scope=Q1-Q4 або Match. target=кількість очок. homeOdd/awayOdd. Це НЕ тотал і НЕ переможець.',
-      home_ind_total: 'Індивідуальний тотал ТІЛЬКИ хазяїв за матч. scope="Match". line/overOdd/underOdd.',
-      away_ind_total: 'Індивідуальний тотал ТІЛЬКИ гостей за матч. scope="Match". line/overOdd/underOdd.',
-      win_margin:     'Різниця очок переможця матчу (bucket-ставка). label=діапазон типу "1-5" або "6-10". odd=коефіцієнт.',
-      last_digit:     'Остання цифра рахунку або сума останніх цифр обох команд. scope=Match/H1/H2. Екзотичний ринок.',
+      version: '2026-08-03-market-identity-v1',
+      canonical_array: 'market_identity.outcomes',
+      compatibility_arrays: [
+        'match_total', 'half_total', 'quarter_total',
+        'home_ind_total', 'away_ind_total',
+      ],
+      required_fields: [
+        'market_type', 'scope', 'team_side', 'team_name', 'line',
+        'overOdd', 'underOdd', 'raw_market_name', 'raw_selection_name',
+        'source_market_id', 'source_outcome_id', 'source', 'fetchedAt',
+        'eligible_market',
+      ],
+      market_types: {
+        MATCH_TOTAL: 'Загальний тотал матчу; team_side/team_name мають бути null.',
+        QUARTER_TOTAL: 'Загальний тотал конкретної чверті; team_side/team_name мають бути null.',
+        TEAM_IT_MATCH: 'Індивідуальний тотал команди за матч.',
+        TEAM_IT_QUARTER: 'Індивідуальний тотал команди за конкретну чверть.',
+        TEAM_IT_H1: 'Індивідуальний тотал команди за першу половину.',
+        TEAM_IT_H2: 'Індивідуальний тотал команди за другу половину.',
+        H1_TOTAL: 'Сумарний тотал обох команд за першу половину; compatibility extension.',
+        H2_TOTAL: 'Сумарний тотал обох команд за другу половину; compatibility extension.',
+        AMBIGUOUS_TEAM_IT_QUARTER: 'Низька чвертна лінія схожа на Team IT, але команда не підтверджена; eligible_market=false.',
+        AMBIGUOUS_TEAM_IT: 'Командний тотал без надійної team identity; eligible_market=false.',
+      },
+      scope_values: ['Match', 'H1', 'H2', 'Q1', 'Q2', 'Q3', 'Q4'],
+      validation_rules: [
+        'QUARTER_TOTAL не може містити team_side/team_name.',
+        'TEAM_IT_* обов’язково має team_side і team_name.',
+        'Scope визначається лише з raw_market_name або source_tab, не з порядку елементів.',
+        'Лінія чверті <30 поруч із combined total 35-60 без team identity блокується.',
+        'MATCH_TOTAL <120 без raw_market_name блокується.',
+      ],
+      notes: 'market_identity.outcomes є канонічним ТЗ-масивом. Старі bucket-масиви збережені без перейменування для math_script.py та v14 advisor; blocked rows у них не потрапляють.',
     };
 
     return result;
