@@ -1,0 +1,23 @@
+{
+  "version": "15.5.2-EXACT-ANCHOR-Q4-H73-S73-INFO",
+  "files_scanned": 699,
+  "files_with_candidates": 151,
+  "main_play_risk": {
+    "signals": 10,
+    "actions": {
+      "RISK": 7,
+      "PLAY": 3
+    },
+    "info_variants_on_main_files": 0
+  },
+  "strict_info": {
+    "files": 11,
+    "variants": 18,
+    "win": 15,
+    "loss": 3,
+    "other": 0,
+    "expected_keys_match": true
+  },
+  "candidate_mutation_detected": false,
+  "errors": []
+}

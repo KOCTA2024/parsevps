@@ -1,0 +1,51 @@
+SUPER BASKET v15.5.3 — CHANGELOG
+================================
+
+БАЗА:
+  SUPER_BASKET v15.5.2
+  ZIP SHA256: 8fb4e00acbae7ebed4dd8c533f0e05306ec3982342cf626f9bdb0c8b245f0617
+
+ЗМІНЕНО:
+
+1. super_basket_v15_5_history_override.py
+   - version 15.5.2 -> 15.5.3;
+   - додано незалежний selector усіх real-line кандидатів із
+     P_history>=90% та P_scenario>=90%;
+   - для 90/90 немає stage, market, delta або action gate;
+   - додано дедуплікацію точної лінії проти main PLAY/RISK і Q4 INFO;
+   - додано окремий INFO 0% Telegram formatter і safe batch delivery;
+   - додано JSON metadata та CLI summary;
+   - додано env kill switch SUPER_BASKET_INFO_90_90_ENABLED.
+
+2. worker.js
+   - Python command/path не змінено;
+   - main і Q4 INFO логування збережено;
+   - додано окремий 90/90 INFO status/count у лог та job result.
+
+3. verification/test_q4_info_layer.py
+   - старі 7 тестів Q4 INFO збережені;
+   - додано 5 тестів 90/90 INFO.
+
+4. verification/replay_info_layers.py
+   - додано повний replay 699 готових production-result JSON.
+
+5. verification/e2e_regression_v15_5_2_to_v15_5_3.py
+   - додано end-to-end порівняння старої й нової версій на 23 файлах.
+
+НЕ ЗМІНЕНО:
+
+- basketball_score_predictor_v4.py;
+- super_basket_vps_system_FINAL_v14_2_ALWAYS_TELEGRAM_STAGE_ROUTER 2.py;
+- score_forecast, selected, ranked_candidates і rejected_by_v15_route;
+- PLAY/RISK threshold, blocker, stake, bankroll та Telegram message;
+- попередній Q4 H73/S73/DELTA3 selector і Telegram message;
+- SQLite та result filename compatibility.
+
+ІЗОЛЯЦІЯ:
+
+- 90/90 selector виконується після старого selected/apply_budget;
+- він не записує action/stake і не змінює candidates;
+- exact main/Q4 candidate виключається тільки з повторного INFO;
+- інші 90/90 candidates у PLAY/RISK-файлі дозволені як INFO 0%;
+- помилка необов'язкової INFO-відправки не валить worker job.
+

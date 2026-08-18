@@ -1,0 +1,21 @@
+{
+  "baseline_version": "15.5.2-EXACT-ANCHOR-Q4-H73-S73-INFO",
+  "new_version": "15.5.3-EXACT-ANCHOR-Q4-H73-S73-PLUS-H90-S90-INFO",
+  "simulations": 1200,
+  "control_files": 23,
+  "checks_equal": {
+    "score_forecast": 23,
+    "selected": 23,
+    "ranked_candidates": 23,
+    "rejected_by_v15_route": 23,
+    "main_telegram_message": 23,
+    "q4_info_variants": 23,
+    "q4_info_messages": 23,
+    "q4_info_delivery": 23
+  },
+  "new_90_90_variants": 10,
+  "new_90_90_messages": 4,
+  "duplicate_90_market_ids": [],
+  "errors": [],
+  "passed": true
+}

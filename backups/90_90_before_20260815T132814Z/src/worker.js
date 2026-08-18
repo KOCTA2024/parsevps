@@ -8,10 +8,8 @@
  *   2. python3 src/math_script.py           — математичний розрахунок
  *   3. python3 src/super_basket_v15_5_history_override.py run — головний v15.5 радник.
  *      Він динамічно завантажує basketball_score_predictor_v4.py, v14-router
- *      та production calibration, формує незмінну основну рекомендацію,
- *      пише JSON/SQLite і за прапором --telegram відправляє повідомлення.
- *      Для PASS на Q4 може окремо відправити INFO 0%; PLAY/RISK ця гілка
- *      пропускає повністю.
+ *      та production calibration, формує одну рекомендацію, пише JSON/SQLite
+ *      і за прапором --telegram відправляє повідомлення.
  *
  * Checkpoint #6 після завершення матчу виконує лише кроки 1–2 і зберігає
  * *_result_checkpoint6.json. Крок 3, Telegram і SQLite для нього вимкнені.
@@ -300,10 +298,6 @@ async function processJob(job) {
   let summary = null;
   let decision = null;
   let telegramStatus = null;
-  let q4InfoTelegramStatus = null;
-  let q4InfoVariants = 0;
-  let info9090TelegramStatus = null;
-  let info9090Variants = 0;
   let outputStatus = 'ERROR';
 
   if (superBasketResult.code === 0) {
@@ -314,21 +308,11 @@ async function processJob(job) {
       const fullResult = JSON.parse(fs.readFileSync(superBasketOutputPath, 'utf8'));
       decision = fullResult.selected ?? null;
       telegramStatus = fullResult.telegram?.delivery?.status ?? summary.telegram?.status ?? null;
-      q4InfoTelegramStatus = fullResult.q4_history_scenario_info_telegram?.delivery?.status
-        ?? summary.q4_info_telegram?.status ?? null;
-      q4InfoVariants = Number(fullResult.q4_history_scenario_info_telegram?.variants_count
-        ?? summary.q4_info_variants ?? 0);
-      info9090TelegramStatus = fullResult.history_scenario_90_info_telegram?.delivery?.status
-        ?? summary.info_90_90_telegram?.status ?? null;
-      info9090Variants = Number(fullResult.history_scenario_90_info_telegram?.variants_count
-        ?? summary.info_90_90_variants ?? 0);
       outputStatus = 'OK';
       log(jid, 'info',
         `Step 3 completed — decision: ${decision?.action ?? summary.action ?? 'n/a'}` +
         `/${decision?.status ?? 'n/a'} | stage: ${summary.stage ?? 'n/a'}` +
-        ` | main telegram: ${telegramStatus ?? 'n/a'}` +
-        ` | Q4 INFO: ${q4InfoTelegramStatus ?? 'n/a'} (${q4InfoVariants})` +
-        ` | 90/90 INFO: ${info9090TelegramStatus ?? 'n/a'} (${info9090Variants})`
+        ` | telegram: ${telegramStatus ?? 'n/a'}`
       );
     } catch (e) {
       outputStatus = 'OUTPUT_PARSE_ERROR';
@@ -348,10 +332,6 @@ async function processJob(job) {
     superBasketExitCode: superBasketResult.code,
     decision,
     aiVerdict:      decision?.action ?? summary?.action ?? null,
-    q4InfoVariants,
-    q4InfoTelegramStatus,
-    info9090Variants,
-    info9090TelegramStatus,
     checkpoint:     triggerCheckpoint || null,
     stageCheckpoint: publicStageCheckpoint || null,
     calculatedFilePath,

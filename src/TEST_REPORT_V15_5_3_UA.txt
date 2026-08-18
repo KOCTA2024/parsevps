@@ -1,0 +1,116 @@
+SUPER BASKET v15.5.3 — TEST REPORT
+=================================
+
+1. STATIC / SYNTAX
+------------------
+
+Python py_compile: PASS
+worker.js node --check: PASS
+
+
+2. UNIT TESTS
+-------------
+
+12/12 PASS.
+
+Старий Q4 INFO:
+  - inclusive P_history/P_scenario=73%;
+  - inclusive abs(delta)=3.0;
+  - PLAY/RISK file skip;
+  - тільки PASS candidate;
+  - stage/market/probability/delta gates;
+  - top1 per market type;
+  - INFO message fields, 0% і kill switch.
+
+Новий 90/90 INFO:
+  - inclusive P_history=P_scenario=90%;
+  - обидва пороги обов'язкові;
+  - немає stage/market/action/delta gate;
+  - усі унікальні лінії, не TOP1;
+  - real odds, U18 і kill switch safety gates;
+  - дедуплікація already-sent market_id;
+  - Telegram містить прогноз, line, delta, edge, probabilities й INFO 0%.
+
+
+3. FULL ARCHIVE REPLAY
+----------------------
+
+Source: matches(2), 699 v15.5 production-result JSON.
+
+Files scanned: 699
+Files with candidates: 151
+
+Existing PLAY/RISK:
+  10 lines, 9 WIN / 1 LOSS = 90.0%
+
+Existing Q4 H73/S73/DELTA3 INFO:
+  18 lines, 15 WIN / 3 LOSS = 83.3%
+
+All H90/S90 before dedup:
+  15 lines, 14 WIN / 1 LOSS = 93.3%
+
+After main dedup:
+  14 lines, 13 WIN / 1 LOSS = 92.9%
+
+New Telegram H90/S90 after main + Q4 exact dedup:
+  10 lines in 4 snapshot files
+  9 WIN / 1 LOSS = 90.0%
+
+Combined exact-line union:
+  38 lines
+  33 WIN / 5 LOSS = 86.8%
+  19 unique matches
+
+Errors: 0
+Expected cohort match: TRUE
+
+
+4. v15.5.2 vs v15.5.3 END-TO-END REGRESSION
+---------------------------------------------
+
+Control files: 23
+Simulations per run: 1200
+
+Identical old vs new on 23/23:
+  score_forecast
+  selected
+  ranked_candidates
+  rejected_by_v15_route
+  main Telegram message
+  Q4 INFO variants
+  Q4 INFO messages
+  Q4 INFO delivery routing
+
+New 90/90 variants: 10
+New 90/90 messages: 4
+Duplicate market_id against main/Q4: 0
+Errors: 0
+Overall: PASS
+
+
+5. TELEGRAM ROUTING WITHOUT TOKEN
+---------------------------------
+
+PASS / HT / four 90/90 lines:
+  main: SKIPPED_PASS_SIGNAL
+  Q4 INFO: SKIPPED_STAGE
+  90/90 INFO: SKIPPED_MISSING_TELEGRAM_TOKEN
+  90/90 variants: 4
+
+PASS / Q4 / old and new INFO together:
+  main: SKIPPED_PASS_SIGNAL
+  Q4 INFO: 2 variants, missing-token status
+  90/90 INFO: 3 new variants, missing-token status
+  overlap: 0
+
+RISK whose exact candidate is also 90/90:
+  main route preserved
+  Q4 INFO: SKIPPED_MAIN_PLAY_RISK
+  duplicate 90/90 INFO: 0
+
+
+ОБМЕЖЕННЯ:
+
+Backtest є ретроспективним. Вибірка 90/90 невелика; кілька сусідніх ліній
+належать одному матчу й не є незалежними прогнозами.
+

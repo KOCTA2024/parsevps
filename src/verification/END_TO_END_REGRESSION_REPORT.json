@@ -1,0 +1,29 @@
+{
+  "baseline_version": "15.5.0-EXACT-ANCHOR-HISTORY-OVERRIDE",
+  "updated_version": "15.5.2-EXACT-ANCHOR-Q4-H73-S73-INFO",
+  "simulations_per_run": 1200,
+  "files_checked": 21,
+  "main_files": 10,
+  "strict_info_files": 11,
+  "comparisons": {
+    "score_forecast_equal": 21,
+    "selected_equal": 21,
+    "ranked_candidates_equal": 21,
+    "rejected_by_v15_route_equal": 21,
+    "main_telegram_message_equal": 21,
+    "strict_files_checked": 11,
+    "main_files_checked": 10
+  },
+  "info_observed_in_e2e": {
+    "variants": 16,
+    "files": 10
+  },
+  "acceptance": {
+    "selected_unchanged_all": true,
+    "ranked_candidates_unchanged_all": true,
+    "score_forecast_unchanged_all": true,
+    "main_telegram_text_unchanged_all": true,
+    "all_main_files_skip_info": true
+  },
+  "errors": []
+}

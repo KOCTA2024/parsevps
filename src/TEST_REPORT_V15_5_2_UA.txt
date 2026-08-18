@@ -1,0 +1,73 @@
+SUPER BASKET v15.5.2 — TEST REPORT
+=================================
+
+1. STATIC / SYNTAX
+------------------
+Python py_compile: PASS
+worker.js node --check: PASS
+CLI run/send path without token: PASS
+
+2. UNIT TESTS
+-------------
+7/7 PASS:
+  - inclusive P_history/P_scenario = 73%;
+  - inclusive abs(delta) = 3.0;
+  - PLAY/RISK file always skipped;
+  - only PASS candidate eligible;
+  - stage/market/probability/delta gates;
+  - top1 per market type by P_final;
+  - required Telegram fields and INFO 0%;
+  - env kill switch.
+
+3. FULL ARCHIVE REPLAY
+----------------------
+Source: matches(2), 699 v15.5 production-result JSON.
+
+Files scanned: 699
+Files with candidates: 151
+Existing PLAY/RISK files: 10
+INFO variants on PLAY/RISK files: 0
+Strict INFO files: 11
+Strict INFO line variants: 18
+Result: 15 WIN / 3 LOSS
+Expected strict cohort match: TRUE
+Candidate mutation detected: FALSE
+Errors: 0
+
+4. OLD vs NEW END-TO-END REGRESSION
+-----------------------------------
+Control files: 21
+  - all 10 existing PLAY/RISK files;
+  - all 11 strict INFO source files.
+
+Old version: 15.5.0-EXACT-ANCHOR-HISTORY-OVERRIDE
+New version: 15.5.2-EXACT-ANCHOR-Q4-H73-S73-INFO
+
+Identical old vs new on 21/21 files:
+  score_forecast: PASS 21/21
+  selected: PASS 21/21
+  ranked_candidates: PASS 21/21
+  rejected_by_v15_route: PASS 21/21
+  old main Telegram message text: PASS 21/21
+
+All 10 PLAY/RISK files returned:
+  q4InfoVariants = 0
+  q4InfoTelegramStatus = SKIPPED_MAIN_PLAY_RISK
+
+Errors: 0
+
+5. TELEGRAM DELIVERY ROUTING
+----------------------------
+Main/RISK sample with --telegram and missing token:
+  main delivery: SKIPPED_MISSING_TELEGRAM_TOKEN
+  INFO delivery: SKIPPED_MAIN_PLAY_RISK
+  INFO variants: 0
+
+PASS/Q4 INFO sample with --telegram and missing token:
+  main delivery: SKIPPED_PASS_SIGNAL
+  INFO delivery: SKIPPED_MISSING_TELEGRAM_TOKEN
+  INFO message created: 1
+  INFO variants: 2
+
+Це підтверджує правильне розділення двох Telegram-гілок.
+

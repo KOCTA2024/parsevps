@@ -42,24 +42,7 @@ from typing import Any, Iterable, Optional
 _MODULE_CACHE: dict[tuple[str, str], Any] = {}
 from xml.etree import ElementTree as ET
 
-VERSION = "15.5.3-EXACT-ANCHOR-Q4-H73-S73-PLUS-H90-S90-INFO"
-
-# Independent Telegram INFO layer.  These constants are intentionally not
-# referenced by score_candidates(), action selection, stake calculation or the
-# existing telegram_message().  Therefore PLAY/RISK behaviour remains frozen.
-INFO_Q4_HISTORY_MIN = 0.73
-INFO_Q4_SCENARIO_MIN = 0.73
-INFO_Q4_ABS_DELTA_MAX = 3.0
-INFO_Q4_STAGE = "Q4_LIVE"
-INFO_Q4_MARKETS = frozenset({"MATCH_TOTAL", "TEAM_IT_MATCH"})
-INFO_Q4_TELEGRAM_MAX_CHARS = 3800
-
-# Second independent Telegram INFO layer requested for every route-valid real
-# line with both history and scenario at 90%+.  It has no stage, market or
-# delta gate and never changes candidate action, selected, stake or bankroll.
-INFO_90_HISTORY_MIN = 0.90
-INFO_90_SCENARIO_MIN = 0.90
-INFO_90_TELEGRAM_MAX_CHARS = 3800
+VERSION = "15.5.0-EXACT-ANCHOR-HISTORY-OVERRIDE"
 DEFAULT_SCORE_MODEL_NAMES = (
     "basketball_score_predictor_v4.py",
     "basketball_score_predictor.py",
@@ -1211,318 +1194,6 @@ def telegram_message(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def info_q4_enabled() -> bool:
-    """Emergency kill switch for the independent INFO layer only."""
-    raw = str(os.getenv("SUPER_BASKET_INFO_Q4_ENABLED", "true")).strip().lower()
-    return raw not in {"0", "false", "no", "off", "disabled"}
-
-
-def info_90_enabled() -> bool:
-    """Emergency kill switch for the independent 90/90 INFO layer only."""
-    raw = str(os.getenv("SUPER_BASKET_INFO_90_90_ENABLED", "true")).strip().lower()
-    return raw not in {"0", "false", "no", "off", "disabled"}
-
-
-def _candidate_exact_line_history(candidate: ScoreCandidate) -> dict[str, Any]:
-    """Return diagnostic exact-line history for display, never as a hard gate."""
-    matches: list[dict[str, Any]] = []
-    for zone in candidate.historical_zones or []:
-        if not isinstance(zone, dict) or not zone.get("available"):
-            continue
-        if str(zone.get("kind") or "") != "CURRENT_LINE_HISTORY":
-            continue
-        if str(zone.get("side") or "").upper() != str(candidate.side or "").upper():
-            continue
-        zone_line = num(zone.get("line"))
-        if zone_line is None or abs(zone_line - float(candidate.line)) > 1e-6:
-            continue
-        matches.append(zone)
-    if not matches:
-        return {"probability": None, "hits": None, "losses": None, "pushes": None, "n": None}
-    matches.sort(key=lambda row: int(num(row.get("n"), 0.0) or 0), reverse=True)
-    zone = matches[0]
-    return {
-        "probability": num(zone.get("probability", zone.get("raw_probability"))),
-        "hits": int(num(zone.get("hits", zone.get("wins")), 0.0) or 0),
-        "losses": int(num(zone.get("losses"), 0.0) or 0),
-        "pushes": int(num(zone.get("pushes"), 0.0) or 0),
-        "n": int(num(zone.get("n"), 0.0) or 0),
-    }
-
-
-def _info_q4_rank(candidate: ScoreCandidate, exact_history: dict[str, Any]) -> tuple[float, ...]:
-    raw_delta = float(candidate.projection) - float(candidate.line)
-    directional_edge = raw_delta if str(candidate.side).upper() == "OVER" else -raw_delta
-    return (
-        float(candidate.p_final),
-        min(float(candidate.p_history), float(candidate.p_scenario)),
-        float(exact_history.get("probability") or 0.0),
-        min(directional_edge, 10.0),
-        float(candidate.odds or 0.0),
-    )
-
-
-def collect_q4_history_scenario_info(
-    candidates: Iterable[ScoreCandidate],
-    *,
-    stage: str,
-    selected_action: str,
-    age_blocked: bool = False,
-) -> list[dict[str, Any]]:
-    """Select the independent PASS→INFO cohort without touching PLAY/RISK.
-
-    The gate is deliberately downstream of the frozen action calculation:
-    - a file that already produced PLAY/RISK returns no INFO variants;
-    - only candidate.action == PASS is eligible;
-    - at most one candidate per market family is retained, ordered by P_final.
-    """
-    if not info_q4_enabled() or age_blocked:
-        return []
-    if str(selected_action or "").upper() in {"PLAY", "RISK"}:
-        return []
-    if str(stage or "") != INFO_Q4_STAGE:
-        return []
-
-    best_by_market: dict[str, tuple[ScoreCandidate, dict[str, Any]]] = {}
-    for candidate in candidates:
-        if str(candidate.action or "").upper() != "PASS":
-            continue
-        if not candidate.real_line or candidate.odds is None:
-            continue
-        if candidate.market_type not in INFO_Q4_MARKETS:
-            continue
-        if float(candidate.p_history) + 1e-12 < INFO_Q4_HISTORY_MIN:
-            continue
-        if float(candidate.p_scenario) + 1e-12 < INFO_Q4_SCENARIO_MIN:
-            continue
-        raw_delta = float(candidate.projection) - float(candidate.line)
-        if abs(raw_delta) > INFO_Q4_ABS_DELTA_MAX + 1e-12:
-            continue
-        exact_history = _candidate_exact_line_history(candidate)
-        previous = best_by_market.get(candidate.market_type)
-        if previous is None or _info_q4_rank(candidate, exact_history) > _info_q4_rank(*previous):
-            best_by_market[candidate.market_type] = (candidate, exact_history)
-
-    market_order = {"MATCH_TOTAL": 1, "TEAM_IT_MATCH": 2}
-    variants: list[dict[str, Any]] = []
-    for market_type, (candidate, exact_history) in sorted(
-        best_by_market.items(), key=lambda item: market_order.get(item[0], 99)
-    ):
-        raw_delta = float(candidate.projection) - float(candidate.line)
-        directional_edge = raw_delta if str(candidate.side).upper() == "OVER" else -raw_delta
-        variants.append({
-            "market_id": candidate.market_id,
-            "market_type": market_type,
-            "market_label": MARKET_LABELS.get(market_type, market_type),
-            "segment": candidate.segment,
-            "team": candidate.team,
-            "side": candidate.side,
-            "line": float(candidate.line),
-            "odds": float(candidate.odds),
-            "bookmaker": candidate.bookmaker,
-            "projection_home": float(candidate.projection_home),
-            "projection_away": float(candidate.projection_away),
-            "projection_total": float(candidate.projection_home + candidate.projection_away),
-            "projection_market": float(candidate.projection),
-            "raw_delta": raw_delta,
-            "directional_edge": directional_edge,
-            "candidate_edge": float(candidate.edge),
-            "edge_z": float(candidate.edge_z),
-            "p_history": float(candidate.p_history),
-            "p_scenario": float(candidate.p_scenario),
-            "p_final": float(candidate.p_final),
-            "exact_history_probability": exact_history.get("probability"),
-            "exact_history_hits": exact_history.get("hits"),
-            "exact_history_losses": exact_history.get("losses"),
-            "exact_history_pushes": exact_history.get("pushes"),
-            "exact_history_n": exact_history.get("n"),
-            "source_action": candidate.action,
-            "status": "ЦІКАВИЙ ІСТОРИКО-СЦЕНАРНИЙ ВАРІАНТ — БЮДЖЕТ 0%",
-            "informational_only": True,
-        })
-    return variants
-
-
-def _candidate_info_identity(candidate: ScoreCandidate) -> str:
-    """Stable identity used only to suppress an already-sent exact candidate."""
-    market_id = str(candidate.market_id or "").strip()
-    if market_id:
-        return market_id
-    return "|".join([
-        str(candidate.market_type or ""),
-        str(candidate.segment or ""),
-        str(candidate.team or ""),
-        str(candidate.side or "").upper(),
-        f"{float(candidate.line):.6f}",
-        str(candidate.bookmaker or ""),
-    ])
-
-
-def collect_history_scenario_90_info(
-    candidates: Iterable[ScoreCandidate],
-    *,
-    excluded_market_ids: Iterable[str] = (),
-    age_blocked: bool = False,
-) -> list[dict[str, Any]]:
-    """Return every independent 90/90 INFO line not already sent elsewhere.
-
-    This selector intentionally has no stage, market, delta or candidate-action
-    gate.  The upstream router still defines which candidates are legitimate.
-    A real bookmaker line, real odds and U18+ remain mandatory.  Exact
-    candidates already emitted as the main PLAY/RISK or Q4 INFO are excluded
-    only to prevent duplicate Telegram messages.
-    """
-    if not info_90_enabled() or age_blocked:
-        return []
-
-    excluded = {str(value).strip() for value in excluded_market_ids if str(value).strip()}
-    seen: set[str] = set()
-    variants: list[dict[str, Any]] = []
-    for candidate in candidates:
-        if not candidate.real_line or candidate.odds is None:
-            continue
-        if float(candidate.p_history) + 1e-12 < INFO_90_HISTORY_MIN:
-            continue
-        if float(candidate.p_scenario) + 1e-12 < INFO_90_SCENARIO_MIN:
-            continue
-        identity = _candidate_info_identity(candidate)
-        if identity in excluded or identity in seen:
-            continue
-        seen.add(identity)
-
-        exact_history = _candidate_exact_line_history(candidate)
-        raw_delta = float(candidate.projection) - float(candidate.line)
-        directional_edge = raw_delta if str(candidate.side).upper() == "OVER" else -raw_delta
-        variants.append({
-            "market_id": identity,
-            "market_type": candidate.market_type,
-            "market_label": MARKET_LABELS.get(candidate.market_type, candidate.market_type),
-            "segment": candidate.segment,
-            "team": candidate.team,
-            "side": candidate.side,
-            "line": float(candidate.line),
-            "odds": float(candidate.odds),
-            "bookmaker": candidate.bookmaker,
-            "projection_home": float(candidate.projection_home),
-            "projection_away": float(candidate.projection_away),
-            "projection_total": float(candidate.projection_home + candidate.projection_away),
-            "projection_market": float(candidate.projection),
-            "raw_delta": raw_delta,
-            "directional_edge": directional_edge,
-            "candidate_edge": float(candidate.edge),
-            "edge_z": float(candidate.edge_z),
-            "p_history": float(candidate.p_history),
-            "p_scenario": float(candidate.p_scenario),
-            "p_final": float(candidate.p_final),
-            "exact_history_probability": exact_history.get("probability"),
-            "exact_history_hits": exact_history.get("hits"),
-            "exact_history_losses": exact_history.get("losses"),
-            "exact_history_pushes": exact_history.get("pushes"),
-            "exact_history_n": exact_history.get("n"),
-            "source_action": candidate.action,
-            "status": "ІСТОРІЯ 90% + СЦЕНАРІЙ 90% — INFO, БЮДЖЕТ 0%",
-            "informational_only": True,
-        })
-    return variants
-
-
-def _info_q4_variant_block(index: int, variant: dict[str, Any]) -> str:
-    team = f" — {html.escape(str(variant['team']))}" if variant.get("team") else ""
-    odds = f" @ {float(variant['odds']):.2f}" if variant.get("odds") is not None else ""
-    history_probability = format_pct(num(variant.get("exact_history_probability")))
-    history_n = int(variant.get("exact_history_n") or 0)
-    history_hits = int(variant.get("exact_history_hits") or 0)
-    history_sample = f" ({history_hits}/{history_n})" if history_n else ""
-    return "\n".join([
-        f"<b>{index}. {html.escape(str(variant.get('market_label') or variant.get('market_type')))}{team}</b>",
-        f"<b>{html.escape(str(variant.get('side')))} {float(variant['line']):.1f}{odds}</b>",
-        f"🎯 Прогнозований рахунок: <b>{float(variant['projection_home']):.1f} : "
-        f"{float(variant['projection_away']):.1f}</b>",
-        f"🧮 Прогноз ринку / лінія: <b>{float(variant['projection_market']):.1f}</b> / "
-        f"{float(variant['line']):.1f}",
-        f"Δ прогноз−лінія: <b>{float(variant['raw_delta']):+.1f}</b> | "
-        f"Directional edge: <b>{float(variant['directional_edge']):+.1f}</b>",
-        f"📊 P_history: <b>{format_pct(num(variant.get('p_history')))}</b> | "
-        f"P_scenario: <b>{format_pct(num(variant.get('p_scenario')))}</b> | "
-        f"P_final: {format_pct(num(variant.get('p_final')))}",
-        f"📚 Exact-line history: <b>{history_probability}</b>{history_sample}",
-        f"БК: {html.escape(str(variant.get('bookmaker') or '—'))}",
-    ])
-
-
-def q4_history_scenario_info_messages(result: dict[str, Any]) -> list[str]:
-    variants = result.get("q4_history_scenario_info_variants") or []
-    if not variants:
-        return []
-    forecast = result.get("score_forecast") or {}
-    final_home = num(forecast.get("final_home"))
-    final_away = num(forecast.get("final_away"))
-    final_score = (
-        f"{half_up(final_home)}:{half_up(final_away)}"
-        if final_home is not None and final_away is not None else "—"
-    )
-    header = "\n".join([
-        "<b>📚 ЦІКАВИЙ ІСТОРИКО-СЦЕНАРНИЙ ВАРІАНТ</b>",
-        "<b>⚪ INFO 0% — НЕ PLAY І НЕ RISK</b>",
-        html.escape(str(forecast.get("match_name") or "Матч")),
-        f"Етап: <b>{html.escape(str(forecast.get('stage') or '—'))}</b>",
-        f"🎯 Загальний прогноз рахунку: <b>{final_score}</b>",
-        f"Умови: P_history/P_scenario ≥ 73%; |Δ| ≤ {INFO_Q4_ABS_DELTA_MAX:.1f}.",
-    ])
-    footer = "\n\n<i>Окремий PASS→INFO шар без бюджету. Чинні PLAY/RISK та їхні ставки не змінені.</i>"
-    blocks = [_info_q4_variant_block(index, row) for index, row in enumerate(variants, 1)]
-    messages: list[str] = []
-    current: list[str] = []
-    for block in blocks:
-        proposed = header + "\n\n" + "\n\n".join(current + [block]) + footer
-        if current and len(proposed) > INFO_Q4_TELEGRAM_MAX_CHARS:
-            messages.append(header + "\n\n" + "\n\n".join(current) + footer)
-            current = [block]
-        else:
-            current.append(block)
-    if current:
-        messages.append(header + "\n\n" + "\n\n".join(current) + footer)
-    return messages
-
-
-def history_scenario_90_info_messages(result: dict[str, Any]) -> list[str]:
-    variants = result.get("history_scenario_90_info_variants") or []
-    if not variants:
-        return []
-    forecast = result.get("score_forecast") or {}
-    final_home = num(forecast.get("final_home"))
-    final_away = num(forecast.get("final_away"))
-    final_score = (
-        f"{half_up(final_home)}:{half_up(final_away)}"
-        if final_home is not None and final_away is not None else "—"
-    )
-    header = "\n".join([
-        "<b>🔥 ІСТОРІЯ 90% + СЦЕНАРІЙ 90%</b>",
-        "<b>🟣 INFO 0% — ДОДАТКОВИЙ ВАРІАНТ БЕЗ БЮДЖЕТУ</b>",
-        html.escape(str(forecast.get("match_name") or "Матч")),
-        f"Етап: <b>{html.escape(str(forecast.get('stage') or '—'))}</b>",
-        f"🎯 Загальний прогноз рахунку: <b>{final_score}</b>",
-        "Умови: P_history ≥ 90% і P_scenario ≥ 90%; без обмеження stage, market або Δ.",
-    ])
-    footer = (
-        "\n\n<i>Окремий INFO-шар 0%. PLAY/RISK не змінені; "
-        "лінії, уже надіслані main або Q4 INFO, не дублюються.</i>"
-    )
-    blocks = [_info_q4_variant_block(index, row) for index, row in enumerate(variants, 1)]
-    messages: list[str] = []
-    current: list[str] = []
-    for block in blocks:
-        proposed = header + "\n\n" + "\n\n".join(current + [block]) + footer
-        if current and len(proposed) > INFO_90_TELEGRAM_MAX_CHARS:
-            messages.append(header + "\n\n" + "\n\n".join(current) + footer)
-            current = [block]
-        else:
-            current.append(block)
-    if current:
-        messages.append(header + "\n\n" + "\n\n".join(current) + footer)
-    return messages
-
-
 def _telegram_chat_ids(chats_file: Optional[str | Path] = None) -> tuple[list[str], str]:
     """Load recipients from the shared state volume, then fall back to env."""
     configured = chats_file or os.getenv("TELEGRAM_CHATS_FILE") or "/app/state/telegram_chats.json"
@@ -1579,32 +1250,6 @@ def send_telegram(text: str) -> dict[str, Any]:
         "chats_sent": len(chat_ids),
         "message_ids": message_ids,
     }
-
-
-def send_info_telegram_batch(messages: Iterable[str]) -> dict[str, Any]:
-    """Send INFO messages without allowing the optional layer to crash a job."""
-    deliveries: list[dict[str, Any]] = []
-    for message in messages:
-        try:
-            deliveries.append(send_telegram(message))
-        except Exception as error:
-            deliveries.append({
-                "status": "ERROR",
-                "error_type": type(error).__name__,
-                "error": str(error),
-            })
-    statuses = [str(item.get("status") or "UNKNOWN") for item in deliveries]
-    if statuses and all(status == "SENT" for status in statuses):
-        status = "SENT"
-    elif not statuses:
-        status = "SKIPPED_NO_MESSAGES"
-    elif any(status == "SENT" for status in statuses):
-        status = "PARTIAL"
-    elif len(set(statuses)) == 1:
-        status = statuses[0]
-    else:
-        status = "NOT_SENT"
-    return {"status": status, "messages_count": len(deliveries), "deliveries": deliveries}
 
 
 def analyse_file(
@@ -1687,26 +1332,6 @@ def analyse_file(
         }
     model_line = None
     selected = apply_budget(selected, bankroll_usdt)
-    q4_info_variants = collect_q4_history_scenario_info(
-        candidates,
-        stage=stage,
-        selected_action=str(selected.get("action") or "PASS"),
-        age_blocked=age_blocked,
-    )
-    info_90_excluded_ids = {
-        str(row.get("market_id") or "").strip()
-        for row in q4_info_variants
-        if str(row.get("market_id") or "").strip()
-    }
-    if str(selected.get("action") or "").upper() in {"PLAY", "RISK"}:
-        selected_market_id = str(selected.get("market_id") or "").strip()
-        if selected_market_id:
-            info_90_excluded_ids.add(selected_market_id)
-    info_90_variants = collect_history_scenario_90_info(
-        candidates,
-        excluded_market_ids=info_90_excluded_ids,
-        age_blocked=age_blocked,
-    )
 
     score_forecast = asdict(score_forecast_obj)
     result = {
@@ -1742,33 +1367,12 @@ def analyse_file(
                 "post_q3_under_prefers_h2_to_avoid_ot_exposure": True,
                 "detected_youth_age": youth_age,
                 "age_blocked": age_blocked,
-                "q4_pass_info_layer_enabled": info_q4_enabled(),
-                "q4_pass_info_layer_is_independent": True,
-                "q4_pass_info_layer_skips_files_with_play_or_risk": True,
-                "q4_pass_info_history_min": INFO_Q4_HISTORY_MIN,
-                "q4_pass_info_scenario_min": INFO_Q4_SCENARIO_MIN,
-                "q4_pass_info_abs_delta_max": INFO_Q4_ABS_DELTA_MAX,
-                "q4_pass_info_stage": INFO_Q4_STAGE,
-                "q4_pass_info_markets": sorted(INFO_Q4_MARKETS),
-                "q4_pass_info_budget_percent": 0.0,
-                "history_scenario_90_info_layer_enabled": info_90_enabled(),
-                "history_scenario_90_info_layer_is_independent": True,
-                "history_scenario_90_info_history_min": INFO_90_HISTORY_MIN,
-                "history_scenario_90_info_scenario_min": INFO_90_SCENARIO_MIN,
-                "history_scenario_90_info_stage_gate": None,
-                "history_scenario_90_info_market_gate": None,
-                "history_scenario_90_info_delta_gate": None,
-                "history_scenario_90_info_requires_real_line_and_odds": True,
-                "history_scenario_90_info_deduplicates_main_and_q4_info": True,
-                "history_scenario_90_info_budget_percent": 0.0,
             },
         },
         "score_forecast": score_forecast,
         "selected": selected,
         "model_line": model_line,
         "ranked_candidates": [asdict(row) for row in candidates],
-        "q4_history_scenario_info_variants": q4_info_variants,
-        "history_scenario_90_info_variants": info_90_variants,
         "rejected_by_v15_route": rejected,
         "legacy_context": {
             "version": ((legacy_result.get("super_basket_system") or {}).get("version")),
@@ -1784,68 +1388,6 @@ def analyse_file(
     else:
         delivery = send_telegram(message)
     result["telegram"] = {"message": message, "delivery": delivery}
-    info_messages = q4_history_scenario_info_messages(result)
-    if not info_q4_enabled():
-        info_delivery = {"status": "SKIPPED_DISABLED_BY_ENV", "messages_count": 0}
-    elif age_blocked:
-        info_delivery = {"status": "SKIPPED_AGE_FILTER", "messages_count": 0}
-    elif str(selected.get("action") or "").upper() in {"PLAY", "RISK"}:
-        info_delivery = {"status": "SKIPPED_MAIN_PLAY_RISK", "messages_count": 0}
-    elif stage != INFO_Q4_STAGE:
-        info_delivery = {"status": "SKIPPED_STAGE", "messages_count": 0}
-    elif not info_messages:
-        info_delivery = {"status": "SKIPPED_NO_QUALIFYING_PASS_INFO", "messages_count": 0}
-    elif not send:
-        info_delivery = {"status": "DISABLED", "messages_count": len(info_messages)}
-    else:
-        info_delivery = send_info_telegram_batch(info_messages)
-    result["q4_history_scenario_info_telegram"] = {
-        "informational_only": True,
-        "budget_percent": 0.0,
-        "rule": {
-            "selected_action_required": "PASS",
-            "stage": INFO_Q4_STAGE,
-            "markets": sorted(INFO_Q4_MARKETS),
-            "p_history_min": INFO_Q4_HISTORY_MIN,
-            "p_scenario_min": INFO_Q4_SCENARIO_MIN,
-            "abs_raw_delta_max": INFO_Q4_ABS_DELTA_MAX,
-            "selection": "TOP1_PER_MARKET_TYPE_BY_P_FINAL",
-        },
-        "variants_count": len(q4_info_variants),
-        "messages": info_messages,
-        "delivery": info_delivery,
-    }
-
-    info_90_messages = history_scenario_90_info_messages(result)
-    if not info_90_enabled():
-        info_90_delivery = {"status": "SKIPPED_DISABLED_BY_ENV", "messages_count": 0}
-    elif age_blocked:
-        info_90_delivery = {"status": "SKIPPED_AGE_FILTER", "messages_count": 0}
-    elif not info_90_messages:
-        info_90_delivery = {"status": "SKIPPED_NO_NEW_QUALIFYING_90_90_INFO", "messages_count": 0}
-    elif not send:
-        info_90_delivery = {"status": "DISABLED", "messages_count": len(info_90_messages)}
-    else:
-        info_90_delivery = send_info_telegram_batch(info_90_messages)
-    result["history_scenario_90_info_telegram"] = {
-        "informational_only": True,
-        "budget_percent": 0.0,
-        "rule": {
-            "p_history_min": INFO_90_HISTORY_MIN,
-            "p_scenario_min": INFO_90_SCENARIO_MIN,
-            "stage_gate": None,
-            "market_gate": None,
-            "delta_gate": None,
-            "real_line_and_odds_required": True,
-            "u18_plus_required": True,
-            "selection": "ALL_UNIQUE_ROUTE_VALID_REAL_LINES",
-            "deduplicate_against": ["MAIN_PLAY_RISK", "Q4_HISTORY_SCENARIO_INFO"],
-        },
-        "excluded_market_ids": sorted(info_90_excluded_ids),
-        "variants_count": len(info_90_variants),
-        "messages": info_90_messages,
-        "delivery": info_90_delivery,
-    }
 
     destination = Path(output_path).expanduser().resolve() if output_path else match_path.with_name(match_path.stem + "_v15_5_result.json")
     destination.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -2211,10 +1753,6 @@ def cli(argv: Optional[list[str]] = None) -> int:
                 "p_score": selected.get("p_score_calibrated"),
                 "p_final": selected.get("p_final"),
                 "telegram": result["telegram"]["delivery"],
-                "q4_info_variants": result["q4_history_scenario_info_telegram"]["variants_count"],
-                "q4_info_telegram": result["q4_history_scenario_info_telegram"]["delivery"],
-                "info_90_90_variants": result["history_scenario_90_info_telegram"]["variants_count"],
-                "info_90_90_telegram": result["history_scenario_90_info_telegram"]["delivery"],
             }, ensure_ascii=False, indent=2))
             return 0
 
