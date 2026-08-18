@@ -16272,6 +16272,11 @@ DEFAULT_CONFIG.setdefault('v12_advisor_policy', {}).update({
 #   3 = EARLY_LIVE_Q2, approximately 2:00 played in Q2
 #   4 = HT
 #   5 = Q4_CONFIRMATION, approximately 4:00 played in Q4
+#   7 = Q1_MIN6, approximately 6:00 played in Q1
+#   8 = Q2_MIN6, approximately 6:00 played in Q2
+#   9 = Q3_MIN6, approximately 6:00 played in Q3
+#  10 = Q4_MIN6, approximately 6:00 played in Q4
+# Checkpoint 6 remains reserved by the outer worker for the final parser+math-only snapshot.
 # Exact provider score/clock remains authoritative. The checkpoint supplies a
 # fallback clock only when the parser omitted it and never discards otherwise
 # valid lines or parser live projections merely because of a naming/time mismatch.
@@ -16286,6 +16291,10 @@ V124_CHECKPOINT_NAMES = {
     3: 'EARLY_LIVE_Q2',
     4: 'HT',
     5: 'Q4_CONFIRMATION',
+    7: 'Q1_MIN6',
+    8: 'Q2_MIN6',
+    9: 'Q3_MIN6',
+    10: 'Q4_MIN6',
 }
 V124_CHECKPOINT_TOLERANCE_SECONDS = max(
     60, int(os.getenv('SUPER_BASKET_V124_CHECKPOINT_TOLERANCE_SECONDS', '180'))
@@ -16311,6 +16320,10 @@ def _v124_checkpoint_expected(cp: int, quarter_seconds: int) -> dict[str, Any]:
         3: {'period': 2, 'period_played_seconds': 120, 'elapsed_seconds': q + 120},
         4: {'period': None, 'period_played_seconds': None, 'elapsed_seconds': 2 * q},
         5: {'period': 4, 'period_played_seconds': 240, 'elapsed_seconds': 3 * q + 240},
+        7: {'period': 1, 'period_played_seconds': 360, 'elapsed_seconds': 360},
+        8: {'period': 2, 'period_played_seconds': 360, 'elapsed_seconds': q + 360},
+        9: {'period': 3, 'period_played_seconds': 360, 'elapsed_seconds': 2 * q + 360},
+        10: {'period': 4, 'period_played_seconds': 360, 'elapsed_seconds': 3 * q + 360},
     }
     return {'checkpoint': cp, 'name': V124_CHECKPOINT_NAMES[cp], **table[cp]}
 
@@ -16346,6 +16359,8 @@ def _v124_checkpoint_from_source(source: dict[str, Any], path: Optional[Path]=No
         return 1
     if stage in {'HT', 'HALFTIME', 'HALF_TIME'} or 'ПЕРЕРВА' in stage or 'AFTER_Q2' in stage:
         return 4
+    if period in {1, 2, 3, 4} and played is not None and 5.0 < float(played) <= 8.0:
+        return 6 + int(period)
     if period == 1 and (played is None or played <= 5.0):
         return 2
     if period == 2 and (played is None or played <= 5.0):
@@ -16375,6 +16390,9 @@ def _v124_checkpoint_from_source(source: dict[str, Any], path: Optional[Path]=No
         return 4
     if re.search(r'(?:^|_)(?:q4_?confirmation|q4_?4min|early_?q4)(?:_|$)', stem):
         return 5
+    for quarter, cp in ((1, 7), (2, 8), (3, 9), (4, 10)):
+        if re.search(rf'(?:^|_)q{quarter}_?(?:6min|min6|6m)(?:_|$)', stem):
+            return cp
     return None
 
 
@@ -16389,7 +16407,7 @@ def _v124_prepare_source(source: dict[str, Any], cp: Optional[int]) -> dict[str,
     qsec = int(qmin) * 60
     expected = _v124_checkpoint_expected(cp, qsec)
     context = output.get('analysis_context') if isinstance(output.get('analysis_context'), dict) else {}
-    legacy = {1: None, 2: None, 3: 1, 4: 2, 5: 3}[cp]
+    legacy = {1: None, 2: None, 3: 1, 4: 2, 5: 3, 7: None, 8: None, 9: None, 10: None}[cp]
     context.update({
         'advisor_checkpoint': cp,
         'advisor_checkpoint_name': V124_CHECKPOINT_NAMES[cp],
@@ -16417,7 +16435,7 @@ def _v124_prepare_source(source: dict[str, Any], cp: Optional[int]) -> dict[str,
             match['match_minute_played'] = 0.0; synthesized.append('match_minute_played')
         if not isinstance(match.get('score'), dict):
             match['score'] = {'home': 0, 'away': 0, 'total': 0, 'margin_home': 0}; synthesized.append('score')
-    elif cp in {2, 3, 5}:
+    elif cp in {2, 3, 5, 7, 8, 9, 10}:
         target_period = int(expected['period'])
         target_played = float(expected['period_played_seconds']) / 60.0
         if period is None:
@@ -16914,7 +16932,7 @@ def _v12_build_messages(advisor: dict[str, Any], calculation: dict[str, Any]) ->
     cp = to_int(snapshot.get('advisor_checkpoint'))
     if cp not in V124_CHECKPOINT_NAMES:
         return messages
-    checkpoint_line = f'<b>Чекпоінт:</b> {cp}/5 {html.escape(V124_CHECKPOINT_NAMES[cp])}'
+    checkpoint_line = f'<b>Чекпоінт:</b> #{cp} {html.escape(V124_CHECKPOINT_NAMES[cp])}'
     output = []
     for message in messages:
         token = '<b>Стадія:</b>'
@@ -16950,7 +16968,7 @@ def _v112_input_state_gate(source: dict[str, Any], canonical: dict[str, Any], ch
     return result
 
 
-# Public 1..5 process wrapper. Internally, v12.3 receives no legacy CLI checkpoint;
+# Public checkpoint process wrapper (1..5 plus additive 7..10 minute-6 points). Internally, v12.3 receives no legacy CLI checkpoint;
 # the prepared source carries the correct legacy completed-quarter trigger only
 # where scenario math needs it (Q2 early/HT/Q4 confirmation).
 _V124_PROCESS_BASE = process_vps_match_file
@@ -16981,7 +16999,7 @@ def process_vps_match_file(
     if cp is not None:
         cp = int(cp)
         if cp not in V124_CHECKPOINT_NAMES:
-            raise ValueError('checkpoint must be 1..5: 1=prematch, 2=early_live_q1, 3=early_live_q2, 4=ht, 5=q4_confirmation')
+            raise ValueError('checkpoint must be one of 1,2,3,4,5,7,8,9,10 (6 is reserved for final parser+math)')
     _V124_RUNTIME_PATH = source_path
     _V124_RUNTIME_CHECKPOINT = cp
     _V124_BASE_PROCESS_ACTIVE = True
@@ -17030,7 +17048,7 @@ def process_vps_match_file(
     return result
 
 
-# CLI compatibility: accept --checkpoint 1..5 even though the embedded legacy
+# CLI compatibility: accept --checkpoint 1..5 and 7..10 even though the embedded legacy
 # argparse parser still documents 1..3. The option is stripped before delegating;
 # the public wrapper above receives it via the runtime bridge.
 _V124_CLI_BASE = _single_file_cli
@@ -17043,13 +17061,13 @@ def _single_file_cli(argv: list[str] | None=None) -> int:
     if '--checkpoint' in args:
         index = args.index('--checkpoint')
         if index + 1 >= len(args):
-            raise SystemExit('--checkpoint requires 1..5')
+            raise SystemExit('--checkpoint requires one of 1,2,3,4,5,7,8,9,10')
         try:
             forced = int(args[index + 1])
         except ValueError as error:
-            raise SystemExit('--checkpoint requires an integer 1..5') from error
+            raise SystemExit('--checkpoint requires an integer from 1,2,3,4,5,7,8,9,10') from error
         if forced not in V124_CHECKPOINT_NAMES:
-            raise SystemExit('--checkpoint must be 1..5')
+            raise SystemExit('--checkpoint must be one of 1,2,3,4,5,7,8,9,10')
         del args[index:index + 2]
     _V124_CLI_FORCED_CHECKPOINT = forced
     try:
@@ -17060,7 +17078,8 @@ def _single_file_cli(argv: list[str] | None=None) -> int:
 
 DEFAULT_CONFIG.setdefault('v12_advisor_policy', {}).update({
     'version': ADVISOR_VERSION,
-    'five_checkpoints': deepcopy(V124_CHECKPOINT_NAMES),
+    'five_checkpoints': {key: value for key, value in V124_CHECKPOINT_NAMES.items() if key <= 5},
+    'additive_minute6_checkpoints': {key: value for key, value in V124_CHECKPOINT_NAMES.items() if key >= 7},
     'provider_time_authoritative': True,
     'checkpoint_time_mismatch_is_warning': True,
     'preserve_fresh_parser_live_projection': True,
@@ -19037,7 +19056,7 @@ def _v134_market_priority(item: dict[str, Any], canonical: dict[str, Any]) -> fl
     cp = _v134_checkpoint(canonical)
     stage = str(canonical.get('stage') or '').upper()
     # During Q1/after Q1, the closest observable segments are Q1 and H1.
-    if cp in {2, 3} or stage in {'EARLY_LIVE', 'Q1_LIVE', 'Q2_LIVE'}:
+    if cp in {2, 3, 7, 8} or stage in {'EARLY_LIVE', 'Q1_LIVE', 'Q2_LIVE'}:
         table = {
             'CURRENT_QUARTER_TOTAL': 2.80 if segment in {'Q1','Q2'} else 0.70,
             'H1_TOTAL': 2.60,
@@ -19058,8 +19077,19 @@ def _v134_market_priority(item: dict[str, Any], canonical: dict[str, Any]) -> fl
             'TEAM_IT_MATCH': 0.70,
         }
         return float(table.get(market_type, 0.30))
+    # Mid-Q3 minute-6 snapshot: current Q3 and match are the relevant scopes.
+    if cp == 9 or stage in {'Q3', 'Q3_LIVE'}:
+        table = {
+            'CURRENT_QUARTER_TOTAL': 2.85 if segment == 'Q3' else 0.60,
+            'CURRENT_QUARTER_TEAM_IT': 2.45 if segment == 'Q3' else 0.55,
+            'MATCH_TOTAL': 2.35,
+            'TEAM_IT_MATCH': 1.75,
+            'H2_TOTAL': 1.10,
+            'TEAM_IT_H2': 0.90,
+        }
+        return float(table.get(market_type, 0.35))
     # After Q3/start Q4, match total becomes the main market.
-    if cp == 5 or stage in {'AFTER_3Q', 'Q4_CONFIRMATION', 'Q4_LIVE'}:
+    if cp in {5, 10} or stage in {'AFTER_3Q', 'Q4_CONFIRMATION', 'Q4_LIVE'}:
         table = {
             'MATCH_TOTAL': 3.00,
             'TEAM_IT_MATCH': 2.20,
@@ -19775,7 +19805,7 @@ _V1351_HARD_GATE_BASE = _v131_hard_gate
 def _v1351_early_stage(canonical: dict[str, Any]) -> bool:
     cp = _v134_checkpoint(canonical)
     stage = str(canonical.get('stage') or '').upper()
-    return cp in {2, 3} or stage in {'EARLY_LIVE', 'Q1_LIVE', 'Q2_LIVE'}
+    return cp in {2, 3, 7, 8} or stage in {'EARLY_LIVE', 'Q1_LIVE', 'Q2_LIVE'}
 
 
 def _v131_hard_gate(item: dict[str, Any], canonical: dict[str, Any], metrics: dict[str, Any]) -> list[str]:
@@ -19905,11 +19935,13 @@ def _v142_stage(canonical: dict[str, Any]) -> str:
         return 'PRE_MATCH'
     if cp == 4:
         return 'HT'
-    if cp == 5:
+    if cp in {5, 10}:
         return 'Q4'
-    if cp == 3:
+    if cp == 9:
+        return 'Q3'
+    if cp in {3, 8}:
         return 'Q2'
-    if cp == 2:
+    if cp in {2, 7}:
         return 'Q1'
     return 'UNKNOWN'
 

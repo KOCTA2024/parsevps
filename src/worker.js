@@ -15,6 +15,7 @@
  *
  * Checkpoint #6 після завершення матчу виконує лише кроки 1–2 і зберігає
  * *_result_checkpoint6.json. Крок 3, Telegram і SQLite для нього вимкнені.
+ * Checkpoints #7–#10 — додаткові повні live-запуски на 6-й хвилині Q1–Q4.
  */
 import path from 'path';
 import fs from 'fs';
@@ -59,6 +60,29 @@ const LEGACY_ADVISOR_SCRIPT = process.env.SUPER_BASKET_LEGACY_ADVISOR
 const CALIBRATION_FILE = process.env.SUPER_BASKET_CALIBRATION
   || path.join(APP_ROOT, 'src', 'v15_2_calibration_production_485.json');
 const V15_SIMULATIONS = Number(process.env.SUPER_BASKET_SIMULATIONS) || 12000;
+
+// Same-match checkpoints can be only a few minutes apart. The parser writes to
+// shared data/<match>.json and line_result_<id>.json paths, so serialize only
+// the parser+snapshot section per match; calculations may still run concurrently
+// from their immutable checkpoint copies.
+const parserLocks = new Map();
+
+async function withMatchParserLock(matchId, fn) {
+  const key = String(matchId);
+  const previous = parserLocks.get(key) || Promise.resolve();
+  let release;
+  const current = new Promise((resolve) => { release = resolve; });
+  const tail = previous.catch(() => undefined).then(() => current);
+  parserLocks.set(key, tail);
+
+  await previous.catch(() => undefined);
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (parserLocks.get(key) === tail) parserLocks.delete(key);
+  }
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -107,6 +131,17 @@ function resolveWorkerCheckpoint(jobData, fiveCheckpointMode = ENABLE_FIVE_CHECK
   const hasNewStageMarker = jobData.stageCheckpoint !== undefined &&
     jobData.stageCheckpoint !== null;
   const stageCheckpoint = Number(hasNewStageMarker ? jobData.stageCheckpoint : jobData.checkpoint) || 0;
+
+  // Additive minute-6 checkpoints are full v15 jobs. Step 2 has no checkpoint
+  // CLI argument and v15.5 derives the stage from the parser snapshot itself, so
+  // they are safe even when the old five-checkpoint compatibility flag is off.
+  if (stageCheckpoint >= 7 && stageCheckpoint <= 10) {
+    return {
+      accepted: true,
+      stageCheckpoint,
+      calculatorCheckpoint: stageCheckpoint,
+    };
+  }
 
   if (fiveCheckpointMode) {
     return {
@@ -170,8 +205,24 @@ async function processJob(job) {
       `(scheduled fire: ${fireAt}; stage checkpoint: ${publicStageCheckpoint || 'unknown'}` +
       `${checkpointLabel ? `/${checkpointLabel}` : ''}; calculator checkpoint: ${triggerCheckpoint})`);
 
+  // Build stable checkpoint paths before parsing. Frequent minute-6 jobs may
+  // overlap older checkpoints, so Step 2 must never read the parser's shared
+  // mutable output paths directly.
+  fs.mkdirSync(MATCH_FILES_DIR, { recursive: true });
+  const checkpointKey = (ENABLE_FIVE_CHECKPOINTS || (publicStageCheckpoint >= 7 && publicStageCheckpoint <= 10))
+    ? `checkpoint_${triggerCheckpoint}`
+    : (triggerCheckpoint >= 1 && triggerCheckpoint <= 3
+      ? `q${triggerCheckpoint}`
+      : `checkpoint_${Date.now()}`);
+  const matchBaseName = path.basename(dataFilename, path.extname(dataFilename));
+
   // ── Step 1: Node parser ───────────────────────────────────────────────────
   const parserScript = path.join(APP_ROOT, 'src', 'match_h2h_export.js');
+  const sharedDataFilePath = path.join(APP_ROOT, 'src', 'data', dataFilename);
+  const sharedLineFilePath = path.join(APP_ROOT, 'src', 'data', lineFilename);
+  const dataFilePath = path.join(MATCH_FILES_DIR, `${matchBaseName}_${checkpointKey}_parser.json`);
+  const lineFilePath = path.join(MATCH_FILES_DIR, `${matchBaseName}_${checkpointKey}_lines.json`);
+
   log(jid, 'info', `Step 1 → node ${parserScript} --matchId ${matchId} --home ${homeSlug} --away ${awaySlug}` +
       (parserMathOnly ? ' --skip-lines' : ''));
   await job.updateProgress(10);
@@ -180,38 +231,28 @@ async function processJob(job) {
     parserScript, '--matchId', matchId, '--home', homeSlug, '--away', awaySlug,
   ];
   if (parserMathOnly) parserArgs.push('--skip-lines');
-  const parserResult = await run(NODE_BIN, parserArgs, { jobId: jid });
 
-  log(jid, 'info', `Step 1 exited ${parserResult.code}${parserResult.stderr ? '\n' + parserResult.stderr : ''}`);
-  if (parserResult.code !== 0) {
-    throw new Error(`Parser failed (exit ${parserResult.code}): ${parserResult.stderr || '(none)'}`);
-  }
+  const parserResult = await withMatchParserLock(matchId, async () => {
+    const result = await run(NODE_BIN, parserArgs, { jobId: jid });
+    log(jid, 'info', `Step 1 exited ${result.code}${result.stderr ? '\n' + result.stderr : ''}`);
+    if (result.code !== 0) {
+      throw new Error(`Parser failed (exit ${result.code}): ${result.stderr || '(none)'}`);
+    }
 
-  // Парсер может выйти с кодом 0, даже если не нашёл матч на betking
-  // и не записал итоговый JSON (например, "Match not found" залогирован
-  // как non-fatal warning внутри match_h2h_export.js). Проверяем файлы
-  // на диске явно, чтобы не улетать на Step 2 с несуществующими путями.
-  const dataFilePath = path.join(APP_ROOT, 'src', 'data', dataFilename);
-  const lineFilePath = path.join(APP_ROOT, 'src', 'data', lineFilename);
+    const missing = [sharedDataFilePath, sharedLineFilePath].filter(p => !fs.existsSync(p));
+    if (missing.length) {
+      throw new Error(
+        `Parser exited 0 but did not produce expected file(s): ${missing.join(', ')} ` +
+        `— likely failed to locate the match on the source site (see Step 1 logs above).`
+      );
+    }
 
-  const missing = [dataFilePath, lineFilePath].filter(p => !fs.existsSync(p));
-  if (missing.length) {
-    throw new Error(
-      `Parser exited 0 but did not produce expected file(s): ${missing.join(', ')} ` +
-      `— likely failed to locate the match on the source site (see Step 1 logs above).`
-    );
-  }
+    fs.copyFileSync(sharedDataFilePath, dataFilePath);
+    fs.copyFileSync(sharedLineFilePath, lineFilePath);
+    log(jid, 'info', `Step 1 snapshot frozen for checkpoint: ${dataFilePath} + ${lineFilePath}`);
+    return result;
+  });
 
-  // Only calculated artifacts are checkpoint-specific. math_script.py merges
-  // the current parser JSON and lines itself, so duplicating both source files
-  // for every checkpoint is unnecessary.
-  fs.mkdirSync(MATCH_FILES_DIR, { recursive: true });
-  const checkpointKey = ENABLE_FIVE_CHECKPOINTS
-    ? `checkpoint_${triggerCheckpoint}`
-    : (triggerCheckpoint >= 1 && triggerCheckpoint <= 3
-      ? `q${triggerCheckpoint}`
-      : `checkpoint_${Date.now()}`);
-  const matchBaseName = path.basename(dataFilePath, path.extname(dataFilePath));
   await job.updateProgress(40);
 
   // ── Step 2: Python calculator ─────────────────────────────────────────────
@@ -399,5 +440,5 @@ process.on('SIGINT',  () => shutdown('SIGINT'));
 console.log(
   `[worker] Started. Queue "${QUEUE_NAME}" | Redis ${REDIS_CONFIG.host}:${REDIS_CONFIG.port}` +
   ` | Concurrency: ${worker.opts.concurrency}` +
-  ` | Checkpoint mode: ${ENABLE_FIVE_CHECKPOINTS ? 'FULL_1_TO_5' : 'LEGACY_Q2_HT_Q4_ONLY'}`
+  ` | Checkpoint mode: ${ENABLE_FIVE_CHECKPOINTS ? 'FULL_1_TO_5' : 'LEGACY_Q2_HT_Q4_ONLY'}+Q1_Q2_Q3_Q4_MIN6`
 );

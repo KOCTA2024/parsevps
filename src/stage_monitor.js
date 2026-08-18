@@ -8,7 +8,8 @@
  * пора запускати ланцюжок аналізу (парсер → math_script.py → OpenAI →
  * Telegram, все виконує сам worker.js — цей модуль лише кладе job у чергу).
  *
- * Шість контрольних точок на матч:
+ * Десять контрольних точок на матч. Існуючі #1–#6 НЕ змінюються;
+ * додані #7–#10 на 6-й хвилині кожної чверті:
  *   Checkpoint #1 — за 5 хвилин до kickoff за розкладом (без live-зсуву)
  *   Checkpoint #2 — 2-га хвилина фактичної Q1
  *   Checkpoint #3 — 2-га хвилина фактичної Q2 (колишній Checkpoint #1)
@@ -16,6 +17,10 @@
  *   Checkpoint #5 — 4-та хвилина фактичної Q4 (колишній Checkpoint #3)
  *   Checkpoint #6 — після завершення матчу; лише парсер + math_script.py,
  *                   без super_basket/Telegram/SQLite
+ *   Checkpoint #7 — 6-та хвилина фактичної Q1
+ *   Checkpoint #8 — 6-та хвилина фактичної Q2
+ *   Checkpoint #9 — 6-та хвилина фактичної Q3
+ *   Checkpoint #10 — 6-та хвилина фактичної Q4
  *
  * Ігрові точки визначаються за реальною стадією матчу, а не лише за kickoff:
  * якщо старт затримано, watcher лишається живим у status=not_started і
@@ -117,6 +122,7 @@ const PREMATCH_LEAD_MIN  = Number(process.env.PREMATCH_LEAD_MIN) || 5;
 const Q1_TRIGGER_MINUTE  = Number(process.env.Q1_TRIGGER_MINUTE) || 2;
 const Q2_TRIGGER_MINUTE  = Number(process.env.Q2_TRIGGER_MINUTE) || 2;
 const Q4_TRIGGER_MINUTE  = Number(process.env.Q4_TRIGGER_MINUTE) || 4;
+const EACH_QUARTER_TRIGGER_MINUTE = Number(process.env.EACH_QUARTER_TRIGGER_MINUTE) || 6;
 // Було 15 хв — зарано здавались, якщо матч стартував із запізненням щодо
 // kickoff у фіді (реальний Q1/пауза розтягувались довше вікна). Підняли дефолт.
 // Було 25 хв. Тепер, коли час у 'not_started' більше не витрачає це вікно
@@ -307,18 +313,22 @@ function checkpoint1Q2TriggerState(stage, triggerMinute = 2) {
 // New Checkpoint #2: fire only at minute 2+ of the actual first quarter.
 // completedQuarters/currentQuarter make a late restart safe: once Q1 is over,
 // this checkpoint is stale and must never be replayed in Q2 or a later period.
-function checkpoint2Q1TriggerState(stage, triggerMinute = 2) {
+function quarterMinuteTriggerState(stage, targetQuarter, triggerMinute) {
   const completed = stage?.completedQuarters;
   if (stage?.status === 'finished' ||
-      (Number.isInteger(completed) && completed >= 1) ||
-      (Number.isInteger(stage?.currentQuarter) && stage.currentQuarter > 1)) {
+      (Number.isInteger(completed) && completed >= targetQuarter) ||
+      (Number.isInteger(stage?.currentQuarter) && stage.currentQuarter > targetQuarter)) {
     return 'STALE';
   }
   if (stage?.status !== 'live' || !Number.isFinite(stage?.liveMinute)) return 'WAIT';
 
-  const q1Confirmed = stage.currentQuarter === 1 ||
-    (stage.currentQuarter == null && completed === 0);
-  return q1Confirmed && stage.liveMinute >= triggerMinute ? 'TARGET' : 'WAIT';
+  const quarterConfirmed = stage.currentQuarter === targetQuarter ||
+    (stage.currentQuarter == null && completed === targetQuarter - 1);
+  return quarterConfirmed && stage.liveMinute >= triggerMinute ? 'TARGET' : 'WAIT';
+}
+
+function checkpoint2Q1TriggerState(stage, triggerMinute = 2) {
+  return quarterMinuteTriggerState(stage, 1, triggerMinute);
 }
 
 function displayedCheckpointNumber(legacyCheckpointIndex) {
@@ -463,6 +473,8 @@ async function enqueueAnalysis(match, checkpointIndex, metadata = {}) {
     // Checkpoint #6 is an archival final snapshot. worker.js must stop after
     // parser + math_script.py and must not run super_basket or notifications.
     parserMathOnly: metadata.parserMathOnly === true,
+    liveQuarter: metadata.liveQuarter ?? null,
+    liveMinute: metadata.liveMinute ?? null,
   };
 
   // Унікальний jobId на кожну з трьох перерв одного матчу — інакше BullMQ
@@ -583,6 +595,96 @@ function watchQ1MinuteCheckpoint(match, sportId) {
     if (liveWaitStartedAt !== null && Date.now() - liveWaitStartedAt > HARD_CHECK_WINDOW_MS) {
       finish();
       log(id, `⏱ Checkpoint #2 hard timeout after ${HARD_CHECK_WINDOW_MS / 60_000} min of live waiting.`);
+      return;
+    }
+
+    timer = setTimeout(poll, POLL_INTERVAL_MS);
+  };
+
+  void poll();
+}
+
+// ─── Checkpoints #7–#10: 6-та хвилина кожної фактичної чверті ──────────────
+
+function sixMinuteOffset(quarter, quarterMin) {
+  const q = Number(quarterMin);
+  const minute = EACH_QUARTER_TRIGGER_MINUTE;
+  if (quarter === 1) return minute;
+  if (quarter === 2) return q + SHORT_BREAK_MIN + minute;
+  if (quarter === 3) return 2 * q + SHORT_BREAK_MIN + HALFTIME_BREAK_MIN + minute;
+  if (quarter === 4) return 3 * q + 2 * SHORT_BREAK_MIN + HALFTIME_BREAK_MIN + minute;
+  throw new Error(`Unsupported quarter for six-minute checkpoint: ${quarter}`);
+}
+
+function watchQuarterSixMinuteCheckpoint(match, sportId, targetQuarter, sequenceCheckpoint) {
+  const { id } = match;
+  const notStartedWaitStartedAt = Date.now();
+  let liveWaitStartedAt = null;
+  let stopped = false;
+  let timer = null;
+
+  const finish = () => {
+    stopped = true;
+    if (timer) clearTimeout(timer);
+  };
+
+  log(id, `▶ Checkpoint #${sequenceCheckpoint} window opened — target: actual Q${targetQuarter} ` +
+          `minute ${EACH_QUARTER_TRIGGER_MINUTE}+; polling every ${POLL_INTERVAL_MS / 1000}s.`);
+
+  const poll = async () => {
+    if (stopped) return;
+
+    let stage;
+    try {
+      stage = await matchStageChecker.checkStage(id, sportId);
+    } catch (e) {
+      log(id, `⚠ Checkpoint #${sequenceCheckpoint} stage check failed (will retry): ${e.message}`);
+      timer = setTimeout(poll, POLL_INTERVAL_MS);
+      return;
+    }
+
+    if (stage.status === 'not_started') {
+      if (NOT_STARTED_MAX_WAIT_MS > 0 &&
+          Date.now() - notStartedWaitStartedAt > NOT_STARTED_MAX_WAIT_MS) {
+        finish();
+        log(id, `⏱ Checkpoint #${sequenceCheckpoint} — match still not_started after ` +
+                `${NOT_STARTED_MAX_WAIT_MS / 60_000} min → configured wait limit reached.`);
+        return;
+      }
+      timer = setTimeout(poll, POLL_INTERVAL_MS);
+      return;
+    }
+
+    if (liveWaitStartedAt === null) liveWaitStartedAt = Date.now();
+    const state = quarterMinuteTriggerState(stage, targetQuarter, EACH_QUARTER_TRIGGER_MINUTE);
+    log(id, `Checkpoint #${sequenceCheckpoint} — stage: ${stage.status}` +
+            (stage.liveMinute != null ? ` (${stage.liveMinute}')` : '') +
+            `; completedQ=${stage.completedQuarters ?? '?'}; currentQ=${stage.currentQuarter ?? '?'}; state=${state}`);
+
+    if (state === 'TARGET') {
+      finish();
+      await enqueueAnalysis(match, null, {
+        sequenceCheckpoint,
+        checkpointLabel: `Q${targetQuarter} minute ${EACH_QUARTER_TRIGGER_MINUTE}+`,
+        triggerLabel: `Checkpoint #${sequenceCheckpoint} Q${targetQuarter} minute ${EACH_QUARTER_TRIGGER_MINUTE}+`,
+        jobId: `${id}_checkpoint${sequenceCheckpoint}_q${targetQuarter}_min${EACH_QUARTER_TRIGGER_MINUTE}`,
+        liveQuarter: targetQuarter,
+        liveMinute: EACH_QUARTER_TRIGGER_MINUTE,
+      });
+      return;
+    }
+
+    if (state === 'STALE') {
+      finish();
+      log(id, `↷ Checkpoint #${sequenceCheckpoint} skipped: Q${targetQuarter} minute ` +
+              `${EACH_QUARTER_TRIGGER_MINUTE}+ was not observed before Q${targetQuarter} ended.`);
+      return;
+    }
+
+    if (liveWaitStartedAt !== null && Date.now() - liveWaitStartedAt > HARD_CHECK_WINDOW_MS) {
+      finish();
+      log(id, `⏱ Checkpoint #${sequenceCheckpoint} hard timeout after ` +
+              `${HARD_CHECK_WINDOW_MS / 60_000} min of live waiting.`);
       return;
     }
 
@@ -1208,6 +1310,25 @@ function scheduleMatch(match) {
             `→ opens in ${(delay / 60_000).toFixed(1)} min`);
   });
 
+  // #7–#10 are additive checkpoints: minute 6 of Q1/Q2/Q3/Q4. They use
+  // scheduled offsets only to decide when polling may start; the actual trigger
+  // always requires the real quarter + liveMinute from match_stage.js.
+  for (let quarter = 1; quarter <= 4; quarter += 1) {
+    const key = `q${quarter}_minute_${EACH_QUARTER_TRIGGER_MINUTE}`;
+    if (doneSet.has(key)) continue;
+    doneSet.add(key);
+
+    const sequenceCheckpoint = 6 + quarter; // preserve existing #1–#6
+    const watchAt = kickoffMs + sixMinuteOffset(quarter, quarterMin) * 60_000;
+    const delay = Math.max(0, watchAt - now);
+    setTimeout(
+      () => watchQuarterSixMinuteCheckpoint(match, sportId, quarter, sequenceCheckpoint),
+      delay
+    );
+    log(id, `Scheduled checkpoint #${sequenceCheckpoint} (actual Q${quarter} minute ` +
+            `${EACH_QUARTER_TRIGGER_MINUTE}+) → watcher opens in ${(delay / 60_000).toFixed(1)} min`);
+  }
+
   // Start the final watcher near the expected end instead of polling for the
   // whole match. A delayed match remains tracked until it really finishes; a
   // restart after the expected end opens the watcher immediately.
@@ -1287,7 +1408,8 @@ async function main() {
     `[stage-monitor] Started. Watching "${MATCHES_FILE}" | ` +
     `poll every ${POLL_INTERVAL_MS / 1000}s | check window ${CHECK_WINDOW_MS / 60_000} min | ` +
     `checkpoints: #1 schedule-${PREMATCH_LEAD_MIN}m, #2 Q1-${Q1_TRIGGER_MINUTE}m, ` +
-    `#3 Q2-${Q2_TRIGGER_MINUTE}m, #4 HT, #5 Q4-${Q4_TRIGGER_MINUTE}m, #6 final parser+math | ` +
+    `#3 Q2-${Q2_TRIGGER_MINUTE}m, #4 HT, #5 Q4-${Q4_TRIGGER_MINUTE}m, #6 final parser+math, ` +
+    `#7-#10 Q1/Q2/Q3/Q4-${EACH_QUARTER_TRIGGER_MINUTE}m | ` +
     `stall-confirm fallback ${STALL_CONFIRM_MS / 60_000} min | ` +
     `soft window ${CHECK_WINDOW_MS / 60_000} min (progress-aware) | hard max ${HARD_CHECK_WINDOW_MS / 60_000} min | ` +
     `rescanning matches.json every ${RESCAN_INTERVAL_MS / 60_000} min | ` +
