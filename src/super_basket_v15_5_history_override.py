@@ -62,6 +62,12 @@ INFO_90_HISTORY_MIN = 0.90
 INFO_90_SCENARIO_MIN = 0.90
 INFO_90_PLAY_DIRECTIONAL_DELTA_MIN = 0.0
 INFO_90_TELEGRAM_MAX_CHARS = 3800
+
+# Email delivery uses the same notification body as Telegram, but posts it to
+# the Google Apps Script web-app over HTTPS (port 443).  The secret and target
+# are intentionally read from environment variables, never hard-coded.
+DEFAULT_EMAIL_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycby5M0tbCNdy0ZV5DnDGJe7rCMLVY2GUvs1Nv-HRbar8mKczUeqhJa8MmaojjWgYFTdkdA/exec"
+DEFAULT_MATCH_FILES_PUBLIC_BASE_URL = "http://130.0.235.172:8080/match_files"
 DEFAULT_SCORE_MODEL_NAMES = (
     "basketball_score_predictor_v4.py",
     "basketball_score_predictor.py",
@@ -1161,6 +1167,34 @@ def format_zone(zone: dict[str, Any]) -> str:
     return f"{side} {line if line is not None else '—'} — {format_pct(num(probability))}" + (f" ({hits}/{n})" if hits is not None and n else "")
 
 
+def _public_match_file_url(path: str | Path) -> str:
+    """Build a public /match_files URL using only the file name."""
+    base = (os.getenv("MATCH_FILES_PUBLIC_BASE_URL") or DEFAULT_MATCH_FILES_PUBLIC_BASE_URL).rstrip("/")
+    name = Path(path).name
+    return f"{base}/{urllib.parse.quote(name)}"
+
+
+def _file_links_footer(result: dict[str, Any]) -> str:
+    links = result.get("file_links") if isinstance(result.get("file_links"), dict) else {}
+    input_url = str(links.get("input_url") or "").strip()
+    result_url = str(links.get("result_url") or "").strip()
+    rows: list[str] = []
+    if input_url:
+        safe = html.escape(input_url, quote=True)
+        rows.append(f'📄 Вхідний файл: <a href="{safe}">{safe}</a>')
+    if result_url:
+        safe = html.escape(result_url, quote=True)
+        rows.append(f'📊 Файл результату: <a href="{safe}">{safe}</a>')
+    if not rows:
+        return ""
+    return "\n".join(["<b>🔗 ФАЙЛИ</b>", *rows])
+
+
+def _append_file_links(text: str, result: dict[str, Any]) -> str:
+    footer = _file_links_footer(result)
+    return text if not footer else text.rstrip() + "\n\n" + footer
+
+
 def telegram_message(result: dict[str, Any]) -> str:
     forecast = result["score_forecast"]
     selected = result.get("selected") or {}
@@ -1233,7 +1267,7 @@ def telegram_message(result: dict[str, Any]) -> str:
         "FAKE/stat/Q4 conflict — це warning: strong history override може залишити максимум RISK; HOT CONTINUATION для UNDER залишається hard PASS.",
         "Після зміни рахунку, часу, статистики чи лінії потрібен новий розрахунок.",
     ])
-    return "\n".join(lines)
+    return _append_file_links("\n".join(lines), result)
 
 
 def info_q4_enabled() -> bool:
@@ -1501,12 +1535,12 @@ def q4_history_scenario_info_messages(result: dict[str, Any]) -> list[str]:
     for block in blocks:
         proposed = header + "\n\n" + "\n\n".join(current + [block]) + footer
         if current and len(proposed) > INFO_Q4_TELEGRAM_MAX_CHARS:
-            messages.append(header + "\n\n" + "\n\n".join(current) + footer)
+            messages.append(_append_file_links(header + "\n\n" + "\n\n".join(current) + footer, result))
             current = [block]
         else:
             current.append(block)
     if current:
-        messages.append(header + "\n\n" + "\n\n".join(current) + footer)
+        messages.append(_append_file_links(header + "\n\n" + "\n\n".join(current) + footer, result))
     return messages
 
 
@@ -1539,12 +1573,12 @@ def history_scenario_90_info_messages(result: dict[str, Any]) -> list[str]:
     for block in blocks:
         proposed = header + "\n\n" + "\n\n".join(current + [block]) + footer
         if current and len(proposed) > INFO_90_TELEGRAM_MAX_CHARS:
-            messages.append(header + "\n\n" + "\n\n".join(current) + footer)
+            messages.append(_append_file_links(header + "\n\n" + "\n\n".join(current) + footer, result))
             current = [block]
         else:
             current.append(block)
     if current:
-        messages.append(header + "\n\n" + "\n\n".join(current) + footer)
+        messages.append(_append_file_links(header + "\n\n" + "\n\n".join(current) + footer, result))
     return messages
 
 
@@ -1604,6 +1638,118 @@ def send_telegram(text: str) -> dict[str, Any]:
         "chats_sent": len(chat_ids),
         "message_ids": message_ids,
     }
+
+
+def _plain_text_from_telegram_html(text: str) -> str:
+    # The Telegram body uses only simple HTML formatting. Keep visible link text
+    # and strip tags for the plain-text email alternative.
+    without_tags = re.sub(r"<[^>]+>", "", text)
+    return html.unescape(without_tags)
+
+
+def _email_html_from_telegram_html(text: str) -> str:
+    # Telegram's <b>/<i>/<a> markup is valid in email too; only newlines need
+    # conversion so the mail visually matches the Telegram notification.
+    return "<html><body>" + text.replace("\n", "<br>\n") + "</body></html>"
+
+
+def send_email(text: str, subject: str = "SUPER BASKET notification") -> dict[str, Any]:
+    """Send through Google Apps Script over HTTPS without touching SMTP.
+
+    Required env:
+      EMAIL_HASH   - the Apps Script secret/hash
+      EMAIL_TARGET - recipient email address (or a comma-separated list)
+
+    Optional env:
+      EMAIL_WEBHOOK_URL - override the deployed Apps Script /exec URL
+    """
+    secret = (os.getenv("EMAIL_HASH") or os.getenv("MAIL_HASH") or "").strip()
+    target = (os.getenv("EMAIL_TARGET") or os.getenv("MAIL_TARGET") or "").strip()
+    endpoint = (os.getenv("EMAIL_WEBHOOK_URL") or DEFAULT_EMAIL_WEBHOOK_URL).strip()
+    if not secret:
+        return {"status": "SKIPPED_MISSING_EMAIL_HASH", "sent": False}
+    if not target:
+        return {"status": "SKIPPED_MISSING_EMAIL_TARGET", "sent": False}
+    if not endpoint:
+        return {"status": "SKIPPED_MISSING_EMAIL_WEBHOOK_URL", "sent": False}
+
+    payload = {
+        "secret": secret,
+        "to": target,
+        "subject": subject,
+        "text": _plain_text_from_telegram_html(text),
+        "html": _email_html_from_telegram_html(text),
+    }
+    request = urllib.request.Request(
+        endpoint,
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "User-Agent": "SUPER-BASKET-v15.5",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=25) as response:
+            raw_body = response.read().decode("utf-8", errors="replace").strip()
+        response_payload: Any = None
+        if raw_body:
+            try:
+                response_payload = json.loads(raw_body)
+            except json.JSONDecodeError:
+                response_payload = {"raw": raw_body[:1000]}
+        if isinstance(response_payload, dict) and response_payload.get("ok") is False:
+            return {
+                "status": "ERROR_EMAIL_REJECTED",
+                "sent": False,
+                "target": target,
+                "response": response_payload,
+            }
+        return {
+            "status": "SENT",
+            "sent": True,
+            "target": target,
+            "response": response_payload,
+        }
+    except Exception as error:
+        # Email must never replace or break Telegram delivery.
+        return {
+            "status": "ERROR_EMAIL_SEND_FAILED",
+            "sent": False,
+            "target": target,
+            "error": f"{type(error).__name__}: {error}",
+        }
+
+
+def _notification_subject(result: dict[str, Any], kind: str = "MAIN") -> str:
+    forecast = result.get("score_forecast") or {}
+    selected = result.get("selected") or {}
+    match_name = str(forecast.get("match_name") or "Матч").strip()
+    stage = str(forecast.get("stage") or "").strip()
+    action = str(selected.get("action") or "").strip()
+    parts = ["SUPER BASKET", kind]
+    if action and kind == "MAIN":
+        parts.append(action)
+    if stage:
+        parts.append(stage)
+    parts.append(match_name)
+    return " — ".join(parts)[:240]
+
+
+def send_info_email_batch(messages: Iterable[str], subject: str) -> dict[str, Any]:
+    deliveries: list[dict[str, Any]] = [send_email(message, subject) for message in messages]
+    statuses = [str(item.get("status") or "UNKNOWN") for item in deliveries]
+    if statuses and all(status == "SENT" for status in statuses):
+        status = "SENT"
+    elif not statuses:
+        status = "SKIPPED_NO_MESSAGES"
+    elif any(status == "SENT" for status in statuses):
+        status = "PARTIAL"
+    elif len(set(statuses)) == 1:
+        status = statuses[0]
+    else:
+        status = "NOT_SENT"
+    return {"status": status, "messages_count": len(deliveries), "deliveries": deliveries}
 
 
 def send_info_telegram_batch(messages: Iterable[str]) -> dict[str, Any]:
@@ -1734,6 +1880,13 @@ def analyse_file(
     )
 
     score_forecast = asdict(score_forecast_obj)
+    destination = Path(output_path).expanduser().resolve() if output_path else match_path.with_name(match_path.stem + "_v15_5_result.json")
+    file_links = {
+        "input_name": match_path.name,
+        "input_url": _public_match_file_url(match_path),
+        "result_name": destination.name,
+        "result_url": _public_match_file_url(destination),
+    }
     result = {
         "super_basket_v15": {
             "version": VERSION,
@@ -1795,6 +1948,7 @@ def analyse_file(
         "score_forecast": score_forecast,
         "selected": selected,
         "model_line": model_line,
+        "file_links": file_links,
         "ranked_candidates": [asdict(row) for row in candidates],
         "q4_history_scenario_info_variants": q4_info_variants,
         "history_scenario_90_info_variants": info_90_variants,
@@ -1808,26 +1962,39 @@ def analyse_file(
     message = telegram_message(result)
     if not send:
         delivery = {"status": "DISABLED"}
+        email_delivery = {"status": "DISABLED"}
     elif selected.get("action") == "PASS":
         delivery = {"status": "SKIPPED_PASS_SIGNAL"}
+        email_delivery = {"status": "SKIPPED_PASS_SIGNAL"}
     else:
+        # Telegram remains the original channel. Email is an additional,
+        # independent HTTPS delivery of exactly the same notification body.
         delivery = send_telegram(message)
+        email_delivery = send_email(message, _notification_subject(result, "MAIN"))
     result["telegram"] = {"message": message, "delivery": delivery}
+    result["email"] = {"message": message, "delivery": email_delivery}
     info_messages = q4_history_scenario_info_messages(result)
     if not info_q4_enabled():
         info_delivery = {"status": "SKIPPED_DISABLED_BY_ENV", "messages_count": 0}
+        info_email_delivery = {"status": "SKIPPED_DISABLED_BY_ENV", "messages_count": 0}
     elif age_blocked:
         info_delivery = {"status": "SKIPPED_AGE_FILTER", "messages_count": 0}
+        info_email_delivery = {"status": "SKIPPED_AGE_FILTER", "messages_count": 0}
     elif str(selected.get("action") or "").upper() in {"PLAY", "RISK"}:
         info_delivery = {"status": "SKIPPED_MAIN_PLAY_RISK", "messages_count": 0}
+        info_email_delivery = {"status": "SKIPPED_MAIN_PLAY_RISK", "messages_count": 0}
     elif stage != INFO_Q4_STAGE:
         info_delivery = {"status": "SKIPPED_STAGE", "messages_count": 0}
+        info_email_delivery = {"status": "SKIPPED_STAGE", "messages_count": 0}
     elif not info_messages:
         info_delivery = {"status": "SKIPPED_NO_QUALIFYING_PASS_INFO", "messages_count": 0}
+        info_email_delivery = {"status": "SKIPPED_NO_QUALIFYING_PASS_INFO", "messages_count": 0}
     elif not send:
         info_delivery = {"status": "DISABLED", "messages_count": len(info_messages)}
+        info_email_delivery = {"status": "DISABLED", "messages_count": len(info_messages)}
     else:
         info_delivery = send_info_telegram_batch(info_messages)
+        info_email_delivery = send_info_email_batch(info_messages, _notification_subject(result, "Q4 INFO"))
     result["q4_history_scenario_info_telegram"] = {
         "informational_only": True,
         "budget_percent": 0.0,
@@ -1844,18 +2011,28 @@ def analyse_file(
         "messages": info_messages,
         "delivery": info_delivery,
     }
+    result["q4_history_scenario_info_email"] = {
+        "informational_only": True,
+        "messages_count": len(info_messages),
+        "delivery": info_email_delivery,
+    }
 
     info_90_messages = history_scenario_90_info_messages(result)
     if not info_90_enabled():
         info_90_delivery = {"status": "SKIPPED_DISABLED_BY_ENV", "messages_count": 0}
+        info_90_email_delivery = {"status": "SKIPPED_DISABLED_BY_ENV", "messages_count": 0}
     elif age_blocked:
         info_90_delivery = {"status": "SKIPPED_AGE_FILTER", "messages_count": 0}
+        info_90_email_delivery = {"status": "SKIPPED_AGE_FILTER", "messages_count": 0}
     elif not info_90_messages:
         info_90_delivery = {"status": "SKIPPED_NO_NEW_QUALIFYING_90_90_INFO", "messages_count": 0}
+        info_90_email_delivery = {"status": "SKIPPED_NO_NEW_QUALIFYING_90_90_INFO", "messages_count": 0}
     elif not send:
         info_90_delivery = {"status": "DISABLED", "messages_count": len(info_90_messages)}
+        info_90_email_delivery = {"status": "DISABLED", "messages_count": len(info_90_messages)}
     else:
         info_90_delivery = send_info_telegram_batch(info_90_messages)
+        info_90_email_delivery = send_info_email_batch(info_90_messages, _notification_subject(result, "90/90 INFO"))
     result["history_scenario_90_info_telegram"] = {
         "informational_only": True,
         "budget_percent": 0.0,
@@ -1876,8 +2053,12 @@ def analyse_file(
         "messages": info_90_messages,
         "delivery": info_90_delivery,
     }
+    result["history_scenario_90_info_email"] = {
+        "informational_only": True,
+        "messages_count": len(info_90_messages),
+        "delivery": info_90_email_delivery,
+    }
 
-    destination = Path(output_path).expanduser().resolve() if output_path else match_path.with_name(match_path.stem + "_v15_5_result.json")
     destination.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     record_v15_result(db_path, result)
     return result
@@ -2241,10 +2422,13 @@ def cli(argv: Optional[list[str]] = None) -> int:
                 "p_score": selected.get("p_score_calibrated"),
                 "p_final": selected.get("p_final"),
                 "telegram": result["telegram"]["delivery"],
+                "email": result["email"]["delivery"],
                 "q4_info_variants": result["q4_history_scenario_info_telegram"]["variants_count"],
                 "q4_info_telegram": result["q4_history_scenario_info_telegram"]["delivery"],
+                "q4_info_email": result["q4_history_scenario_info_email"]["delivery"],
                 "info_90_90_variants": result["history_scenario_90_info_telegram"]["variants_count"],
                 "info_90_90_telegram": result["history_scenario_90_info_telegram"]["delivery"],
+                "info_90_90_email": result["history_scenario_90_info_email"]["delivery"],
             }, ensure_ascii=False, indent=2))
             return 0
 
