@@ -486,51 +486,115 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
 
     // ─── Card search helpers (serialised into browser via page.evaluate) ────────
 
-    // Core search: collects ALL unique cards from DOM+shadowDOM (deduped by text),
-    // then tries to find one matching the given keyword sets.
-    // Returns { clicked, foundNames, strategy } or null.
+    // Core search: collect ALL unique cards from DOM+shadowDOM and accept a card
+    // only when BOTH expected teams are confirmed on TWO DIFFERENT competitor sides.
+    // Never click a card from a home-only / away-only match: generic words such as
+    // "Warriors" / "Ворріорз" are not enough to identify a basketball event.
     //
-    // matchMode:
-    //   'both'  — card must match at least one homeKw AND one awayKw
-    //   'home'  — card must match at least one homeKw (awayKws ignored)
-    //   'away'  — card must match at least one awayKw (homeKws ignored)
-    //
-    // In 'home'/'away' mode we also require uniqueness — if more than one card
-    // matches the single keyword we skip it (ambiguous).
+    // Returns:
+    //   { clicked: true, foundNames, strategy, orientation, pairVerified: true }
+    //   { clicked: false, ambiguous: true, candidates, strategy }
+    //   null
 
-    async function tryFindCard(homeKws, awayKws, matchMode, strategyLabel, homeQuals = [], awayQuals = []) {
+    async function tryFindCard(homeKws, awayKws, strategyLabel) {
       return page.evaluate(
-        ([hKws, aKws, mode, label, hQuals, aQuals]) => {
-          function wordIn(nameOnPage, kws) {
-            const normalize = value => value.toLowerCase()
-              .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-              .replace(/[’'`]/g, '')
-              .replace(/[^\p{L}\p{N}]+/gu, ' ')
-              .replace(/\s+/g, ' ').trim();
+        ([hKwsRaw, aKwsRaw, label]) => {
+          const normalize = value => String(value ?? '').toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[’'`]/g, '')
+            .replace(/[^\p{L}\p{N}]+/gu, ' ')
+            .replace(/\s+/g, ' ').trim();
+
+          const hKws = hKwsRaw.map(normalize).filter(Boolean);
+          const aKws = aKwsRaw.map(normalize).filter(Boolean);
+
+          function levenshtein(a, b) {
+            if (a === b) return 0;
+            if (!a) return b.length;
+            if (!b) return a.length;
+            const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+            const cur = new Array(b.length + 1);
+            for (let i = 1; i <= a.length; i++) {
+              cur[0] = i;
+              for (let j = 1; j <= b.length; j++) {
+                const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+                cur[j] = Math.min(cur[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+              }
+              for (let j = 0; j <= b.length; j++) prev[j] = cur[j];
+            }
+            return prev[b.length];
+          }
+
+          function tokenSimilarity(a, b) {
+            if (a === b) return 1;
+            if (Math.min(a.length, b.length) < 4) return 0;
+            if (a.includes(b) || b.includes(a)) {
+              return Math.min(a.length, b.length) / Math.max(a.length, b.length);
+            }
+            const distance = levenshtein(a, b);
+            return 1 - distance / Math.max(a.length, b.length);
+          }
+
+          function variantMatchesName(nameOnPage, rawVariant) {
             const n = normalize(nameOnPage);
-            return kws.some(k => n.includes(k) || k.includes(n));
+            const variant = normalize(rawVariant);
+            if (!n || !variant) return false;
+
+            // Strong path: exact/full-phrase containment.
+            if (n === variant) return true;
+            if (Math.min(n.length, variant.length) >= 4 && (n.includes(variant) || variant.includes(n))) {
+              return true;
+            }
+
+            // Fuzzy path is team-level, not one-word-level. For a multi-word team
+            // at least TWO expected words must independently resemble words on the
+            // bookmaker card. This is what prevents "ДженСан Ворріорз" from being
+            // accepted as "Белград Ворріорз" merely because "Ворріорз" matches.
+            const expectedTokens = variant.split(' ').filter(t => t.length >= 4);
+            const actualTokens = n.split(' ').filter(t => t.length >= 4);
+            if (!expectedTokens.length || !actualTokens.length) return false;
+
+            const requiredMatches = expectedTokens.length >= 2 ? 2 : 1;
+            const usedActual = new Set();
+            let matched = 0;
+            for (const expected of expectedTokens) {
+              let bestIndex = -1;
+              let bestScore = 0;
+              for (let i = 0; i < actualTokens.length; i++) {
+                if (usedActual.has(i)) continue;
+                const score = tokenSimilarity(expected, actualTokens[i]);
+                if (score > bestScore) {
+                  bestScore = score;
+                  bestIndex = i;
+                }
+              }
+              // 0.60 is enough for transliteration variants such as
+              // dzhensan~gensan and vorriorz~warriors, but a single shared generic
+              // word can never satisfy a multi-word team by itself.
+              if (bestIndex >= 0 && bestScore >= 0.60) {
+                usedActual.add(bestIndex);
+                matched++;
+              }
+            }
+            return matched >= requiredMatches;
           }
 
-          // Age/gender qualifiers (u17, u20, w, m, …) must ALSO be present on the
-          // card side when we only matched on a bare team-name word. Without this,
-          // "словенія" alone matches any Slovenia team regardless of age group —
-          // e.g. it would happily click "Словенія U20" while looking for "Словенія U17 W".
-          function qualifiersOk(nameOnPage, quals) {
-            if (quals.length === 0) return true;
-            const n = nameOnPage.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ');
-            return quals.every(q => n.includes(q));
+          function nameMatches(nameOnPage, variants) {
+            return variants.some(variant => variantMatchesName(nameOnPage, variant));
           }
 
-          // Collect all cards from DOM + shadow DOM, dedupe by joined competitor text
+          // Collect all cards from DOM + shadow DOM, dedupe by joined competitor text.
           function collectCards(root, seen, out) {
             const cards = root.querySelectorAll('[class*="EventBoxContainer-sc-"]');
             for (const card of cards) {
               const nameEls = Array.from(card.querySelectorAll('[class*="CompetitorName-sc-"]'));
               if (nameEls.length < 2) continue;
-              const key = nameEls.map(e => e.textContent.trim().toLowerCase()).join('|');
+              const names = nameEls.map(e => e.textContent.trim()).filter(Boolean);
+              if (names.length < 2) continue;
+              const key = names.map(normalize).join('|');
               if (seen.has(key)) continue;
               seen.add(key);
-              out.push({ card, names: nameEls.map(e => e.textContent.trim()) });
+              out.push({ card, names });
             }
             for (const el of root.querySelectorAll('*'))
               if (el.shadowRoot) collectCards(el.shadowRoot, seen, out);
@@ -540,26 +604,47 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
           const entries = [];
           collectCards(document, seen, entries);
 
-          // Filter by match mode
-          const matches = entries.filter(({ names }) => {
-            const ns = names.map(n => n.toLowerCase());
-            if (mode === 'both')
-              return ns.some(n => wordIn(n, hKws)) && ns.some(n => wordIn(n, aKws));
-            if (mode === 'home')
-              return ns.some(n => wordIn(n, hKws) && qualifiersOk(n, hQuals));
-            if (mode === 'away')
-              return ns.some(n => wordIn(n, aKws) && qualifiersOk(n, aQuals));
-            return false;
-          });
+          const matches = [];
+          for (const entry of entries) {
+            const { names } = entry;
+            let orientation = null;
 
-          // For single-team modes require exactly one match (avoid ambiguity)
-          if (mode !== 'both' && matches.length !== 1) return null;
+            // Require distinct competitor slots. This prevents one generic team word
+            // from satisfying the whole event identity.
+            for (let hi = 0; hi < names.length && !orientation; hi++) {
+              if (!nameMatches(names[hi], hKws)) continue;
+              for (let ai = 0; ai < names.length; ai++) {
+                if (ai === hi) continue;
+                if (!nameMatches(names[ai], aKws)) continue;
+                orientation = hi < ai ? 'home-away' : 'away-home';
+                break;
+              }
+            }
+
+            if (orientation) matches.push({ ...entry, orientation });
+          }
+
           if (matches.length === 0) return null;
+          if (matches.length !== 1) {
+            return {
+              clicked: false,
+              ambiguous: true,
+              strategy: label,
+              candidates: matches.map(m => m.names),
+            };
+          }
 
-          matches[0].card.click();
-          return { clicked: true, foundNames: matches[0].names, strategy: label };
+          const match = matches[0];
+          match.card.click();
+          return {
+            clicked: true,
+            foundNames: match.names,
+            strategy: label,
+            orientation: match.orientation,
+            pairVerified: true,
+          };
         },
-        [homeKws, awayKws, matchMode, strategyLabel, homeQuals, awayQuals]
+        [homeKws, awayKws, strategyLabel]
       );
     }
 
@@ -606,78 +691,18 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
     const SCROLL_PAUSE = 1000;  // generous for 1-core VPS
     const MAX_SCROLLS  = 20;
 
-    // ─── Build keyword lists for fallback word-by-word search ────────────────
-    // All variants expanded + individual words longer than 3 chars, deduplicated.
-    // Words are tried longest-first so more specific words win over short ones.
-
-    function significantWords(variants) {
-      const words = new Set();
-      for (const v of variants) {
-        // the full variant itself
-        words.add(v);
-        // individual words within the variant
-        for (const w of v.split(/[\s\-.,]+/))
-          if (w.length > 3) words.add(w);
-      }
-      // sort longest first — more specific = better
-      return [...words].sort((a, b) => b.length - a.length);
-    }
-
-    // Age-group / gender qualifiers (u16, u17, u20, w, m, …) get dropped by the
-    // `length > 3` filter above, which lets a bare team-name word like "словенія"
-    // match ANY age group for that country. Extract them separately so fallback
-    // single-team strategies can still require them to match.
-    function significantQualifiers(variants) {
-      const quals = new Set();
-      for (const v of variants)
-        for (const w of v.split(/[\s\-.,]+/))
-          if (/^u\d{1,2}$/.test(w) || /^[wm]$/.test(w)) quals.add(w);
-      return [...quals];
-    }
-
-    const homeWords = significantWords(homeVariants);
-    const awayWords = significantWords(awayVariants);
-    const homeQualifiers = significantQualifiers(homeVariants);
-    const awayQualifiers = significantQualifiers(awayVariants);
-
-    console.log(`  [betking] homeWords: ${JSON.stringify(homeWords)}`);
-    console.log(`  [betking] awayWords: ${JSON.stringify(awayWords)}`);
-    console.log(`  [betking] homeQualifiers: ${JSON.stringify(homeQualifiers)}`);
-    console.log(`  [betking] awayQualifiers: ${JSON.stringify(awayQualifiers)}`);
-
-    // ─── Search pass — run after every scroll step ────────────────────────────
-    // Returns clickResult or null.
-    // Strategy order:
-    //   1. Both teams full variants match (original behaviour)
-    //   2. Each home word paired with each away word (word × word)
-    //   3. Home word alone — unique card required
-    //   4. Away word alone — unique card required
+    // ─── Strict pair search — run after every scroll step ─────────────────────
+    // We deliberately search by the complete variant sets for BOTH teams only.
+    // The matcher itself can tolerate transliteration/spelling differences, but a
+    // multi-word team needs at least two independently matching words unless an
+    // explicit full-name/alias phrase matches. No one-team fallback exists.
 
     async function searchPass() {
-      // 1. Full match
-      let r = await tryFindCard(homeVariants, awayVariants, 'both', 'full-variants');
-      if (r) return r;
-
-      // 2. Word × word
-      for (const hw of homeWords) {
-        for (const aw of awayWords) {
-          r = await tryFindCard([hw], [aw], 'both', `word×word(${hw}×${aw})`);
-          if (r) return r;
-        }
+      const r = await tryFindCard(homeVariants, awayVariants, 'strict-both-teams');
+      if (r?.clicked) return r;
+      if (r?.ambiguous) {
+        console.warn(`  [betking] ⚠ Ambiguous two-team match; refusing click: ${JSON.stringify(r.candidates)}`);
       }
-
-      // 3. Home word alone (unique) — must still match the age/gender qualifier
-      for (const hw of homeWords) {
-        r = await tryFindCard([hw], [], 'home', `home-word(${hw})`, homeQualifiers, []);
-        if (r) return r;
-      }
-
-      // 4. Away word alone (unique) — must still match the age/gender qualifier
-      for (const aw of awayWords) {
-        r = await tryFindCard([], [aw], 'away', `away-word(${aw})`, [], awayQualifiers);
-        if (r) return r;
-      }
-
       return null;
     }
 
@@ -731,7 +756,10 @@ async function scrapeBetking(context, homeName, awayName, liveStatus = '', isPre
       return null;
     }
 
-    console.log(`  [betking] ✅ Match card clicked after ${scrollsDone} scrolls — found: ${JSON.stringify(clickResult.foundNames)} (strategy: ${clickResult.strategy})`);
+    if (!clickResult.pairVerified) {
+      throw new Error(`[betking] INTERNAL MATCH-ID SAFETY: refusing unverified card ${JSON.stringify(clickResult.foundNames)}`);
+    }
+    console.log(`  [betking] ✅ Match card clicked after ${scrollsDone} scrolls — found: ${JSON.stringify(clickResult.foundNames)} (strategy: ${clickResult.strategy}, pairVerified=true, orientation=${clickResult.orientation})`);
 
     // 3. Wait for new tab or navigation to match detail
     console.log('  [betking] Waiting for detail page…');
