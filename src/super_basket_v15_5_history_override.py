@@ -1653,32 +1653,50 @@ def _email_html_from_telegram_html(text: str) -> str:
     return "<html><body>" + text.replace("\n", "<br>\n") + "</body></html>"
 
 
-def send_email(text: str, subject: str = "SUPER BASKET notification") -> dict[str, Any]:
-    """Send through Google Apps Script over HTTPS without touching SMTP.
+def _email_targets() -> tuple[list[str], str]:
+    """Load email recipients from env, accepting a list or legacy single target.
 
-    Required env:
-      EMAIL_HASH   - the Apps Script secret/hash
-      EMAIL_TARGET - recipient email address (or a comma-separated list)
+    Preferred env:
+      EMAIL_TARGETS - JSON array or comma/semicolon/newline/space-separated emails.
 
-    Optional env:
-      EMAIL_WEBHOOK_URL - override the deployed Apps Script /exec URL
+    Legacy env (still supported):
+      EMAIL_TARGET / MAIL_TARGET - one email or the same delimited list format.
     """
-    secret = (os.getenv("EMAIL_HASH") or os.getenv("MAIL_HASH") or "").strip()
-    target = (os.getenv("EMAIL_TARGET") or os.getenv("MAIL_TARGET") or "").strip()
-    endpoint = (os.getenv("EMAIL_WEBHOOK_URL") or DEFAULT_EMAIL_WEBHOOK_URL).strip()
-    if not secret:
-        return {"status": "SKIPPED_MISSING_EMAIL_HASH", "sent": False}
-    if not target:
-        return {"status": "SKIPPED_MISSING_EMAIL_TARGET", "sent": False}
-    if not endpoint:
-        return {"status": "SKIPPED_MISSING_EMAIL_WEBHOOK_URL", "sent": False}
+    raw = os.getenv("EMAIL_TARGETS")
+    source = "EMAIL_TARGETS"
+    if raw is None or not raw.strip():
+        raw = os.getenv("EMAIL_TARGET") or os.getenv("MAIL_TARGET") or ""
+        source = "EMAIL_TARGET/MAIL_TARGET"
+    raw = raw.strip()
+    if not raw:
+        return [], source
 
+    values: list[str]
+    if raw.startswith("["):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, list):
+            values = [str(value).strip() for value in parsed]
+        else:
+            values = re.split(r"[,;\s]+", raw)
+    else:
+        values = re.split(r"[,;\s]+", raw)
+
+    targets = list(dict.fromkeys(value for value in values if value))
+    return targets, source
+
+
+def _send_email_to_target(
+    *, endpoint: str, secret: str, target: str, subject: str, text: str, html_text: str,
+) -> dict[str, Any]:
     payload = {
         "secret": secret,
         "to": target,
         "subject": subject,
-        "text": _plain_text_from_telegram_html(text),
-        "html": _email_html_from_telegram_html(text),
+        "text": text,
+        "html": html_text,
     }
     request = urllib.request.Request(
         endpoint,
@@ -1719,6 +1737,67 @@ def send_email(text: str, subject: str = "SUPER BASKET notification") -> dict[st
             "target": target,
             "error": f"{type(error).__name__}: {error}",
         }
+
+
+def send_email(text: str, subject: str = "SUPER BASKET notification") -> dict[str, Any]:
+    """Send through Google Apps Script over HTTPS without touching SMTP.
+
+    Required env:
+      EMAIL_HASH    - the Apps Script secret/hash
+      EMAIL_TARGETS - recipients as JSON array or comma/semicolon/space-separated list
+
+    Backward compatible env:
+      EMAIL_TARGET / MAIL_TARGET - one recipient or a delimited list
+
+    Optional env:
+      EMAIL_WEBHOOK_URL - override the deployed Apps Script /exec URL
+    """
+    secret = (os.getenv("EMAIL_HASH") or os.getenv("MAIL_HASH") or "").strip()
+    targets, recipients_source = _email_targets()
+    endpoint = (os.getenv("EMAIL_WEBHOOK_URL") or DEFAULT_EMAIL_WEBHOOK_URL).strip()
+    if not secret:
+        return {"status": "SKIPPED_MISSING_EMAIL_HASH", "sent": False}
+    if not targets:
+        return {
+            "status": "SKIPPED_MISSING_EMAIL_TARGET",
+            "sent": False,
+            "recipients_source": recipients_source,
+        }
+    if not endpoint:
+        return {"status": "SKIPPED_MISSING_EMAIL_WEBHOOK_URL", "sent": False}
+
+    plain_text = _plain_text_from_telegram_html(text)
+    html_text = _email_html_from_telegram_html(text)
+    deliveries = [
+        _send_email_to_target(
+            endpoint=endpoint,
+            secret=secret,
+            target=target,
+            subject=subject,
+            text=plain_text,
+            html_text=html_text,
+        )
+        for target in targets
+    ]
+    sent_count = sum(bool(item.get("sent")) for item in deliveries)
+    if sent_count == len(deliveries):
+        status = "SENT"
+    elif sent_count:
+        status = "PARTIAL"
+    elif len({str(item.get("status") or "UNKNOWN") for item in deliveries}) == 1:
+        status = str(deliveries[0].get("status") or "NOT_SENT")
+    else:
+        status = "NOT_SENT"
+
+    return {
+        "status": status,
+        "sent": sent_count > 0,
+        "recipients_source": recipients_source,
+        "recipients_count": len(targets),
+        "sent_count": sent_count,
+        "targets": targets,
+        "deliveries": deliveries,
+    }
 
 
 def _notification_subject(result: dict[str, Any], kind: str = "MAIN") -> str:
